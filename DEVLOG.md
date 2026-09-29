@@ -46,3 +46,20 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * Seattle-summer day cycle (sunrise 5:30, sunset 21:00). The intro plays at 7:42 PM golden hour like the real clip,
   then cuts to "The next morning… Jimothy is internet famous."
 * Touch-friendly minimap (tap to open the big map).
+
+## 00:45–01:20 — Everything lands
+* All 9 zones done: Old Ballard (spawn + den), Downtown (City Hall, bronze Jimothy statue, 75 m climbable Space Noodle),
+  Residential Hills (Tumble St rolling street with a radar speed sign, trampolines, pools, BBQ propane tanks,
+  Grandma's porch, Danny's lawn), University of Washing (cherry blossoms, graduation stage), SlopCorp campus
+  (six-fingered billboard, data center + giant plug, Prompt Portal, Slop Dragon), Gasworks-ish Park, the Locks with a
+  working fish ladder, the Waterfront with Pike's Plaice Market + Gum Wall + ferry "M/V Round Boy", Tee-Hee Park stadium.
+* Systems done: 56–58 NPCs with 11-body ragdolls (they film Jimothy, officers scold fans, the "not a cat" gag),
+  32 washable item kinds with custom reactions, dumpster diving with loot, explosions, AI-slop "Slopothys",
+  the ridable Slop Dragon, unplug-SlopCorp quest, 6 landmark events (degree, proclamation, Salmon Run,
+  Catch of the Day, $20k rookie card, Noodle summit), 50 objectives, 12 mutators, 10 golden bobbleheads.
+* Fixes: colour grading now after tone mapping (saturated colours were turning black), culler uses world positions,
+  heavy-object drag no longer drops instantly (helper found a shared-temp bug in my controller), mantling lands on
+  ledges, camera ignores thin poles/trunks, physics queries refreshed after each zone build.
+* Automated regression playtest (`tools/playtest.mjs`): walking, jumping, washing cotton candy, bonking/stealing from
+  NPCs, dumpster diving, getting hit by a car, climbing, rolling — 0 console errors.
+* QA wave started: objectives audit, world polish + performance, first-time-player UX + mobile.
