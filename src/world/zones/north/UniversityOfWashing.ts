@@ -251,6 +251,9 @@ function grandSteps(game: Game, world: World, b: Batch, cx: number, edgeZ: numbe
     const zc = edgeZ + (dir * len) / 2;
     const gy = world.heightAt(cx + s * (width / 2 + 0.4), edgeZ + dir * len);
     b.box('stone', cx + s * (width / 2 + 0.4), (topY + gy - 0.4) / 2, zc, 0.8, topY - gy + 0.4, len, 0xcfc5b0);
+    // (these cheek walls + urns were visual only: Jimothy walked into them from the lawn and the steps)
+    colliderBox(game, cx + s * (width / 2 + 0.4), (topY + gy - 0.4) / 2, zc, 0.8, topY - gy + 0.4, len);
+    colliderBox(game, cx + s * (width / 2 + 0.4), topY + 0.45, edgeZ + dir * 0.5, 0.7, 0.9, 0.7);
     b.add('concrete', GEO.cyl, trs(cx + s * (width / 2 + 0.4), topY + 0.45, edgeZ + dir * 0.5, 0.7, 0.9, 0.7), 0xe8e0d0);
     b.add('leaves', GEO.ico, trs(cx + s * (width / 2 + 0.4), topY + 1.1, edgeZ + dir * 0.5, 0.9, 0.7, 0.9), 0xd6457a);
   }
@@ -419,7 +422,9 @@ function founderStatue(game: Game, world: World, b: Batch, x: number, y: number,
   f.geo(b, 'metal', GEO.cyl8, 0, by + 3.0, 0.02, 0.36, 0.5, 0.36, bronze);
   f.geo(b, 'metal', GEO.cyl, 0, by + 2.78, 0.02, 0.62, 0.05, 0.62, bronze);
   f.geo(b, 'metal', GEO.cyl8, -0.4, by + 1.85, 0.05, 0.16, 0.8, 0.16, bronze, 0, 0, -0.35);
-  f.geo(b, 'metal', GEO.cyl8, 0.5, by + 2.45, 0.1, 0.16, 0.95, 0.16, bronze, 0, 0.25, 0.6);
+  // raised arm: from the right shoulder up and out to the hand holding the sock (was tilted the wrong way,
+  // slanting from beside his hip in toward his head)
+  f.geo(b, 'metal', GEO.cyl8, 0.59, by + 2.53, 0.17, 0.16, 0.92, 0.16, bronze, 0, 0, -0.81);
   // the sock
   f.box(b, 'metal', 0.95, by + 3.05, 0.2, 0.22, 0.55, 0.2, bronze, 0, 0, 0.3);
   f.box(b, 'metal', 0.84, by + 2.78, 0.35, 0.22, 0.2, 0.36, bronze, 0, 0, 0.3);

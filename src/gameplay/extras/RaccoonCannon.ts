@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Game } from '../../core/Game';
+import { G, groups } from '../../core/Physics';
 import type { ExtrasHost, ExtrasFeature } from './host';
 import {
   T,
@@ -73,6 +74,20 @@ type CannonState = 'idle' | 'load' | 'aim' | 'cool';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _m4 = new THREE.Matrix4();
+const _v4 = new THREE.Vector3();
+const _v5 = new THREE.Vector3();
+const _v6 = new THREE.Vector3();
+const _v7 = new THREE.Vector3();
+/** What stops a flight: level geometry, cars, props. */
+const ARC_FILTER = groups(G.ALL, G.WORLD | G.VEHICLE | G.PROP);
+/** Seconds the player gets to aim before the cannon fires on its own. */
+const AIM_SECS = 4;
+/** How far the player can swing the barrel left/right (radians). */
+const AIM_YAW = 0.5;
+/** Dots in the trajectory preview. */
+const ARC_DOTS = 44;
 const _q = new THREE.Quaternion();
 
 export class Cannon {
@@ -98,6 +113,15 @@ export class Cannon {
   private camFn: ((cam: THREE.PerspectiveCamera, dt: number) => void) | null = null;
   private camLook = new THREE.Vector3();
   private readonly scale: number;
+  /** Player aim (yaw offset from the carriage heading, barrel elevation). */
+  private aimYaw = 0;
+  private aimElev = 0.75;
+  /** Dotted trajectory preview shown while aiming. */
+  private arc: THREE.InstancedMesh | null = null;
+  /** Where the aim camera looks: halfway between the preview's apex and its landing point. */
+  private arcLook = new THREE.Vector3();
+  private arcLookValid = false;
+  private arcRange = 0;
 
   constructor(
     private host: ExtrasHost,
@@ -257,9 +281,11 @@ export class Cannon {
     this.state = 'load';
     this.t = 0;
     const s = this.spec;
-    this.launchSpeed = rand(s.speed[0], s.speed[1]);
-    this.launchElev = rand(s.elev[0], s.elev[1]);
-    this.launchYaw = rand(-s.spread, s.spread);
+    this.launchSpeed = (s.speed[0] + s.speed[1]) / 2;
+    this.launchElev = (s.elev[0] + s.elev[1]) / 2;
+    this.launchYaw = rand(-s.spread, s.spread) * 0.5;
+    this.aimYaw = this.launchYaw;
+    this.aimElev = this.launchElev;
     game.sfx('boing', this.breech, 0.7, 0.75);
     game.sfx('whoosh', this.breech, 0.5, 0.7);
     game.hint(`Jimothy climbs into the ${s.title}. This seems fine.`, 2.4);
@@ -293,26 +319,33 @@ export class Cannon {
           this.t = 0;
           this.drumT = 0;
           game.sfx('crowd_ooh', this.spec.crowd ?? this.muzzle, 0.7);
-          game.hint('Aiming… (Jimothy is having second thoughts)', 2);
+          game.hint('Jimothy is having second thoughts…', 2);
         }
         break;
       }
       case 'aim': {
-        const dur = 2.1;
-        const u = clamp(this.t / dur, 0, 1);
-        const k = smooth(u);
-        const w = 1 - k;
+        const u = clamp(this.t / AIM_SECS, 0, 1);
         const tt = this.t;
-        this.aimGroup.rotation.y = (Math.sin(tt * 9.3) * 0.1 + Math.sin(tt * 4.1) * 0.06) * w + this.launchYaw * k;
-        this.pitchGroup.rotation.x = -(this.spec.elevation + (Math.sin(tt * 7.7) * 0.07 + Math.sin(tt * 3.3) * 0.04) * w + (this.launchElev - this.spec.elevation) * k);
+        const s = this.spec;
+        // the player aims: left/right swings the barrel, forward/back raises/lowers it
+        const mv = game.input.move;
+        this.aimYaw = clamp(this.aimYaw - mv.x * 0.75 * dt, -AIM_YAW, AIM_YAW);
+        this.aimElev = clamp(this.aimElev + mv.y * 0.5 * dt, Math.max(0.12, s.elev[0] - 0.25), Math.min(1.25, s.elev[1] + 0.35));
+        // a small nervous wobble (Jimothy is having second thoughts), too small to spoil the aim
+        this.aimGroup.rotation.y = this.aimYaw + Math.sin(tt * 9.3) * 0.008;
+        this.pitchGroup.rotation.x = -(this.aimElev + Math.sin(tt * 7.7) * 0.006);
+        this.launchYaw = this.aimYaw;
+        this.launchElev = this.aimElev;
         this.hold(player, this.insidePoint(_v), dt, 30);
+        this.updateArc(player);
+        prompt(game, `Move to aim (lands ~${Math.round(this.arcRange)} m away) · Jump to fire · ${Math.max(1, Math.ceil(AIM_SECS - this.t))}…`);
         // drumroll: rapid low taps getting louder
         this.drumT -= dt;
         if (this.drumT <= 0) {
           this.drumT = 0.055 - u * 0.012;
           game.sfx('impact_light', this.muzzle, 0.25 + u * 0.55, rand(0.5, 0.62));
         }
-        if (u >= 1) this.fire();
+        if (u >= 1 || (this.t > 0.35 && game.input.pressed('jump'))) this.fire();
         break;
       }
       case 'cool':
@@ -360,6 +393,8 @@ export class Cannon {
   private fire() {
     const game = this.game;
     const player = playerOf(game);
+    if (this.arc) this.arc.visible = false;
+    this.arcLookValid = false;
     const dir = this.axis(new THREE.Vector3());
     this.root.updateMatrixWorld(true);
     const muzzle = this.barrel.localToWorld(new THREE.Vector3(0, 0, MUZZLE));
@@ -407,6 +442,82 @@ export class Cannon {
     this.host.flight.begin(this.spec.id, from, vel, cam, `cannon:${this.spec.id}`);
   }
 
+  /**
+   * Dotted flight preview: the same launch point/velocity fire() uses, integrated with Jimothy's gravity until it
+   * meets the ground (dots grow with distance so the far end stays readable).
+   */
+  private updateArc(player: any) {
+    const game = this.game;
+    if (!this.arc) {
+      const geo = new THREE.SphereGeometry(1, 8, 6);
+      // drawn over everything, so you can see where he'll come down even behind a scoreboard
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffc233, transparent: true, opacity: 0.9, depthWrite: false, depthTest: false, toneMapped: false, fog: false });
+      this.arc = new THREE.InstancedMesh(geo, mat, ARC_DOTS);
+      this.arc.frustumCulled = false;
+      this.arc.castShadow = false;
+      this.arc.renderOrder = 5;
+      this.arc.userData.noMerge = true;
+      game.scene.add(this.arc);
+    }
+    const arc = this.arc;
+    arc.visible = true;
+    const dir = this.axis(_v3);
+    this.root.updateMatrixWorld(true);
+    const p = this.barrel.localToWorld(_v.set(0, 0, MUZZLE)).addScaledVector(dir, 0.35 * this.scale);
+    const vel = _v2.copy(dir).multiplyScalar(this.launchSpeed);
+    const g = game.physics.gravity * (player.gravityMul ?? 1);
+    const world = game.get<any>('world');
+    const water = game.get<any>('water');
+    const step = 0.07;
+    const drag = Math.exp(-0.02 * step); // fire() gives him a tiny linear damping
+    const prev = _v4;
+    const apex = _v6.copy(p);
+    let ended = false;
+    for (let i = 0; i < ARC_DOTS; i++) {
+      // advance several sub-steps per dot (dots ~every 0.21 s of flight), stopping at ground, water or anything solid
+      prev.copy(p);
+      for (let k = 0; k < 3 && !ended; k++) {
+        p.addScaledVector(vel, step);
+        vel.y += g * step;
+        vel.multiplyScalar(drag);
+        const ground = world?.heightAt?.(p.x, p.z);
+        if (typeof ground === 'number' && p.y < ground && vel.y < 0) ended = true;
+        const vol = vel.y < 0 ? water?.volumeAt?.(p) : null;
+        if (vol && p.y < vol.surfaceY) {
+          p.y = vol.surfaceY;
+          ended = true;
+        }
+      }
+      if (p.y > apex.y) apex.copy(p);
+      const seg = _v5.copy(p).sub(prev);
+      const len = seg.length();
+      if (len > 1e-3) {
+        const hit = game.physics.raycast(prev, seg, len, ARC_FILTER, player.body);
+        if (hit) {
+          p.copy(hit.point);
+          ended = true;
+        }
+      }
+      // constant-ish size on screen (far dots would otherwise shrink to nothing over a 170 m flight)
+      const camD = game.camera.position.distanceTo(p);
+      const r = ended && i > 0 ? 0 : Math.max(0.14 * this.scale, camD * 0.012);
+      _m4.makeScale(r, r, r).setPosition(p);
+      arc.setMatrixAt(i, _m4);
+      if (ended) {
+        // a bigger landing marker at the end, then hide the rest
+        const mr = Math.max(1.4 * this.scale, camD * 0.04);
+        _m4.makeScale(mr, mr * 0.12, mr).setPosition(p.x, p.y + 0.1, p.z);
+        arc.setMatrixAt(i, _m4);
+        for (let j = i + 1; j < ARC_DOTS; j++) arc.setMatrixAt(j, _m4.makeScale(0, 0, 0));
+        break;
+      }
+    }
+    arc.instanceMatrix.needsUpdate = true;
+    this.arcLook.copy(p).lerp(apex, 0.5);
+    this.arcRange = Math.hypot(p.x - this.breech.x, p.z - this.breech.z);
+    this.arcLookValid = true;
+  }
+
   // ---------------------------------------------------------------------------------------------- camera
   /**
    * Cinematic camera: while loading, glide to a side view of the cannon; when aiming, cut to a low 3/4 front view
@@ -426,30 +537,31 @@ export class Cannon {
     const sc = this.scale;
     const sideWant = mid.clone().addScaledVector(right, side * 7.5 * sc).addScaledVector(fwd, -1.8 * sc).add(new THREE.Vector3(0, 1.6 * sc, 0));
     clearView(game, mid, sideWant, 2);
-    const frontFrom = this.muzzle.clone().addScaledVector(fwd, 6.2 * sc).addScaledVector(right, side * 4.2 * sc).add(new THREE.Vector3(0, -0.6 * sc, 0));
-    const frontTo = this.muzzle.clone().addScaledVector(fwd, 4.6 * sc).addScaledVector(right, side * 3.1 * sc).add(new THREE.Vector3(0, -0.35 * sc, 0));
-    aboveGround(game, frontFrom, 0.5);
-    aboveGround(game, frontTo, 0.5);
     this.camLook.copy(game.camera.position).add(_v2.set(0, 0, -1).applyQuaternion(game.camera.quaternion).multiplyScalar(6));
-    let front = false;
-    let ft = 0;
+    const aimCam = new THREE.Vector3();
+    let aiming = false;
     const fn = (cam: THREE.PerspectiveCamera, dt: number) => {
       const d = Math.min(dt, 0.1);
       if (game.paused) return;
       if (this.state === 'aim') {
-        const look = this.insidePoint(_v2).add(_v.set(0, 0.15 * sc, 0));
-        if (!front) {
-          // cut
-          front = true;
-          ft = 0;
-          cam.position.copy(frontFrom);
+        // over-the-shoulder behind the breech, looking down the barrel at where he'll fly
+        const ax = this.axis(_v3);
+        const flat = _v.set(ax.x, 0, ax.z).normalize();
+        // Jimothy's-eye view from just above/behind his head at the muzzle (nothing can get between it and the arc),
+        // nudged to one side so the dotted arc reads as a curve
+        aimCam.copy(this.insidePoint(_v7)).addScaledVector(flat, -2.6 * sc).addScaledVector(_v2.set(flat.z, 0, -flat.x), side * 1.4 * sc);
+        aimCam.y += 1.9 * sc;
+        aboveGround(game, aimCam, 0.5);
+        // look at the middle of the predicted flight so the whole dotted arc is on screen
+        const look = this.arcLookValid ? _v2.copy(this.arcLook) : this.insidePoint(_v2).addScaledVector(ax, 16 * sc);
+        if (!aiming) {
+          aiming = true;
           this.camLook.copy(look);
         }
-        ft += d;
-        cam.position.lerpVectors(frontFrom, frontTo, smooth(ft / 2.2));
-        this.camLook.lerp(look, 1 - Math.exp(-d * 10));
+        cam.position.lerp(aimCam, 1 - Math.exp(-d * 5));
+        this.camLook.lerp(look, 1 - Math.exp(-d * 8));
         cam.lookAt(this.camLook);
-        cam.fov += (46 - cam.fov) * (1 - Math.exp(-d * 4));
+        cam.fov += (58 - cam.fov) * (1 - Math.exp(-d * 4));
       } else {
         const look = this.insidePoint(_v2).lerp(mid, 0.35);
         cam.position.lerp(sideWant, 1 - Math.exp(-d * 3.2));
@@ -465,6 +577,8 @@ export class Cannon {
 
   /** Abort (finale started, respawn…): give everything back. */
   abort() {
+    if (this.arc) this.arc.visible = false;
+    this.arcLookValid = false;
     if (this.state === 'load' || this.state === 'aim') {
       const player = playerOf(this.game);
       if (player) player.frozen = false;

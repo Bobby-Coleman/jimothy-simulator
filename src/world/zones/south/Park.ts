@@ -250,6 +250,13 @@ function gasworks(kit: Kit, b: Batch) {
     // red warning light on top
     warningLights.push([t.x, top + capH + 0.45, t.z]);
     b.cyl([t.x, top + capH + 0.3, t.z], 0.05, 0.3, IRON, { seg: 6, collide: false });
+    // service ladder (east side) on the towers without a catwalk ring: bare walls tire Jimothy quickly, ladders don't
+    if (!t.ring) {
+      const lx = t.x + t.r + 0.1;
+      for (const dz of [-0.28, 0.28]) b.box([lx, base + t.h / 2, t.z + dz], [0.06, t.h, 0.06], IRON, { collide: false, mat: 'metal', shadow: false });
+      for (let y = base + 0.3; y < top; y += 0.35) b.box([lx, y, t.z], [0.05, 0.04, 0.56], IRON, { collide: false, mat: 'metal', shadow: false });
+      kit.world.addLadder(new THREE.Vector3(t.x + t.r - 0.3, 0, t.z - 0.8), new THREE.Vector3(t.x + t.r + 1.2, top + capH + 1, t.z + 0.8));
+    }
     // vertical pipes hugging the tower (climbable)
     const na = t.r > 2 ? 2 : 1;
     for (let k = 0; k < na; k++) {

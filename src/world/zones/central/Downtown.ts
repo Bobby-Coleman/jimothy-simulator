@@ -714,6 +714,7 @@ const pasta = cached('mat:pasta', () => glowAtNight(game, new THREE.MeshStandard
     for (const dz of [-0.28, 0.28]) rails.push({ geo: new THREE.BoxGeometry(0.06, h, 0.06), color: 0x3d434a, matrix: T(r + 0.1, a + h / 2, dz) });
     for (let yy = a + 0.3; yy < b; yy += 0.35) rails.push({ geo: new THREE.BoxGeometry(0.05, 0.04, 0.56), color: 0x3d434a, matrix: T(r + 0.1, yy, 0) });
     batch.add(mergeColored(rails), trim, { matrix: T(nx, y0, nz) });
+    world.addLadder(new THREE.Vector3(nx + r - 0.3, y0 + a - 0.6, nz - 0.8), new THREE.Vector3(nx + r + 1.2, y0 + b + 0.8, nz + 0.8));
     // rest landings beside the ladder at mid-height (sidestep onto one while climbing, let go, get your breath back)
     const land: { geo: THREE.BufferGeometry; color: number; matrix: THREE.Matrix4 }[] = [];
     for (const side of [-1, 1]) {

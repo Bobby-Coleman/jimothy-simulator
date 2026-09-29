@@ -630,6 +630,11 @@ function buildBillboard(game: Game, world: World, b: Batch) {
   }
   // service ladder up the left column
   for (let k = 0; k < Math.floor(bottom / 0.4); k++) f.box(b, 'metal', -5, 0.5 + k * 0.4, -0.2, 0.6, 0.05, 0.05, 0xcfd6dc);
+  {
+    const lo = f.p(-5, -0.5, -0.2);
+    const hi = f.p(-5, bottom + 1.5, -0.2);
+    world.addLadder(new THREE.Vector3(Math.min(lo.x, hi.x) - 1.4, lo.y, Math.min(lo.z, hi.z) - 1.4), new THREE.Vector3(Math.max(lo.x, hi.x) + 1.4, hi.y, Math.max(lo.z, hi.z) + 1.4));
+  }
   return { top: f.p(0, bottom + Hh + 0.2, -0.3) };
 }
 
@@ -873,7 +878,8 @@ function coolantTank(game: Game, world: World, b: Batch, water: WaterSystem, x: 
     ctx.fillStyle = '#c0306b';
     fitText(ctx, '(please do not drink the coolant)', w / 2, h - 30, w - 200, 30, "'Nunito', sans-serif", 'italic 800');
   });
-  const sa = a + 0.9;
+  // on the side of the tank facing town (clear of the ladder and the big coolant pipe), readable from the street
+  const sa = Math.atan2(-z, -x);
   const sx = x + Math.cos(sa) * (R + 2.2),
     sz = z + Math.sin(sa) * (R + 2.2);
   const sy = world.heightAt(sx, sz);

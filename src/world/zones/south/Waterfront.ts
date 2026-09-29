@@ -1114,7 +1114,7 @@ function ferry(kit: Kit, b: Batch) {
   // passenger cabin
   const cz0 = zA + 4;
   const cz1 = zB - 4;
-  const cw = hw - 0.9;
+  const cw = hw - 1.7; // ~1.6 m promenade each side (Jimothy is 0.76 m wide; the old 0.8 m gap wedged him)
   b.box([0, (pass + sun) / 2, (cz0 + cz1) / 2], [cw * 2, sun - pass, cz1 - cz0], white, { mat: 'glossy' });
   for (const s of [-1, 1]) {
     b.box([s * (cw + 0.02), pass + 1.65, (cz0 + cz1) / 2], [0.06, 1.1, cz1 - cz0 - 1], glass, { collide: false, mat: 'window' });
@@ -1130,7 +1130,21 @@ function ferry(kit: Kit, b: Batch) {
   railingX(b, -hw + 0.2, hw - 0.2, zB - 0.7, pass, 0xe8e8e0);
   // sun deck (cabin roof) + stairs up from the promenade
   b.box([0, sun + 0.1, (cz0 + cz1) / 2], [cw * 2 + 0.3, 0.2, cz1 - cz0 + 0.3], 0xd8d8d0, { mat: 'concrete' });
-  b.stairs([hw - 0.5, pass, cz1 - 6.2], [hw - 0.5, sun + 0.2, cz1 - 0.6], 0.9, 0x9aa3ad, { mat: 'metal' });
+  b.stairs([hw - 0.95, pass, cz1 - 6.2], [hw - 0.95, sun + 0.2, cz1 - 0.6], 1.2, 0x9aa3ad, { mat: 'metal' });
+  // landing at the top joining the sun deck (the stairs used to end in mid-air beside it), railed at the far end
+  b.box([(cw + 0.1 + hw - 0.3) / 2, sun + 0.1, cz1 - 0.2], [hw - 0.3 - (cw + 0.1), 0.2, 1.2], 0x9aa3ad, { mat: 'metal' });
+  railingX(b, cw + 0.1, hw - 0.3, cz1 + 0.35, sun + 0.2, 0xe8e8e0);
+  // outer handrail up the stairs + landing (above the promenade railing he could otherwise roll off into the bay)
+  const rx = hw - 0.28;
+  for (const h of [0.45, 0.95]) {
+    b.pipe([rx, pass + h, cz1 - 6.2], [rx, sun + 0.2 + h, cz1 - 0.6], 0.04, 0xe8e8e0, { collide: true });
+    b.pipe([rx, sun + 0.2 + h, cz1 - 0.6], [rx, sun + 0.2 + h, cz1 + 0.35], 0.04, 0xe8e8e0, { collide: true });
+  }
+  for (let k = 0; k <= 4; k++) {
+    const z = cz1 - 6.2 + (k / 4) * 5.6;
+    const y = pass + (k / 4) * (sun + 0.2 - pass);
+    b.pipe([rx, y, z], [rx, y + 0.95, z], 0.035, 0xe8e8e0);
+  }
   for (const s of [-1, 1]) railingZ(b, s * (cw + 0.05), cz0 + 0.3, s > 0 ? cz1 - 6.5 : cz1 - 0.3, sun + 0.2, 0xe8e8e0);
   // wheelhouses at both ends + funnel + radar + lifeboats
   for (const z of [cz0 + 2.2, cz1 - 2.2]) {

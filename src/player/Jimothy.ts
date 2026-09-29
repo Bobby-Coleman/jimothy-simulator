@@ -530,7 +530,8 @@ export class Jimothy implements System {
       // see checkGround) can be run up; steeper faces are climbable. Otherwise keep feet planted over bumps/crests.
       const n = this.groundNormal;
       const up = plat ? 0 : -(n.x * vx + n.z * vz) / Math.max(0.45, n.y);
-      if (up > 0.05) vy = Math.min(up, 12);
+      // (rate-limited so the edge of a step/ramp, whose normal looks very steep for one frame, can't launch him)
+      if (up > 0.05) vy = Math.min(up, 12, Math.max(vy, 0) + 40 * dt);
       else if (vy > 0) vy = Math.min(vy, 0.5);
     }
 
@@ -544,7 +545,11 @@ export class Jimothy implements System {
       const dir = _a.copy(wish).normalize();
       // Feel pass: a little more reach so pressing into a wall at an angle + jump reliably grabs on
       const hit = game.physics.raycast(this.position, dir, R + 0.36, CLIMB_FILTER, this.body, this.climbable);
-      if (hit && Math.abs(hit.normal.y) < 0.5 && !game.entities.fromCollider(hit.collider)?.tags.has('noclimb')) {
+      // thin things (railings, poles) only get climbed on purpose (holding jump): brushing a handrail mid-stairs
+      // used to auto-climb it and vault him over into the bay
+      // …and without jump, only when heading fairly straight into the wall (not glancing along a railing)
+      const onPurpose = !!hit && (inp.held('jump') || (!game.physics.isThin(hit.collider) && -(dir.x * hit.normal.x + dir.z * hit.normal.z) > 0.7));
+      if (hit && onPurpose && Math.abs(hit.normal.y) < 0.5 && !game.entities.fromCollider(hit.collider)?.tags.has('noclimb')) {
         // Feel pass: a low wall / ledge he can almost reach: vault straight onto it instead of climbing 20 cm
         if (!this.tryVault(hit.point, hit.normal)) this.enterClimb(hit.normal);
       }
@@ -638,9 +643,11 @@ export class Jimothy implements System {
       },
       true,
     );
-    this.stamina -= dt / 11;
+    // A full stamina bar climbs a bare wall for ~2.75 s (~7 m, ~11 m sprinting); ladders are 4× gentler (11 s)
+    const onLadder = !!game.get<any>('world')?.onLadder?.(this.position);
+    this.stamina -= dt / (onLadder ? 11 : 2.75);
     if (this.stamina <= 0) {
-      this.game.hint('Jimothy’s tiny arms give out.', 1.8);
+      this.game.hint('Jimothy’s tiny arms give out. (Ladders are much easier.)', 2.2);
       this.climbCooldown = 1.2;
       this.setMode('walk');
       return;

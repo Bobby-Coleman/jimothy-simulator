@@ -129,7 +129,8 @@ export class ServerPlug {
     jl.position.copy(L(TW / 2 + 1.2, 0.8, 1.26));
     jl.quaternion.copy(q);
     world.staticRoot.add(markOwned(jl));
-    this.anchor.copy(L(TW / 2 + 1.2, 0.9, 1.3));
+    // cable enters the side of the junction box facing the plug, so it never crosses the "TO DATA CENTER" label
+    this.anchor.copy(L(TW / 2 + 0.72, 0.55, 0.9));
 
     // ---- the plug
     const plugMat = new THREE.MeshStandardMaterial({ color: 0x23252b, roughness: 0.55, metalness: 0.1 });

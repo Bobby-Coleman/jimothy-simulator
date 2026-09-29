@@ -157,8 +157,31 @@ function shade(c: number, k: number) {
 }
 
 const sphereGeo = (r: number, w = 12, h = 9) => new THREE.SphereGeometry(r, w, h);
+/**
+ * Partial sphere shell (hair, beards, hat crowns). Open shells get an inward-facing copy: seen from the front, you
+ * look at the *inside* of the back hair around the face, which single-sided rendering culled away (sky showed through).
+ */
 const capGeo = (r: number, thetaLen: number, phiStart = 0, phiLen = Math.PI * 2, thetaStart = 0, w = 14, h = 7) =>
-  new THREE.SphereGeometry(r, w, h, phiStart, phiLen, thetaStart, thetaLen);
+  doubleSided(new THREE.SphereGeometry(r, w, h, phiStart, phiLen, thetaStart, thetaLen));
+function doubleSided(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const back = g.clone();
+  const idx = back.getIndex();
+  if (idx) {
+    const arr = idx.array as Uint16Array | Uint32Array;
+    for (let i = 0; i < arr.length; i += 3) {
+      const t = arr[i + 1];
+      arr[i + 1] = arr[i + 2];
+      arr[i + 2] = t;
+    }
+    idx.needsUpdate = true;
+  }
+  const n = back.getAttribute('normal') as THREE.BufferAttribute;
+  for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+  const out = mergeGeometries([g, back]) ?? g;
+  g.dispose();
+  back.dispose();
+  return out;
+}
 const cylGeo = (rt: number, rb: number, h: number, seg = 10, open = false) => new THREE.CylinderGeometry(rt, rb, h, seg, 1, open);
 function rboxGeo(w: number, h: number, d: number, r: number, seg = 2) {
   const g = new RoundedBoxGeometry(w, h, d, seg, Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3));

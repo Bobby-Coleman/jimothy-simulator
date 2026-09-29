@@ -28,6 +28,18 @@ export class World implements System {
   readonly staticRoot = new THREE.Group();
   /** Named points of interest (spawn, quest spots). Zone builders fill this. */
   readonly poi = new Map<string, THREE.Vector3>();
+  /**
+   * Ladder volumes (world space). Climbing inside one costs the old, gentle stamina rate; bare walls, poles and
+   * trees tire Jimothy 4× faster, so tall landmarks are climbed by ladder (or in stages, via ledges).
+   */
+  readonly ladders: THREE.Box3[] = [];
+  addLadder(min: THREE.Vector3, max: THREE.Vector3) {
+    this.ladders.push(new THREE.Box3(min.clone(), max.clone()));
+  }
+  onLadder(p: THREE.Vector3) {
+    for (const b of this.ladders) if (b.containsPoint(p)) return true;
+    return false;
+  }
   /** Areas for zone-name HUD display. */
   readonly areas: { name: string; min: THREE.Vector2; max: THREE.Vector2 }[] = [];
   /**
