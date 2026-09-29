@@ -796,6 +796,26 @@ function crowTree(kit: Kit, b: Batch) {
   b.geo(GEO.cyl(1, 12), [nx, 8.75, nz], [0, 0, 0], [0.8, 0.2, 0.8], 0x5a4029, {});
   kit.collider([nx, 8.72, nz], [1.6, 0.25, 1.6]);
   kit.world.poi.set('bobblehead:s2', V(nx, 9.1, nz));
+  // rope ladder dangling from the nest's far rim (away from the trunk): jump to grab the bottom rung, climb, tumble in.
+  // The tree itself is a bare-bark climb (4× tiring); the ladder keeps the gentle rate. Hidden slab = the climb face
+  // (1 m wide so it isn't a "thin" jump-to-grab-only collider); its top is flush with the nest so he mantles in.
+  {
+    const rx = nx + 0.95; // rope plane (just outside the nest collider's +x edge)
+    const yTop = 8.85;
+    const yBot = 0.95;
+    const ROPE = 0xcfa86a;
+    const RUNG = 0x8a5a33;
+    for (const dz of [-0.4, 0.4]) {
+      b.pipe([rx, yBot - 0.15, nz + dz], [rx, yTop, nz + dz], 0.045, ROPE, { seg: 6, collide: false });
+      // loop over the rim + knot on the nest floor
+      b.pipe([rx, yTop, nz + dz], [nx + 0.55, 9.2, nz + dz * 0.9], 0.05, ROPE, { seg: 6, collide: false });
+      b.geo(GEO.cyl(1, 8), [nx + 0.5, 9.05, nz + dz * 0.9], [0, 0, 0], [0.1, 0.18, 0.1], ROPE, {});
+      b.geo(GEO.cyl(1, 8), [rx, yBot - 0.2, nz + dz], [0, 0, 0], [0.07, 0.12, 0.07], ROPE, {});
+    }
+    for (let y = yBot; y < yTop - 0.1; y += 0.42) b.box([rx + 0.02, y, nz], [0.1, 0.08, 0.98], RUNG, { collide: false, mat: 'planks', shadow: false });
+    kit.collider([nx + 0.87, (yBot + yTop) / 2, nz], [0.14, yTop - yBot, 1.0]);
+    kit.world.addLadder(V(nx + 0.7, yBot - 0.6, nz - 0.8), V(nx + 2.2, yTop + 1, nz + 0.8));
+  }
   // crows perched on branches and loitering below
   perched(kit, BIRD.crow(), [
     [x + 3.2, 7.55, z + 0.9, 1.2, 1.2],

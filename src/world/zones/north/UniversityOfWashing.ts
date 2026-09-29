@@ -122,6 +122,7 @@ export const UniversityOfWashing: ZoneBuilder = {
     halls.push({ info: tumble, name: 'TUMBLE DRY HALL' });
     for (const hInfo of halls) hallPlaque(world, b, hInfo.info, hInfo.name);
     if (library.towerTop) poi(world, 'bobblehead:n2', library.towerTop.x, library.towerTop.y + 0.35, library.towerTop.z);
+    if (library.towerTop) libraryTowerLadder(world, b, library);
 
     // quad lawn paths
     const libFootZ = library.stepsEnd.z; // ground in front of the library steps
@@ -488,6 +489,38 @@ function gothicLamp(game: Game, world: World, b: Batch, x: number, y: number, z:
   b.box('lamp', x, y + 3.95, z, 0.34, 0.5, 0.34, 0xfff0c8);
   b.add('metal', GEO.cone4, trs(x, y + 4.4, z, 0.55, 0.45, 0.55), 0x2a2d33);
   world.collider(new THREE.Vector3(x, y + 2.2, z), new THREE.Vector3(0.25, 4.4, 0.25));
+}
+
+/**
+ * Maintenance ladder up the library tower (bobblehead n2 sits on the tower roof, ~25 m up). Bare walls tire Jimothy
+ * 4× faster than ladders, so the tower gets a steeplejack's iron ladder on its west face, in the nook where the tower
+ * stands proud of the facade, ground to crenel gap. Tower dims mirror gothicHall's (7×7, top at h + 10, centre
+ * d/2 − 3.5 + 1.2 = 3.7 local, h = 14, d = 12). Rails/rungs are thin visual boxes; the tower wall is the climb face.
+ */
+function libraryTowerLadder(world: World, b: Batch, lib: HallInfo) {
+  const f = lib.frame;
+  const th2 = lib.top + 10;
+  const wx = -3.5; // tower west face (local x)
+  const lz = 6.62; // proud of the facade line (6, so he clears the eave) and short of the corner pinnacle (7.2)
+  const base = f.p(wx, 0, lz);
+  const gy = world.heightAt(base.x, base.z) - lib.floorY;
+  const IRON = 0xa3acb0; // galvanised: reads against the red brick from the quad
+  const rx = wx - 0.1;
+  const y0 = gy - 0.1;
+  const y1 = th2 + 1.1; // rails poke above the parapet as grab handles
+  for (const dz of [-0.26, 0.26]) {
+    f.box(b, 'metal', rx, (y0 + y1) / 2, lz + dz, 0.11, y1 - y0, 0.11, IRON);
+    // hooked grab-rail over the top
+    f.box(b, 'metal', wx + 0.05, y1, lz + dz, 0.4, 0.11, 0.11, IRON);
+  }
+  for (let y = gy + 0.35; y < th2 + 0.2; y += 0.35) f.box(b, 'metal', rx, y, lz, 0.08, 0.07, 0.52, IRON);
+  // stand-off brackets bolting it to the brick every few metres
+  for (let y = gy + 1.5; y < th2; y += 3.2)
+    for (const dz of [-0.26, 0.26]) f.box(b, 'metal', wx - 0.05, y, lz + dz, 0.12, 0.1, 0.1, IRON);
+  // ladder volume: where his body is while climbing (wall face out to ~1.2 m, ±0.8 m along the wall, full height)
+  const a = f.p(wx - 1.3, gy - 0.3, lz - 0.8);
+  const c = f.p(wx + 0.3, th2 + 1.5, lz + 0.8);
+  world.addLadder(new THREE.Vector3(Math.min(a.x, c.x), a.y, Math.min(a.z, c.z)), new THREE.Vector3(Math.max(a.x, c.x), c.y, Math.max(a.z, c.z)));
 }
 
 function hallPlaque(world: World, b: Batch, h: HallInfo, name: string) {
