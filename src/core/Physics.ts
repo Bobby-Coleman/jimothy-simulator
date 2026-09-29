@@ -235,7 +235,7 @@ export class Physics {
     _v.copy(dir).normalize();
     // Tiny nudge: rays passing exactly through heightfield grid vertices can miss (degenerate case).
     const ray = new RAPIER.Ray({ x: from.x + 0.00137, y: from.y, z: from.z + 0.00071 }, { x: _v.x, y: _v.y, z: _v.z });
-    const hit = this.world.castRayAndGetNormal(ray, maxDist, true, undefined, filter, undefined, exclude, predicate);
+    const hit = this.world.castRayAndGetNormal(ray, maxDist, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, filter, undefined, exclude, predicate);
     if (!hit) return null;
     const t = hit.timeOfImpact;
     return {
@@ -265,7 +265,9 @@ export class Physics {
       0,
       maxDist,
       true,
-      undefined,
+      // sensors (wash zones, triggers) are never solid: casting against them left Jimothy "ungrounded" on the
+      // billboard catwalk and jammed the camera
+      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
       filter,
       undefined,
       exclude,
