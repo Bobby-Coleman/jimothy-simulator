@@ -80,6 +80,8 @@ export function gothicHall(game: Game, world: World, b: Batch, o: HallOpts): Hal
   for (let i = 1; i < o.floors; i++) f.box(b, 'concrete', 0, 0.9 + floorH * i, 0, w + 0.14, 0.16, d + 0.14, STONE);
   f.box(b, 'concrete', 0, h - 0.1, 0, w + 0.5, 0.35, d + 0.5, STONE); // cornice
   f.collider(game, 0, (h + yb) / 2, 0, w, h - yb, d);
+  // floor pass: the stone plinth + water-table band stick out 0.15–0.18 m all round (a ledge you sank into)
+  f.collider(game, 0, (yb + 1.06) / 2, 0, w + 0.36, 1.06 - yb, d + 0.36);
 
   // buttresses + lancet windows in each bay on the long facades; smaller windows on the ends
   const bay = o.bay ?? 4.2;
@@ -131,6 +133,7 @@ export function gothicHall(game: Game, world: World, b: Batch, o: HallOpts): Hal
     roofCollider(game, f, 'z', s, d / 2, h, Ry, w);
   }
   f.box(b, 'metal', 0, Ry + t * 1.2, 0, w + 0.3, 0.16, 0.3, 0x6f7b72);
+  f.collider(game, 0, Ry + t * 1.2, 0, w, 0.16, 0.3); // floor pass: solid ridge cap
   for (const s of [-1, 1]) {
     f.geo(b, 'brick', GEO.prism, (s * w) / 2, h - 0.05, 0, d + 0.2, (d / 2 + 0.1) * pitch, 0.5, brick, Math.PI / 2);
     gableCollider(game, f, 'x', s, w / 2, h - 0.05, d, (d / 2) * pitch, 0.5);
@@ -219,6 +222,8 @@ export function gothicHall(game: Game, world: World, b: Batch, o: HallOpts): Hal
     const th2 = h + 10;
     f.box(b, 'brick', 0, (th2 + 0.4) / 2, d / 2 - td / 2 + 1.2, tw, th2 - 0.4, td, brick);
     f.box(b, 'concrete', 0, th2, d / 2 - td / 2 + 1.2, tw + 0.6, 0.5, td + 0.6, STONE);
+    // floor pass: the cap slab (the tower's roof) stood 0.25 m proud of the brick collider
+    f.collider(game, 0, th2, d / 2 - td / 2 + 1.2, tw + 0.6, 0.5, td + 0.6);
     // rose window + big lancet
     f.geo(b, 'concrete', GEO.cyl, 0, h + 3.2, d / 2 + 1.25, 4.0, 0.25, 4.0, STONE, 0, Math.PI / 2);
     f.geo(b, 'glassLit', GEO.cyl, 0, h + 3.2, d / 2 + 1.34, 3.4, 0.12, 3.4, 0x8a78c9, 0, Math.PI / 2);

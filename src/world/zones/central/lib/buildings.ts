@@ -264,7 +264,8 @@ export async function buildStore(kit: BuildingKit, s: StoreSpec): Promise<BuiltS
   batch.add(bx(0.3, 0.7, D - 0.34), wallMat, { matrix: M.clone().multiply(T(W / 2 - 0.15, H + 0.35, -D / 2 - 0.17)), uv: 2.3, color: s.wall });
   batch.add(bx(W, 0.7, 0.3), wallMat, { matrix: M.clone().multiply(T(0, H + 0.35, -D + 0.15)), uv: 2.3, color: s.wall });
   addBox(W + 0.08, 0.1, 0.44, 0, H + pH + 0.05, -0.17, shade(trimC, 0.95));
-  world.collider(lp(0, H + pH / 2, -0.17), new THREE.Vector3(W, pH, 0.34), yaw);
+  // floor pass: the collider includes the 10 cm coping (0.44 deep) you walk along the parapet on
+  world.collider(lp(0, H + (pH + 0.1) / 2, -0.17), new THREE.Vector3(W + 0.08, pH + 0.1, 0.44), yaw);
   world.collider(lp(-W / 2 + 0.15, H + 0.35, -D / 2 - 0.17), new THREE.Vector3(0.3, 0.7, D - 0.34), yaw);
   world.collider(lp(W / 2 - 0.15, H + 0.35, -D / 2 - 0.17), new THREE.Vector3(0.3, 0.7, D - 0.34), yaw);
   world.collider(lp(0, H + 0.35, -D + 0.15), new THREE.Vector3(W, 0.7, 0.3), yaw);
@@ -272,7 +273,7 @@ export async function buildStore(kit: BuildingKit, s: StoreSpec): Promise<BuiltS
     const sw = Math.min(W * 0.45, 5);
     batch.add(bx(sw, 0.8, 0.34), wallMat, { matrix: M.clone().multiply(T(0, H + pH + 0.4, -0.17)), uv: 2.3, color: s.wall });
     addBox(sw + 0.1, 0.1, 0.44, 0, H + pH + 0.85, -0.17, shade(trimC, 0.95));
-    world.collider(lp(0, H + pH + 0.4, -0.17), new THREE.Vector3(sw, 0.8, 0.34), yaw);
+    world.collider(lp(0, H + pH + 0.45, -0.17), new THREE.Vector3(sw + 0.1, 0.9, 0.44), yaw);
     if (s.yearRect) add(atlas.quad(s.yearRect, sw * 0.8, 0.5), s.yearRect.page.mat, T(0, H + pH + 0.22, 0.005), undefined, false);
   } else if (s.yearRect) add(atlas.quad(s.yearRect, Math.min(W * 0.5, 3.2), 0.45), s.yearRect.page.mat, T(0, H + pH * 0.5, 0.005), undefined, false);
 

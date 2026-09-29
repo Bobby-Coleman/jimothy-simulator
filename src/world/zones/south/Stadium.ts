@@ -189,10 +189,11 @@ function field(kit: Kit, b: Batch) {
     { mat: 'grass', shadow: false },
   );
   // home circle, base cutouts, mound
-  b.disc([H.x, 0.075, H.z], 4.2, DIRT, { mat: 'sand', seg: 32 });
+  // (floor pass: dirt circles lowered so their top sits ~flush at 7.5 cm instead of 11.5 cm over the solid ground)
+  b.disc([H.x, 0.035, H.z], 4.2, DIRT, { mat: 'sand', seg: 32 });
   const bases: [number, number][] = [at(BASE, D1), [H.x, H.z - BASE * Math.SQRT2], at(BASE, D3)];
   for (const [x, z] of bases) {
-    b.disc([x, 0.075, z], 1.5, DIRT, { mat: 'sand', seg: 20 });
+    b.disc([x, 0.035, z], 1.5, DIRT, { mat: 'sand', seg: 20 });
     b.box([x, 0.1, z], [0.42, 0.1, 0.42], 0xffffff, { rotY: Math.PI / 4, collide: false });
   }
   b.cyl([MOUND.x, 0.13, MOUND.z], 2.2, 0.26, DIRT, { rTop: 1.4, seg: 24, mat: 'sand', collide: false });
@@ -297,7 +298,7 @@ function outfieldWall(kit: Kit, b: Batch) {
     const rotY = -am + Math.PI / 2; // local x tangent
     b.box([x, Hw / 2, z], [len, Hw, 0.6], WALL_GREEN, { rotY });
     const [tx, tz] = onArc(am, Rw);
-    b.box([tx, Hw + 0.06, tz], [len, 0.12, 0.66], 0xffd23a, { rotY, collide: false });
+    b.box([tx, Hw + 0.06, tz], [len, 0.12, 0.66], 0xffd23a, { rotY }); // floor pass: solid cap (was 12 cm walk-in)
   }
   // ads facing home plate
   ADS.forEach(([t1, t2, bg, fg], i) => {
@@ -430,7 +431,7 @@ function section(kit: Kit, b: Batch, seats: Seat[], a: [number, number], c: [num
     const bd = rows * ROW_D + 0.3;
     const top = ROW_H * rows + 2.2;
     b.box([mx + back.x * bd, top / 2, mz + back.z * bd], [L + 1.2, top, 0.6], 0xb9b3a7, { rotY: boxRot, mat: 'concrete' });
-    b.box([mx + back.x * bd, top + 0.15, mz + back.z * bd], [L + 1.4, 0.3, 0.8], TEAL, { rotY: boxRot, collide: false, mat: 'glossy' });
+    b.box([mx + back.x * bd, top + 0.15, mz + back.z * bd], [L + 1.4, 0.3, 0.8], TEAL, { rotY: boxRot, mat: 'glossy' }); // floor pass: solid cap
     if (o.banners !== false) {
       const tex = bannerTextures();
       const n = Math.max(1, Math.floor(L / 7));
@@ -819,7 +820,7 @@ function plaza(kit: Kit, b: Batch) {
 function giantBobblehead(kit: Kit, b: Batch, x: number, z: number) {
   const S = 3.4;
   b.cyl([x, 0.7, z], 2.4, 1.4, 0x8c8378, { seg: 24, mat: 'stone', collide: true });
-  b.cyl([x, 1.45, z], 2.6, 0.12, 0xb9b3a7, { seg: 24, mat: 'stone', collide: false });
+  b.cyl([x, 1.45, z], 2.6, 0.12, 0xb9b3a7, { seg: 24, mat: 'stone', collide: true }); // floor pass: solid plinth cap
   const fig = P.jimothyFigure();
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.05 });
   const base = new THREE.Group();

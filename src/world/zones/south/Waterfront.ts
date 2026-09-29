@@ -8,6 +8,7 @@ import { lamps, BIRD, perched, flock } from './decor';
 import { addNightRig, multiplyPoolMaterial } from './nightLight';
 import { seawall } from './Locks';
 import * as P from './props';
+import { profileColliders } from '../../profileColliders';
 import { spawnItem } from '../../../gameplay/items';
 
 /**
@@ -138,7 +139,7 @@ function marketHall(kit: Kit, b: Batch) {
   const ridgeZ = (z0 + z1) / 2;
   b.ramp([0, H + 0.75, z0 - 0.6], [0, ridgeY, ridgeZ], x1 - x0 + 1.4, 0x2f6b52, { mat: 'metal', thick: 0.3 });
   b.ramp([0, ridgeY, ridgeZ], [0, H + 0.75, z1 + 0.6], x1 - x0 + 1.4, 0x2f6b52, { mat: 'metal', thick: 0.3 });
-  b.box([0, ridgeY + 0.05, ridgeZ], [x1 - x0 + 1.4, 0.25, 0.5], 0x1f4d3a, { mat: 'metal', collide: false });
+  b.box([0, ridgeY + 0.05, ridgeZ], [x1 - x0 + 1.4, 0.25, 0.5], 0x1f4d3a, { mat: 'metal' }); // floor pass: solid ridge cap
   // gable ends
   for (const [a, c] of [
     [x0 - 0.4, x0 + 0.1],
@@ -819,7 +820,7 @@ function prettyGoodWheel(kit: Kit, b: Batch) {
     const gy = py - 1.6;
     b.box([px, gy, cz], [2.2, 1.9, 2.0], cols[i % cols.length], { mat: 'glossy' });
     b.box([px, gy + 0.2, cz], [2.25, 0.7, 2.05], 0x2b4a66, { collide: false, mat: 'window' });
-    b.box([px, gy + 1.0, cz], [2.4, 0.15, 2.2], white, { collide: false });
+    b.box([px, gy + 1.0, cz], [2.4, 0.15, 2.2], white); // floor pass: solid gondola roof (bobblehead #9 sits on one)
     b.cyl([px, gy + 1.3, cz], 0.05, 0.6, 0x9aa3ad, { seg: 5, collide: false });
     bulbs.push([px, py, cz - 1.35], [px, py, cz + 1.35]);
   }
@@ -1161,6 +1162,7 @@ function ferry(kit: Kit, b: Batch) {
   for (const s of [-1, 1])
     for (const z of [zc - 6, zc + 6]) {
       b.geo(GEO.sphere(12, 8), [s * (cw - 0.6), sun + 0.75, z], [0, 0, 0], [0.7, 0.5, 2.0], 0xff7a1a, { mat: 'glossy' });
+      kit.collider([s * (cw - 0.6), sun + 0.75, z], [1.1, 0.8, 3.2]); // floor pass: lifeboats were walk-through
     }
   // name boards on the hull sides
   const name = canvasTex(1024, 200, (ctx, w, h) => {
@@ -1180,7 +1182,8 @@ function ferry(kit: Kit, b: Batch) {
       if (!c) return;
       const [x, z] = spots[i];
       const r = kit.place(c, x, car, z, i === 1 ? 0 : Math.PI, { scale: 1.45 });
-      kit.collider([x, car + r.size.y / 2, z], [r.size.x * 0.9, r.size.y, r.size.z * 0.9]);
+      // floor pass: follows hood/roof (the full-height box made him float over the hood)
+      profileColliders(kit.world, r.obj, { rotY: i === 1 ? 0 : Math.PI });
     });
   });
   kit.world.poi.set('ferry', V(0, car + 0.3, 200));
@@ -1194,7 +1197,10 @@ async function boats(kit: Kit) {
     if (!m) return;
     const r = kit.place(m, x, BAY_Y - sink, z, rotY, { size });
     st.bobbers.push({ obj: r.obj, baseY: BAY_Y - sink, amp: 0.05 + Math.random() * 0.04, speed: 0.9 + Math.random() * 0.6, phase: Math.random() * 6, roll: 0.025, baseRotX: 0, baseRotZ: 0 });
-    kit.collider([x, BAY_Y - sink + hullH / 2, z], [r.size.x * 0.85, hullH, r.size.z * 0.9], rotY);
+    // floor pass: stepped colliders along the real deck/cabin (one guessed-height hull box let him sink up to 1 m
+    // into decks and cabins, or float over the bow)
+    void hullH;
+    profileColliders(kit.world, r.obj, { rotY, baseY: BAY_Y - sink });
   };
   await Promise.all([
     place('boat-sail-a', 40, 184.8, Math.PI / 2, 8.5, 0.5, 1.4),

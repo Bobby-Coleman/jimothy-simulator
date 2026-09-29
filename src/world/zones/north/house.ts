@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import type { Game } from '../../../core/Game';
 import type { World } from '../../World';
-import { Batch, Frame, GEO, footprint, rng, pick, roofCollider, gableCollider } from './kit';
+import { Batch, Frame, GEO, footprint, rng, pick, roofCollider, gableCollider, colliderHull } from './kit';
 
 export type HouseStyle = 'gable' | 'bungalow' | 'foursquare';
 
@@ -204,14 +204,27 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
     ridge = f.p(0, Ey + rise + 0.05, 0);
     // soffit band + rafter tails all around
     f.box(b, 'trim', 0, wallTop - 0.05, 0, w + 0.12, 0.18, d + 0.12, trim);
-    // colliders: 4 inclined slabs (trimmed so the hips don't poke out much)
-    const thz = Math.atan2(rise, bz / 2),
-      thx = Math.atan2(rise, bx / 2);
-    for (const s of [-1, 1]) {
-      const Lz = Math.hypot(bz / 2, rise);
-      roofCollider(game, f, 'z', s, d / 2, Ey + rise * (1 - d / bz), Ey + rise, w * 0.7);
-      const Lx = Math.hypot(bx / 2, rise);
-      roofCollider(game, f, 'x', s, w / 2, Ey + rise * (1 - w / bx), Ey + rise, d * 0.7);
+    // collider: the pyramid itself, trimmed to the wall footprint (no eave overhang, so a wall climb still mantles
+    // straight on). Floor pass: it used to be 4 inclined slabs, each as wide as 70% of the wall, which stood up to
+    // 0.6 m proud of the neighbouring hip faces (Jimothy floated over a quarter of every hip roof).
+    const roofH = (x: number, z: number) => Ey + rise * (1 - Math.max((2 * Math.abs(x)) / bx, (2 * Math.abs(z)) / bz));
+    const hull: THREE.Vector3[] = [f.p(0, Ey + rise, 0)];
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) {
+        const cx = (sx * w) / 2,
+          cz = (sz * d) / 2;
+        hull.push(f.p(cx, roofH(cx, cz), cz), f.p(cx, wallTop - 0.4, cz));
+        // where the hip lines leave the footprint
+        const hx = ((bx / bz) * d) / 2;
+        if (hx < w / 2) hull.push(f.p(sx * hx, roofH(sx * hx, cz), cz));
+        const hz = ((bz / bx) * w) / 2;
+        if (hz < d / 2) hull.push(f.p(cx, roofH(cx, sz * hz), sz * hz));
+      }
+    if (!colliderHull(game, hull)) {
+      for (const s of [-1, 1]) {
+        roofCollider(game, f, 'z', s, d / 2, Ey + rise * (1 - d / bz), Ey + rise, w * 0.7);
+        roofCollider(game, f, 'x', s, w / 2, Ey + rise * (1 - w / bx), Ey + rise, d * 0.7);
+      }
     }
     // front dormer with a tiny hip
     const dy = Ey + rise * 0.3;
@@ -249,6 +262,7 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
         f.box(b, 'trim', s * (w / 2 + ov * 0.6), Ey + ov * 0.4 * pitch - 0.05, zz, ov * 0.9, 0.09, 0.07, trim, 0, 0, -s * th);
     }
     f.box(b, 'roof', 0, Ry + t / Math.cos(th) - 0.02, 0, 0.34, 0.14, zLen + 0.04, new THREE.Color(roofC).multiplyScalar(0.8).getHex());
+    f.collider(game, 0, Ry + t / Math.cos(th) - 0.02, 0, 0.34, 0.14, d); // floor pass: solid ridge cap
     ridge = f.p(0, Ry + t + 0.1, 0);
     // gable ends (front & back) + vents + knee braces
     for (const s of [-1, 1]) {
@@ -290,6 +304,7 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
         f.box(b, 'trim', xx, Ey + ov * 0.4 * pitch - 0.05, s * (d / 2 + ov * 0.6), 0.07, 0.09, ov * 0.9, trim, 0, s * th, 0);
     }
     f.box(b, 'roof', 0, Ry + t / Math.cos(th) - 0.02, 0, xLen + 0.04, 0.14, 0.34, new THREE.Color(roofC).multiplyScalar(0.8).getHex());
+    f.collider(game, 0, Ry + t / Math.cos(th) - 0.02, 0, w, 0.14, 0.34); // floor pass: solid ridge cap
     ridge = f.p(0, Ry + t + 0.1, 0);
     for (const s of [-1, 1]) {
       f.geo(b, 'siding', GEO.prism, (s * w) / 2, wallTop, 0, d, (d / 2) * pitch, 0.16, gableC, Math.PI / 2);

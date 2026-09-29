@@ -284,7 +284,12 @@ function vistaStairs(game: Game, world: World, b: Batch, x: number, z0: number, 
     }
     const len = Math.hypot(runLen, rise);
     const ang = Math.atan2(rise, runLen);
-    colliderBox(game, x, (y0 + yb) / 2 - 0.16, (za + zb) / 2, width, 0.3, len + 0.05, 0, ang);
+    // floor pass: going uphill the ramp ran through the steps' back corners, so every nosing stood up to one riser
+    // (~0.17 m) proud of it and Jimothy walked "inside" the stairs. Shift it one tread downhill so it runs through
+    // the nosings instead, and cap the top tread (which the shifted ramp no longer covers).
+    const sh = rise > 0 ? runLen / n : 0;
+    colliderBox(game, x, (y0 + yb) / 2 - 0.16, (za + zb) / 2 + sh, width, 0.3, len + 0.05, 0, ang);
+    if (sh > 0) colliderBox(game, x, yb - 0.15, zb + sh / 2, width, 0.3, sh + 0.02);
     for (const s of [-1, 1]) {
       b.add('metal', GEO.cyl8, trs(x + (s * width) / 2 - s * 0.2, (y0 + yb) / 2 + 0.9, (za + zb) / 2, 0.07, len, 0.07, 0, ang - Math.PI / 2), 0x2b2f2e);
     }
@@ -316,7 +321,8 @@ function buildFountain(game: Game, world: World, mats: MatSet, b: Batch, water: 
     b.box('stone', cx + Math.cos(a) * (R + 0.3), y + rimH / 2, cz + Math.sin(a) * (R + 0.3), 0.6, rimH, len, 0xe2d9c6, -a);
     b.box('concrete', cx + Math.cos(a) * (R + 0.3), y + rimH + 0.05, cz + Math.sin(a) * (R + 0.3), 0.8, 0.1, len + 0.02, 0xf2ece0, -a);
   }
-  colliderRing(game, cx, y + rimH / 2, cz, R + 0.3, rimH, 0.6, 24);
+  // floor pass: the ring collider now includes the 10 cm coping (0.8 m wide) you walk along the rim on
+  colliderRing(game, cx, y + (rimH + 0.1) / 2, cz, R + 0.3, rimH + 0.1, 0.8, 24);
   water.addCircle({ name: 'Drum-Dryer Fountain', kind: 'fountain', center: new THREE.Vector3(cx, y + rimH - 0.12, cz), radius: R, depth });
   // centerpiece: a giant stone front-loading washing machine on a plinth
   const my = y + 0.3;

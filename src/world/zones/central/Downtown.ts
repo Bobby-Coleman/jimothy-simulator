@@ -11,6 +11,7 @@ import { loadFonts, sharedAtlas, type AtlasRect } from './lib/signs';
 import { drawFriezeBanner, drawVerticalBanner, drawFlag, FLAG_COUNT, drawStatuePlaque, drawCitySeal, drawNoodleSign, drawCafeSign, drawLobbySign, drawNewsVanLogo } from './lib/civicart';
 import { ashlarTexture, cached, towerTexture } from './lib/textures';
 import { loadMerged } from './lib/models';
+import { profileCollidersFromParts } from '../../profileColliders';
 import { cylinderCollider, glowAtNight, onFrame, Rng, trimeshFromGeometry, boxColliderEuler } from './lib/util';
 import { terrainHeight } from '../../terrain';
 import { RAPIER, G, groups } from '../../../core/Physics';
@@ -788,6 +789,8 @@ function buildTowers(game: Game, world: World, batch: Batch, rng: Rng) {
       world.collider(new THREE.Vector3(s.cx, y + h / 2, s.cz), new THREE.Vector3(w, h, d));
       // ledge cap (the setback you can rest on)
       batch.add(new THREE.BoxGeometry(w + 0.3, 0.35, d + 0.3), trim, { matrix: T(s.cx, y + h + 0.17, s.cz), color: 0xdfe4e8 });
+      // floor pass: the cap stood 0.35 m proud of the tier collider (Jimothy sank into every setback and roof)
+      world.collider(new THREE.Vector3(s.cx, y + h + 0.17, s.cz), new THREE.Vector3(w + 0.3, 0.35, d + 0.3));
       y += h;
       if (i < s.tiers.length - 1) {
         w -= 4;
@@ -1195,7 +1198,8 @@ async function buildPlazaDecor(game: Game, world: World, batch: Batch, rng: Rng)
   if (van) {
     placeBatched(world, batch, van.parts.map((p) => ({ geo: p.geo, mat: p.mat })), [{ x: vx, y: walkY(vx, vz), z: vz, ry: Math.PI / 2, s: 1.45 }], { name: 'newsVan' });
     const sz = van.size.clone().multiplyScalar(1.45);
-    world.collider(new THREE.Vector3(vx, walkY(vx, vz) + sz.y * 0.4, vz), new THREE.Vector3(sz.z * 0.95, sz.y * 0.8, sz.x * 0.95));
+    // floor pass: stepped colliders along the van's real roof line (the 0.8-height box sank him 0.4 m into the roof)
+    profileCollidersFromParts(world, van.parts, { x: vx, y: walkY(vx, vz), z: vz, ry: Math.PI / 2, s: 1.45 });
     const logo = atlas.draw(512, 96, (ctx, w, h) => drawNewsVanLogo(ctx, w, h));
     batch.add(atlas.quad(logo, 3.0, 0.56), logo.page.mat, { matrix: T(vx, walkY(vx, vz) + 1.35, vz + sz.x / 2 + 0.02), castShadow: false });
     batch.add(
