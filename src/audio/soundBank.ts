@@ -242,7 +242,7 @@ const at = (f: MusicFile, volume: number): MusicFile => ({ ...f, gain: +(f.gain 
 
 export const MUSIC_BANK: Record<MusicTrack, MusicDef> = {
   title: {
-    desc: 'Title screen music player: every track, upbeat first (the player picks; prev / play-pause / next).',
+    desc: 'The music player playlist: every track, upbeat first. Title screen, and gameplay in "My playlist" mode (checked tracks, optional shuffle: musicPrefs.ts).',
     volume: 1,
     files: [T.workings, T.banana, T.garden, T.wobblings, T.bounce, at(T.dialup, 0.9), at(T.aiContact, 0.9), at(T.lofi, 0.85), at(T.napping, 0.85)],
   },

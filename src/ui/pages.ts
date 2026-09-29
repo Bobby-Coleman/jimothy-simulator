@@ -11,6 +11,7 @@ import type { MenuHost, PageDef } from './MenuHost';
 import type { Settings } from './settings';
 import type { UiCtx } from './types';
 import { bindFullscreenButton, isFullscreen, toggleFullscreen } from './fullscreen';
+import { MusicPlayer } from './MusicPlayer';
 
 /** What menu pages need from the UI system. */
 export interface MenuApi extends UiCtx {
@@ -139,6 +140,7 @@ function buildPauseMain(api: MenuApi, host: MenuHost) {
       })(),
       bigButton('Instincts', ICONS.list, () => host.push('objectives')),
       bigButton('Mutators', ICONS.wand, () => host.push('mutators')),
+      bigButton('Music', ICONS.note, () => host.push('music')),
       bigButton('Settings', ICONS.gear, () => host.push('settings')),
       bigButton('Controls', api.device === 'pad' ? ICONS.gamepad : ICONS.keyboard, () => host.push('controls')),
       bigButton('Credits', ICONS.star, () => host.push('credits')),
@@ -454,6 +456,19 @@ function buildReset(api: MenuApi, host: MenuHost) {
   );
 }
 
+/** Pause menu › Music: mode toggle (Auto music / My playlist) + the full player with its playlist. */
+function musicPage(api: MenuApi): PageDef {
+  let player: MusicPlayer | null = null;
+  return {
+    title: 'Music',
+    build: () => {
+      player = new MusicPlayer(api, { variant: 'page' });
+      return h('div', { class: 'scroll music-page' }, player.el);
+    },
+    update: () => player?.update(),
+  };
+}
+
 // ------------------------------------------------------------------ page sets
 
 export function pausePages(api: MenuApi): Record<string, PageDef> {
@@ -461,6 +476,7 @@ export function pausePages(api: MenuApi): Record<string, PageDef> {
     pause: { title: 'Paused', noBack: true, cls: 'wide', build: (host) => buildPauseMain(api, host) },
     objectives: { title: 'Instincts', cls: 'wide', build: (host) => buildObjectivesPage(api, host) },
     mutators: { title: 'Mutators', build: (host) => buildMutators(api, host) },
+    music: musicPage(api),
     settings: { title: 'Settings', build: () => buildSettings(api) },
     controls: { title: 'Controls', cls: 'wide', build: () => buildControls(api) },
     credits: { title: 'Credits', build: () => buildCredits(api) },

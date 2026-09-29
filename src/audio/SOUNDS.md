@@ -168,7 +168,7 @@ Streamed from `public/assets/audio/music/` (loudness-normalized per file). Playl
 
 | theme | when | tracks (title — author) |
 |---|---|---|
-| `title` | title screen — Title screen: bouncy, goofy e-piano. | A respectable amount of Bounce — Some Weirdo |
+| `title` | title screen — The music player playlist: every track, upbeat first. Title screen, and gameplay in "My playlist" mode (checked tracks, optional shuffle: musicPrefs.ts). | Wacky Workings — Fupi<br>Banana Track — skrjablin<br>Trouble in the Garden — HaelDB<br>Wacky Wobblings — Fupi<br>A respectable amount of Bounce — Some Weirdo<br>Dialup Song — Fupi<br>Ai Contact — Of Far Different Nature<br>Chill lofi inspired (loop edit) — omfgdude, loop edit by qubodup<br>Napping on a Cloud — congusbongus |
 | `day` | daytime free-roam — Daytime free-roam: jaunty, silly, a little dumb. | Banana Track — skrjablin<br>Wacky Workings — Fupi<br>Trouble in the Garden — HaelDB<br>Wacky Wobblings — Fupi |
 | `night` | night (Environment.isNight) — Night: chill lo-fi / sleepy chiptune (raccoon hours). | Chill lofi inspired (loop edit) — omfgdude, loop edit by qubodup<br>Napping on a Cloud — congusbongus |
 | `slop` | inside SlopCorp Campus — SlopCorp campus: glitchy talking-synth wubs and dial-up modem jams. | Ai Contact — Of Far Different Nature<br>Dialup Song — Fupi |

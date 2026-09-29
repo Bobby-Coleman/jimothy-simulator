@@ -6,7 +6,8 @@
  *  - Plays every `game.sfx(key, pos?, volume?, pitch?)` ('sfx' event).
  *  - Player-driven sounds: wash loop, roll loop (∝ speed), paw steps, climbing scrabbles, swim paddles.
  *  - Ambience: water lapping near the bay/ponds/fountains, crows & seagulls, SlopCorp server hum.
- *  - Music: title / day / night / slop (SlopCorp Campus), debounced crossfades.
+ *  - Music: title / day / night / slop (SlopCorp Campus), debounced crossfades. 'title' is the music player's
+ *    playlist: always on the title screen, and in gameplay when musicPrefs.mode === 'playlist' ("My playlist").
  *  - Reacts to gameplay events (objective, mutatorUnlocked, comboUp, scoreAdded, cameraFlash,
  *    explosion, npcRagdoll, splash, sparkle, ...) with dedupe so systems that ALSO emit 'sfx' for
  *    the same moment never double-play.
@@ -16,6 +17,7 @@
 import * as THREE from 'three';
 import type { Game, System } from '../core/Game';
 import { audio, type AudioVolumes, type MusicTrack, type SoundHandle, type SoundOpts } from './AudioManager';
+import { musicPrefs } from './musicPrefs';
 
 const STORAGE_KEY = 'jimothy.audio';
 const SLOP_AREA = 'SlopCorp Campus';
@@ -388,9 +390,10 @@ export class AudioSystem implements System {
   private updateMusic(p: PlayerView | undefined) {
     const g = this.game;
     let want: MusicTrack;
-    // 'title' is the title-screen music player's playlist: requested once here; the player widget
-    // (src/ui/MusicPlayer.ts) then picks tracks / pauses it directly. Gameplay hands back to day/night/slop.
-    if (g.state === 'title') want = 'title';
+    // 'title' is the music player's playlist (src/ui/MusicPlayer.ts + musicPrefs.ts): always on the title screen,
+    // and during gameplay too in "My playlist" mode. The player widget picks tracks / pauses / seeks it directly.
+    // "Auto music" mode hands gameplay to day / night / slop.
+    if (g.state === 'title' || musicPrefs.mode === 'playlist') want = 'title';
     else if (p && this.area(p) === SLOP_AREA) want = 'slop';
     else {
       const env = g.get('environment') as unknown as { isNight?: boolean } | undefined;
@@ -401,13 +404,16 @@ export class AudioSystem implements System {
       this.musicCandidate = want;
       this.candidateSince = t;
     }
-    // debounce area/time flapping, but switch immediately from the title screen / at start
+    // debounce area/time flapping, but switch immediately from/to the playlist (title screen, mode toggle) / at start
     const settle = this.music == null || this.music === 'title' || want === 'title' ? 0 : 1.5;
     if (want !== this.music && t - this.candidateSince >= settle) {
       const fade = this.music === 'title' || want === 'title' ? 1.5 : want === 'slop' || this.music === 'slop' ? 2 : 4;
-      audio.playMusic(want, fade);
+      // The player paused the music: remember the new theme, but stay quiet until they press play.
+      if (!musicPrefs.userPaused) audio.playMusic(want, fade);
       this.music = want;
     }
+    musicPrefs.theme = this.music ?? want;
+    musicPrefs.noteTrack(audio.musicIndex(musicPrefs.track));
   }
 
   // ------------------------------------------------------------------------------ settings

@@ -417,7 +417,8 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
       console.warn('[ui] reset: could not reset systems cleanly', err);
     }
     try {
-      const keep = new Set(['jimothy.settings.v1', 'jimothy.quality']);
+      // (music player picks are preferences too: mode, checked tracks, shuffle)
+      const keep = new Set(['jimothy.settings.v1', 'jimothy.quality', 'jimothy.music.v1']);
       const keys: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);

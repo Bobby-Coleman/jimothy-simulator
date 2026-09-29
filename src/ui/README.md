@@ -14,9 +14,9 @@ FontFace API (`boot.ts`), with system fallbacks.
 | `Drawer.ts` + `ObjectivesView.ts` | Tab "Instincts" panel (and the pause-menu page), with a "Suggested next" section + Track buttons |
 | `Guide.ts` | Suggested Instincts, the tracked goal (top pill + world waypoint star; the big map/minimap draw it too) and the first-time onboarding coach |
 | `NearHints.ts` | Proximity hints: linger ~2 s near where an unfinished Instinct happens and its hint hangs under the goal pill (data: `Guide.ts` `DEFS[].near` → `guide.nearby()`; own system `nearHints`, registered after `UI`) |
-| `MenuHost.ts` + `pages.ts` | Pause menu + title sub-pages (Instincts, Mutators, Settings, Controls, Credits, Reset) |
+| `MenuHost.ts` + `pages.ts` | Pause menu + title sub-pages (Instincts, Mutators, Music, Settings, Controls, Credits, Reset) |
 | `Title.ts` / `Intro.ts` | Title screen (orbit camera, tips) / viral-video intro cutscene |
-| `MusicPlayer.ts` | Title-screen now-playing card: title, author (→ OGA profile, new tab), prev / play-pause / next over the AudioManager's `'title'` playlist (all tracks, upbeat first, auto-advance). Gameplay hands back to the AudioSystem's day / night / slop logic |
+| `MusicPlayer.ts` | Music player, two variants: the title's now-playing card (`'card'`, playlist expands on demand) and the pause menu's Music page (`'page'`, with the **Auto music / My playlist** toggle). Title + author (→ OGA profile), prev / play-pause / next, draggable seek bar (mouse / touch / click / ←→ 5 s / pad via `data-nav-step`; commits on release), music volume (writes Settings › Music) + mute, shuffle, and the 9-track playlist (checkbox = in rotation, at least one stays on; click a name to play it; current row highlighted). It shows whatever theme the AudioSystem wants (`musicPrefs.theme`). State lives in `src/audio/musicPrefs.ts` (`localStorage['jimothy.music.v1']`: mode, checked, shuffle, last track; kept by Reset progress) |
 | `fullscreen.ts` | Fullscreen API helpers (webkit fallback), `bindFullscreenButton` (label follows `fullscreenchange`, hidden where unsupported, e.g. iPhone). Used by the title icon button and the pause menu's "Fullscreen / Exit fullscreen" button |
 | `Touch.ts` | Phone/tablet controls (only when `(pointer: coarse)`) |
 | `PadNav.ts` | Gamepad + arrow-key menu navigation |
@@ -41,7 +41,7 @@ ui.hudVisible = false                  // hide all HUD (photo mode). Also respec
 ui.hint(text, secs?)                   // same as game.hint
 ui.flash(0..1)                         // white screen flash
 ui.speech(entityOrObject3D, text, secs?, style?)
-ui.openPause(page?) / ui.resume()      // page: 'objectives' | 'mutators' | 'settings' | 'controls' | 'credits'
+ui.openPause(page?) / ui.resume()      // page: 'objectives' | 'mutators' | 'music' | 'settings' | 'controls' | 'credits'
 ui.menuOpen, ui.mode                   // 'title' | 'intro' | 'play' | 'pause'
 ui.guide.current()                     // tracked goal { id, title, label, pos } | null (id 'poi:<name>' for map pins)
 ui.guide.track(objectiveId) / trackPoi(poiName, label) / untrack() / suggestions (top 3)

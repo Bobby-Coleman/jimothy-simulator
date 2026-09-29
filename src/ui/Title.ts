@@ -5,8 +5,7 @@ import { h, esc } from './dom';
 import { ICONS, JIMOTHY_FACE } from './icons';
 import { fillTokens } from './glyphs';
 import { DISCLAIMER, TAGLINE, tipSequence } from './content';
-import type { UiCtx } from './types';
-import { MusicPlayer } from './MusicPlayer';
+import { MusicPlayer, type MusicApi } from './MusicPlayer';
 import { bindFullscreenButton, toggleFullscreen } from './fullscreen';
 
 export { toggleFullscreen } from './fullscreen';
@@ -27,7 +26,7 @@ export function logoHtml(extra = '') {
   return `<div class="logo ${extra}" role="img" aria-label="Jimothy Simulator"><div class="logo-top">${top}</div><div class="logo-bottom">${bottom}</div></div>`;
 }
 
-export interface TitleApi extends UiCtx {
+export interface TitleApi extends MusicApi {
   startGame(playIntro: boolean): void;
   openTitlePage(id: string): void;
   readonly introSeen: boolean;
@@ -49,7 +48,7 @@ export class TitleScreen {
   private replayBtn: HTMLButtonElement;
   private orbitA = Math.random() * Math.PI * 2;
   private settled = false;
-  /** Now-playing card (the title playlist: prev / play-pause / next). */
+  /** Now-playing card (the playlist: prev / play-pause / next, seek, volume, expandable track list). */
   readonly music: MusicPlayer;
 
   constructor(

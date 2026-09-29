@@ -88,7 +88,8 @@ export function navigate(root: HTMLElement, dir: NavKey): boolean {
   if ((dir === 'left' || dir === 'right') && active && i >= 0) {
     const d = dir === 'right' ? 1 : -1;
     if (active instanceof HTMLInputElement && active.type === 'range') {
-      const step = Number(active.step) || 1;
+      // data-nav-step: a coarser pad step than the slider's own (e.g. the music seek bar: 5 s per press)
+      const step = Number(active.dataset.navStep) || Number(active.step) || 1;
       const v = Math.min(Number(active.max), Math.max(Number(active.min), Number(active.value) + d * step));
       active.value = String(v);
       active.dispatchEvent(new Event('input', { bubbles: true }));

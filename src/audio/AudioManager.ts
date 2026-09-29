@@ -77,6 +77,8 @@ interface MusicPlayer {
   stopAt: number;
   want: boolean;
   dead: boolean;
+  /** Seek requested before the file's metadata loaded (applied on 'loadedmetadata'). */
+  pendingSeek: number | null;
 }
 
 const MAX_VOICES = 48;
@@ -251,6 +253,8 @@ export class AudioManager {
   /** Playlist index a theme's player starts at when it's created (musicSelect before unlock). */
   private startIdx = new Map<MusicTrack, number>();
   private hiddenPaused: MusicPlayer[] = [];
+  /** Optional next/previous-file pickers per theme (the music player's checked tracks / shuffle). */
+  private pickers = new Map<MusicTrack, (cur: number, dir: 1 | -1) => number>();
 
   // ------------------------------------------------------------------------------ lifecycle
 
@@ -468,7 +472,7 @@ export class AudioManager {
       file: def?.files[index] ?? null,
       wanted,
       playing: wanted && !!p && p.want && !p.dead && !p.el.paused && this.unlocked,
-      time: p ? p.el.currentTime || 0 : 0,
+      time: p ? (p.pendingSeek ?? (p.el.currentTime || 0)) : 0,
       duration: p && Number.isFinite(p.el.duration) ? p.el.duration : 0,
     };
   }
@@ -492,6 +496,41 @@ export class AudioManager {
     } catch (e) {
       this.warnOnce('musicSelect', '[audio] musicSelect failed', e);
     }
+  }
+
+  /** Current playlist index of a theme (cheap; no allocation). */
+  musicIndex(track: MusicTrack): number {
+    const p = this.music.get(track);
+    return p ? p.idx : (this.startIdx.get(track) ?? 0);
+  }
+
+  /**
+   * Seek the theme's current file to `time` seconds (clamped). Works while paused / fading out; before the file's
+   * metadata has loaded the seek is remembered and applied once it has.
+   */
+  musicSeek(track: MusicTrack, time: number): void {
+    try {
+      const p = this.music.get(track);
+      if (!p || p.dead || !Number.isFinite(time)) return;
+      const d = p.el.duration;
+      if (p.el.readyState < 1 || !Number.isFinite(d)) {
+        p.pendingSeek = Math.max(0, time);
+        return;
+      }
+      p.pendingSeek = null;
+      p.el.currentTime = clamp(time, 0, Math.max(0, d - 0.05));
+    } catch (e) {
+      this.warnOnce('musicSeek', '[audio] musicSeek failed', e);
+    }
+  }
+
+  /**
+   * Custom playlist order for a theme: `fn(current, dir)` returns the next (dir 1) / previous (dir -1) index.
+   * Used by auto-advance at the end of a file (the UI's prev / next buttons call it themselves). null = in order.
+   */
+  setMusicPicker(track: MusicTrack, fn: ((cur: number, dir: 1 | -1) => number) | null): void {
+    if (fn) this.pickers.set(track, fn);
+    else this.pickers.delete(track);
   }
 
   /** Temporarily lowers the music to `gain` (0..1) for `sec` seconds (jingles, explosions). */
@@ -874,7 +913,7 @@ export class AudioManager {
     const trim = ctx.createGain();
     const fade = ctx.createGain();
     fade.gain.value = 0;
-    const p: MusicPlayer = { track, el, trim, fade, idx: 0, failed: new Set(), stopping: false, stopAt: 0, want: false, dead: false };
+    const p: MusicPlayer = { track, el, trim, fade, idx: 0, failed: new Set(), stopping: false, stopAt: 0, want: false, dead: false, pendingSeek: null };
     try {
       const node = ctx.createMediaElementSource(el);
       node.connect(trim);
@@ -885,6 +924,17 @@ export class AudioManager {
       p.dead = true;
     }
     el.addEventListener('ended', () => this.advancePlaylist(p));
+    el.addEventListener('loadedmetadata', () => {
+      if (p.pendingSeek == null) return;
+      const t = p.pendingSeek;
+      p.pendingSeek = null;
+      try {
+        const d = Number.isFinite(p.el.duration) ? p.el.duration : t + 0.05;
+        p.el.currentTime = clamp(t, 0, Math.max(0, d - 0.05));
+      } catch {
+        /* ignore */
+      }
+    });
     el.addEventListener('error', () => {
       p.failed.add(p.idx);
       if (p.failed.size >= def.files.length) {
@@ -900,6 +950,7 @@ export class AudioManager {
   private setMusicFile(p: MusicPlayer, idx: number): void {
     const def = MUSIC_BANK[p.track];
     p.idx = idx;
+    p.pendingSeek = null;
     const f = def.files[idx];
     p.trim.gain.value = f.gain;
     p.el.loop = def.files.length === 1;
@@ -909,11 +960,23 @@ export class AudioManager {
   private advancePlaylist(p: MusicPlayer): void {
     const n = MUSIC_BANK[p.track].files.length;
     if (p.dead) return;
+    const pick = this.pickers.get(p.track);
     let next = p.idx;
     for (let k = 0; k < n; k++) {
-      next = (next + 1) % n;
+      let cand = (next + 1) % n;
+      if (pick) {
+        try {
+          const c = Math.round(pick(next, 1));
+          if (c >= 0 && c < n) cand = c;
+        } catch {
+          /* fall back to in-order */
+        }
+      }
+      next = cand;
       if (!p.failed.has(next)) break;
     }
+    // The picker only offers failed files (e.g. the one checked track won't load): fall back to in-order.
+    for (let k = 0; k < n && p.failed.has(next); k++) next = (next + 1) % n;
     this.setMusicFile(p, next);
     if (p.want && !p.stopping) this.playElement(p);
   }
