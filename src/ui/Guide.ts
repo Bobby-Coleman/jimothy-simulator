@@ -456,6 +456,18 @@ const DEFS: Def[] = [
     how: 'Climb something tall (the Space Noodle!), jump off and walk it off. He is round, he bounces.',
     near: { r: 14, up: 12, at: ['spaceNoodleTop'], hint: "That's a long way down. Jump off and walk it off! He's round. He bounces." },
   },
+  {
+    id: 'whenceYouCame',
+    rank: 16.5,
+    place: 'Seagull',
+    target: (env) => {
+      if (heldTag(env, 'seagull')) return poiTarget(env, 'waterfront', 'Salmon Bay');
+      const n = nearestTagged(env, 'seagull', 400);
+      return n ? { pos: n.pos, label: 'Seagull' } : null;
+    },
+    how: 'Seagulls loaf on the waterfront railing and piers. {grab} Grab one and {bonk} throw it into the bay (or just bonk it in).',
+    near: { r: 9, spots: (env) => taggedSpots(env, 'seagull'), hint: 'A seagull with attitude. {grab} Grab it, face the water and {bonk} throw it into the bay. It will be fine. It will be FURIOUS.' },
+  },
 ];
 
 /** Big-map POIs that stand for a guide entry even when it has no poi (click-to-track). */

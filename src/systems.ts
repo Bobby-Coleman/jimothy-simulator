@@ -34,7 +34,7 @@ import { LandmarkSystem } from './gameplay/quests/landmarks';
 import { NpcSystem } from './entities/npc/NpcSystem';
 import { TrampolineSystem } from './world/zones/north';
 import { SlopSystem } from './gameplay/slop/SlopSystem';
-import { AnimalSystem } from './entities/animals';
+import { AnimalSystem, GullSystem } from './entities/animals';
 import { HeartQuestSystem } from './gameplay/quests/heart';
 import { ExtrasSystem } from './gameplay/extras';
 import { ChaosSystem } from './gameplay/chaos';
@@ -74,6 +74,7 @@ export function registerSystems(game: Game) {
   game.add(new TrampolineSystem());
   game.add(new SlopSystem());
   game.add(new AnimalSystem());
+  game.add(new GullSystem());
   game.add(new HeartQuestSystem());
   game.add(new ItemsSystem());
   game.add(new ImpactSystem());

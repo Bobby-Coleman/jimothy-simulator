@@ -39,6 +39,7 @@ import { OBJECTIVES } from './objectiveDefs';
  *   leapOfFaith         'land' | 'leapOfFaith' {height ≥ 25}         frequentFlyer   8 m rise while airborne (live; teleports reset)
  *   jaywalker           'hitByCar' | playerRagdoll cause car         flopEra         'playerRagdoll' ×25
  *   officerScold        'officerScold' ×10
+ *   whenceYouCame       'animalSplash' {water:'bay'} (thrown/bonked by Jimothy ≤ 5 s before; not Mom/kits/Danny)
  *   secrets: humanMade (stand still near a POI *mural* looking at the wall 1.5 s | photo of it | 'muralFound'),
  *            hydrophobic (swim 60 s), heNeverLearns (cotton candy ×3), backFromTheVoid (fall out of the world),
  *            spinMeRound (roll 60 s non-stop), mutantRaccoon (5 mutators on)
@@ -361,6 +362,7 @@ export class ObjectiveContent implements System {
       if (/car|vehicle|bus|truck|traffic/i.test(String(p.cause ?? ''))) this.done('jaywalker');
     });
     on('officerScold', () => this.add('officerScold'));
+    on('animalSplash', (p) => this.whence(p));
 
     // meta / secrets
     on('mutator', () => {
@@ -378,6 +380,25 @@ export class ObjectiveContent implements System {
     this.lastCandy = this.game.time;
     this.done('cottonCandy');
     this.add('heNeverLearns');
+  }
+
+  /**
+   * "Return From Whence You Came": an animal Jimothy threw / bonked landed in the bay (Animal.checkToss). The heart-quest
+   * family (Mom, kits, Danny) doesn't count: kits paddle back and rejoin the conga line, their quests carry on.
+   */
+  private lastWhenceHint = -99;
+  private whence(p: any) {
+    if (p.water !== 'bay') return;
+    const pos: THREE.Vector3 | undefined = p.position;
+    if (/^(mom|kit|danny)$/.test(String(p.species ?? ''))) {
+      if (this.has('whenceYouCame') && this.game.time - this.lastWhenceHint > 20) {
+        this.lastWhenceHint = this.game.time;
+        this.game.hint("Family doesn't count! They paddle right back to you. (The waterfront seagulls, however...)", 3);
+      }
+      return;
+    }
+    this.game.score(250, 'Returned To The Sea', pos?.clone());
+    this.done('whenceYouCame');
   }
 
   private slop(key: string | number) {

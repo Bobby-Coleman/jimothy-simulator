@@ -98,6 +98,7 @@ so it gets 3 tries). Build + serve first:
 | 42 | **Look Both Ways** — get bonked by a car | ✅ | Stand in the road. He's fine. | 10 s | |
 | 43 | **Flop Era** — ragdoll 25 times | ✅ | Flop (Z) 25 times; any ragdoll counts. | 20 s | |
 | 44 | **Please Don't Approach Jimothy** — the officer scolds 10 fans | ⚠️ | City Hall plaza (Downtown): stay right next to Jimothy fans (≤ 3 m) while the Wildlife Officer is nearby; each fan can be scolded again 12 s later. | 2–3 min | There is exactly one officer (City Hall) and in ~1 game in 5 no fan spawned near him → added one superfan who hangs around the officer. |
+| 44a | **Return From Whence You Came** — throw an animal into the ocean (new) | ✅ | Waterfront: three seagulls with attitude loaf on the promenade railing (x ≈ -16), on Pier A by the gap in its east railing, and on a marina bollard off Pier C. Grab one (E), face the bay and throw it (Bonk while carrying), or just bonk it off its perch. It splashes down, complains, and flies back to its spot. | 30 s | Counts any animal Jimothy threw or knocked flying that lands in Salmon Bay (water kind `bay`, incl. the ship canal) within 5 s; the pond and fountains don't. Mom, the kits and Danny don't count (a thrown kit just paddles back into the conga line; a hint says so). Crows and cats can't be grabbed. Scripted: grab + throw from the promenade, bonks from all three perches, throw through the Pier A gap; a gentle drop on the deck doesn't count. `obj_whenceYouCame` in `--group obj`. |
 
 ### Secrets 🔒
 

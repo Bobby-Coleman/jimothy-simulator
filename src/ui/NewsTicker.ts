@@ -42,6 +42,14 @@ const ON: Record<string, { lines: Headline[]; weight?: number; cooldown?: number
   weather: { lines: [(p) => (p?.kind === 'rain' ? 'Seattle weather update: rain. In other news, water still wet.' : null)] },
   finaleEnd: { lines: ['Fireworks over Salmon Bay. "Best summer ever," says small round local.'], weight: 3 },
   catMet: { lines: ['Actual cat meets raccoon everyone thought was a cat. Cat: unimpressed.'] },
+  animalSplash: {
+    lines: [
+      (p) => (p?.water === 'bay' && p?.species === 'gull' ? "Raccoon returns seagull to Salmon Bay. Seagull: 'I was already home, you round menace.'" : null),
+      (p) => (p?.water === 'bay' && p?.species === 'gull' ? 'Waterfront seagull files formal complaint after unscheduled swim. Complaint was mostly screaming.' : null),
+      (p) => (p?.water === 'bay' && !/^(mom|kit|danny)$/.test(p?.species ?? '') ? "Wildlife officials urge public to stop 'returning' animals to the sea. 'They did not ask.'" : null),
+    ],
+    weight: 2,
+  },
 };
 
 const FILLER = [
