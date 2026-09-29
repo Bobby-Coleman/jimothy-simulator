@@ -72,6 +72,17 @@ export abstract class Landmark {
     this.sys.save();
   }
 
+  /**
+   * Ceremony framing: turn Jimothy toward his audience (`facing`) and swing the camera round to the crowd's side for a
+   * 3/4 view of him with the speaker behind. Players walk up the City Hall steps looking at the building, so without
+   * this the whole proclamation played out behind a column. One-time snap: the mouse still works.
+   */
+  protected frameCeremony(facing: number) {
+    const p = this.player;
+    if (p) p.facing = facing;
+    this.game.get<any>('camera')?.snapBehind?.(facing + Math.PI + 0.45);
+  }
+
   /** Horizontal distance from Jimothy to a point. */
   protected flatDist(p: THREE.Vector3) {
     const pp = this.player?.position;

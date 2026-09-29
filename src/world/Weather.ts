@@ -160,7 +160,9 @@ export class WeatherSystem implements System {
     const r = game.renderer;
     // (the Jimothy Summer mutator's extra-saturated look is folded in here, since weather owns this value each frame)
     const summerBoost = game.get<any>('mutators')?.get?.('jimothySummer')?.enabled ? 0.15 : 0;
-    r.saturation.saturation = 0.3 + summerBoost - 0.12 * k;
+    // lighting pass: 'low' at night read oversaturated blue (no bloom/contrast to soften it, dense deep-blue fog) — ease off
+    const lowNight = r.quality === 'low' ? 0.12 * (env?.nightFactor ?? 0) : 0;
+    r.saturation.saturation = 0.3 + summerBoost - 0.12 * k - lowNight;
     if (k > 0.001) {
       r.gradeHighlights.value.lerp(_rainCol.setRGB(0.98, 1.0, 1.04), 0.6 * k);
       r.gradeShadows.value.lerp(_rainCol.setRGB(0.96, 1.0, 1.06), 0.6 * k);

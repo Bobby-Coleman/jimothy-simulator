@@ -92,7 +92,10 @@ export class MamaQuest implements HeartQuest {
     // --- carrying food near Mom: tell the player what to do
     const held = player.held?.entity as Entity | undefined;
     const dMom = ctx.distToPlayer(mom.pos);
-    if (held && held.tags.has('food') && dMom < 3.2 && !this.grooming) {
+    // Height check like the drop test above: from the thrift-store roof right over the den (where following the
+    // star in a straight line leads you) this used to say "Give Mom the snack", and the snack just landed on the roof.
+    const sameLevel = Math.abs(player.position.y - mom.pos.y) < 2.5;
+    if (held && held.tags.has('food') && dMom < 3.2 && sameLevel && !this.grooming) {
       ctx.prompt('{grab} Give Mom the snack', 0.3);
       if (this.hintCd <= 0 && this.fed < 3) {
         this.hintCd = 14;

@@ -5,6 +5,7 @@ import type { WaterSystem } from '../../Water';
 import { MAP } from '../../terrain';
 import { getKit, Batch, tree, bush, bench, rng, canvasTex, fitText, roundRect, FONT_TITLE, FONT_ROUND, FONT_BODY, GEO, type Kit, type V3 } from './kit';
 import { lamps, BIRD, perched, flock } from './decor';
+import { addNightRig, multiplyPoolMaterial } from './nightLight';
 import { seawall } from './Locks';
 import * as P from './props';
 import { spawnItem } from '../../../gameplay/items';
@@ -167,6 +168,18 @@ function marketHall(kit: Kit, b: Batch) {
   pend.instanceMatrix.needsUpdate = true;
   pend.computeBoundingSphere();
   kit.root.add(pend);
+  // Lighting pass: at night the hall's only light was the roof-shadowed sky, so the interior went black. Warm pools under
+  // each pendant (multiply-add: they brighten the paving instead of painting it beige; 1 instanced draw) + the shared
+  // south night light parked mid-hall, under the roof, while Jimothy is in or near the market (see nightLight.ts).
+  const poolMat = multiplyPoolMaterial(0xffc98c);
+  kit.glow(poolMat, 0, 2.2, 'opacity');
+  const pools = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), poolMat, 7);
+  for (let i = 0; i < 7; i++) pools.setMatrixAt(i, new THREE.Matrix4().makeScale(7, 1, 7).setPosition(-18 + i * 6, 0.06, 86));
+  pools.instanceMatrix.needsUpdate = true;
+  pools.computeBoundingSphere();
+  pools.renderOrder = 1;
+  kit.root.add(pools);
+  addNightRig(kit.game, { pos: V(0, H - 0.6, 86.5), color: 0xffc584, intensity: 1.2, distance: 27, decay: 0, radius: 18, fade: 14 });
 
   // THE big neon sign (faces north toward town) + clock
   const neon = canvasTex(2048, 420, (ctx, w, h) => {

@@ -24,6 +24,8 @@ import type { UiCtx } from './types';
 export interface GuideTarget {
   pos: THREE.Vector3;
   label: string;
+  /** Map POIs: `pos.y` isn't necessarily where you stand (billboard catwalk…), so only flat distance counts. */
+  flat?: boolean;
 }
 
 export interface Suggestion {
@@ -142,7 +144,15 @@ function nearestWater(env: Env): GuideTarget | null {
 
 function poiTarget(env: Env, name: string, label: string): GuideTarget | null {
   const p = env.game.get<any>('world')?.poi?.get?.(name) as THREE.Vector3 | undefined;
-  return p ? { pos: p.clone(), label } : null;
+  return p ? { pos: p.clone(), label, flat: true } : null;
+}
+
+/**
+ * Seattle rule (Jimothy.ts): while it rains on him the whole city is a sink. The weather hint says "Wash anything!",
+ * so don't march the player 12 m to a puddle at the same time: the target is right where he stands.
+ */
+function rainHere(env: Env): GuideTarget | null {
+  return env.game.get<any>('weather')?.rainingOnPlayer ? { pos: env.player.position.clone(), label: 'Wash anywhere (rain)', flat: true } : null;
 }
 
 const heldTag = (env: Env, tag: string) => !!env.held?.tags?.has(tag);
@@ -161,12 +171,16 @@ const DEFS: Def[] = [
     place: 'Cotton candy cart',
     poi: 'cottonCandyCart',
     target: (env) => {
-      if (heldTag(env, 'cottoncandy')) return nearestWater(env);
+      if (heldTag(env, 'cottoncandy')) return rainHere(env) ?? nearestWater(env);
       const n = nearestTagged(env, 'cottoncandy', 160);
       return n ? { pos: n.pos, label: 'Cotton candy' } : poiTarget(env, 'cottonCandyCart', 'Cotton candy cart');
     },
     howFn: (env) =>
-      heldTag(env, 'cottoncandy') ? 'Take it to a puddle and hold {wash} to scrub. What could possibly go wrong?' : '{grab} Grab cotton candy from the cart, then hold {wash} in a puddle.',
+      heldTag(env, 'cottoncandy')
+        ? rainHere(env)
+          ? "It's raining, so the whole city is a sink: hold {wash} right here. What could possibly go wrong?"
+          : 'Take it to a puddle and hold {wash} to scrub. What could possibly go wrong?'
+        : '{grab} Grab cotton candy from the cart, then hold {wash} in a puddle.',
   },
   {
     id: 'mamasBoy',
@@ -204,8 +218,9 @@ const DEFS: Def[] = [
   {
     id: 'wash10',
     rank: 5,
-    target: (env) => (env.held ? nearestWater(env) : null),
-    howFn: (env) => (env.held ? 'Take it to water and hold {wash}. Puddles count!' : '{grab} Grab anything, then hold {wash} near water.'),
+    target: (env) => (env.held ? rainHere(env) ?? nearestWater(env) : null),
+    howFn: (env) =>
+      env.held ? (rainHere(env) ? "It's raining: hold {wash} right here. Anything. Everything." : 'Take it to water and hold {wash}. Puddles count!') : '{grab} Grab anything, then hold {wash} near water.',
   },
   { id: 'awww', rank: 6, how: '{chitter} Chitter at people. Watch them melt.' },
   { id: 'teddyRescue', rank: 7, quest: 'teddy', poi: 'sadKid', place: 'Sad kid' },
@@ -420,11 +435,11 @@ export class Guide {
   // ------------------------------------------------------------------ public API
 
   /** The goal being tracked right now (manual pin, map POI, or the top suggestion). `pos` is null for goals without a place. */
-  current(): { id: string; title: string; label: string; pos: THREE.Vector3 | null } | null {
+  current(): { id: string; title: string; label: string; pos: THREE.Vector3 | null; flat?: boolean } | null {
     if (this.customPoi && this.customTarget) return { ...this.customTarget, id: 'poi:' + this.customPoi.name, title: this.customPoi.label };
     const c = this.cur;
     if (!c) return null;
-    return { id: c.id, title: c.title, label: c.target?.label ?? '', pos: c.target?.pos ?? null };
+    return { id: c.id, title: c.title, label: c.target?.label ?? '', pos: c.target?.pos ?? null, flat: c.target?.flat };
   }
 
   isTracked(id: string) {
@@ -562,7 +577,7 @@ export class Guide {
     this.cur = pinned ?? out[0] ?? null;
     if (this.customPoi) {
       const p = game.get<any>('world')?.poi?.get?.(this.customPoi.name) as THREE.Vector3 | undefined;
-      this.customTarget = p ? { pos: p.clone(), label: this.customPoi.label } : null;
+      this.customTarget = p ? { pos: p.clone(), label: this.customPoi.label, flat: true } : null;
       if (!p) this.customPoi = null;
     }
     const key = this.customPoi ? 'poi:' + this.customPoi.name : this.cur?.id ?? '';
@@ -659,7 +674,12 @@ export class Guide {
       return;
     }
     const dist = Math.hypot(pos.x - p.position.x, pos.z - p.position.z);
-    const dTxt = dist < 3.5 ? 'here!' : `${Math.round(dist)} m`;
+    // Straight above/below the goal (on the thrift-store roof over Mom's den, at the foot of the Space Noodle, under a
+    // rooftop bobblehead) the flat distance said "here!" and hid the star. Say which way instead. Exact targets only:
+    // map POIs' heights aren't always where you stand.
+    const dy = c.flat ? 0 : pos.y - p.position.y;
+    const vert = Math.abs(dy) > 4 && dist < 12;
+    const dTxt = vert ? `${Math.round(Math.abs(dy))} m ${dy > 0 ? 'up' : 'down'}` : dist < 3.5 ? 'here!' : `${Math.round(dist)} m`;
     if (this.pillDist.textContent !== dTxt) this.pillDist.textContent = dTxt;
     // Compass arrow relative to the camera (up = straight ahead).
     const rig = game.get<any>('camera');
@@ -670,7 +690,7 @@ export class Guide {
     while (rel > Math.PI) rel -= Math.PI * 2;
     while (rel < -Math.PI) rel += Math.PI * 2;
     this.pillArrow.style.transform = `rotate(${((rel * 180) / Math.PI).toFixed(1)}deg)`;
-    this.placeMarker(pos, dist);
+    this.placeMarker(pos, vert ? Math.hypot(dist, dy) : dist);
   }
 
   /** World waypoint: a star over the target, clamped to the screen edge (with an arrow) when off-screen. */

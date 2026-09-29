@@ -3,6 +3,7 @@ import type { Game } from '../../../core/Game';
 import type { World, ZoneBuilder } from '../../World';
 import { getKit, Batch, tree, bench, rng, canvasTex, fitText, roundRect, FONT_TITLE, FONT_ROUND, FONT_BODY, GEO, bake, type Kit, type V3 } from './kit';
 import { lamps } from './decor';
+import { addNightRig, multiplyPoolMaterial } from './nightLight';
 import { seawall } from './Locks';
 import * as P from './props';
 
@@ -672,7 +673,7 @@ function lightTowers(kit: Kit, b: Batch) {
   // polish: beams fade out toward the ground (vertex alpha) — before, standing on the field put the camera inside
   // six overlapping double-sided additive cones and the whole night view turned into a beige haze.
   const beamMat = new THREE.MeshBasicMaterial({ color: 0xfff4d0, vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: true });
-  kit.glow(beamMat, 0, 0.03, 'opacity');
+  kit.glow(beamMat, 0, 0.018, 'opacity'); // lighting pass: 0.03 → 0.018, the cones still read but no longer haze the view
   const target = new THREE.Vector3(FC.x, 0, FC.z + 8);
   const spots: [number, number][] = [at(22, D3, 21, N3), at(42, D3, 21, N3), at(22, D1, 21, N1), at(42, D1, 21, N1), onArc(A_L + 0.45, FR + 13), onArc(A_R - 0.45, FR + 13)];
   const Ht = 24;
@@ -708,21 +709,18 @@ function lightTowers(kit: Kit, b: Batch) {
   // bobblehead #11 on the catwalk of the first 3B-side light tower
   const [lx, lz] = spots[0];
   kit.world.poi.set('bobblehead:s11', V(lx, Ht + 0.45, lz));
-  // soft field glow at night (fake light pool)
-  const poolTex = canvasTex(256, 256, (ctx) => {
-    const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-    g.addColorStop(0, 'rgba(255,245,215,1)');
-    g.addColorStop(0.7, 'rgba(255,240,200,0.5)');
-    g.addColorStop(1, 'rgba(255,240,200,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 256, 256);
-  });
-  const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
-  kit.glow(poolMat, 0, 0.2, 'opacity');
+  // soft field glow at night (fake light pool). Lighting pass: it was ADDITIVE warm white over the whole field, which on
+  // a dark night field painted grass, dirt and lines the same flat beige. Now it multiplies what's there (grass stays
+  // green, lines stay white) — it's what makes the field read as lit from across the bay.
+  const poolMat = multiplyPoolMaterial(0xfff4e6);
+  kit.glow(poolMat, 0, 0.7, 'opacity');
   const pool = new THREE.Mesh(new THREE.PlaneGeometry(95, 95).rotateX(-Math.PI / 2), poolMat);
   pool.position.set(FC.x, 0.12, FC.z + 6);
   pool.renderOrder = 4;
   kit.root.add(pool);
+  // …and up close a real (shared, shadowless) light high over the infield lights the field, stands and Jimothy.
+  // Only on at night within ~80 m of the field (see nightLight.ts).
+  addNightRig(kit.game, { pos: V(FC.x, 40, FC.z + 2), color: 0xf6f4ee, intensity: 1.45, distance: 85, decay: 0, radius: 55, fade: 25 });
 }
 
 // ------------------------------------------------------------------ plaza: gate, concessions, giant bobblehead

@@ -67,30 +67,55 @@ export class Environment implements System {
     mat.uniforms.uSkySat = this.skySatU;
     mat.uniforms.uGolden = this.goldenU;
     mat.uniforms.uGlowColor = this.glowColorU;
+    mat.uniforms.uPinkColor = this.pinkColorU;
     mat.uniforms.uNight = this.nightU;
     mat.uniforms.uNightHorizon = this.nightHorizonU;
     mat.uniforms.uNightZenith = this.nightZenithU;
+    mat.uniforms.uAfter = this.afterU;
+    mat.uniforms.uSunCol = this.sunDiscU;
+    mat.uniforms.uKnee = this.kneeU;
     mat.fragmentShader = mat.fragmentShader
       .replace(
         'void main() {',
-        'uniform float skyExposure;\nuniform float uOvercast;\nuniform vec3 uOvercastColor;\nuniform float uSkySat;\nuniform float uGolden;\nuniform vec3 uGlowColor;\nuniform float uNight;\nuniform vec3 uNightHorizon;\nuniform vec3 uNightZenith;\nvoid main() {',
+        'uniform float skyExposure;\nuniform float uOvercast;\nuniform vec3 uOvercastColor;\nuniform float uSkySat;\nuniform float uGolden;\nuniform vec3 uGlowColor;\nuniform vec3 uPinkColor;\nuniform float uNight;\nuniform vec3 uNightHorizon;\nuniform vec3 uNightZenith;\nuniform float uAfter;\nuniform vec3 uSunCol;\nuniform vec2 uKnee;\nvoid main() {',
       )
+      // Lighting pass: the stock sun disc (up to ~60,000 in HDR) is replaced by our own disc + glow below.
+      .replace('vec3 texColor = ( Lin + L0 ) * 0.04 + sundiscColor + vec3( 0.0, 0.0003, 0.00075 );', 'vec3 texColor = ( Lin + L0 ) * 0.04 + vec3( 0.0, 0.0003, 0.00075 );')
       .replace(
         'gl_FragColor = vec4( texColor, 1.0 );',
         `texColor = max(texColor, vec3(0.0));
 			if (any(isnan(texColor)) || any(isinf(texColor))) texColor = vec3(0.0);
 			texColor *= skyExposure;
+			// Lighting pass: HUE-PRESERVING soft knee on luminance. The old per-channel clamp flattened the low sun's mie glow
+			// (~200 in HDR) to (12,12,12) = a huge white blob at golden hour; this keeps its orange hue and a gradient.
 			float skyL = dot(texColor, vec3(0.2126, 0.7152, 0.0722));
-			texColor = max(mix(vec3(skyL), texColor, uSkySat), vec3(0.0));
+			float kneeL = skyL > uKnee.x ? uKnee.x + (skyL - uKnee.x) / (1.0 + (skyL - uKnee.x) / (uKnee.y - uKnee.x)) : skyL;
+			texColor *= kneeL / max(skyL, 1e-5);
+			texColor = max(mix(vec3(kneeL), texColor, uSkySat), vec3(0.0));
 			float upY = clamp(direction.y, 0.0, 1.0);
 			float hz = 1.0 - upY;
 			vec2 dxz = normalize(direction.xz + vec2(1e-5));
 			vec2 sxz = normalize(vSunDirection.xz + vec2(1e-5));
 			float sunSide = 0.5 + 0.5 * dot(dxz, sxz);
-			texColor += uGlowColor * uGolden * pow(hz, 4.0) * (0.25 + 0.75 * sunSide * sunSide);
-			texColor *= mix(vec3(1.0), vec3(1.08, 0.94, 0.86), uGolden * (1.0 - upY) * 0.6);
+			float ss2 = sunSide * sunSide;
+			// golden hour / sunset: re-tint toward a stylised gradient (orange toward the sun, pink "belt" away from it,
+			// peach/lilac mid-sky) at the sky's OWN luminance, so the glow gradient and clouds survive; deeper violet zenith
+			float band = pow(hz, 3.0);
+			vec3 tintH = mix(vec3(1.25, 0.8, 1.05), vec3(1.75, 0.8, 0.3), ss2);
+			vec3 tintM = mix(vec3(0.95, 0.9, 1.2), vec3(1.45, 0.85, 0.65), ss2);
+			vec3 sunsetTint = mix(tintH, tintM, smoothstep(0.0, 0.3, upY));
+			texColor = mix(texColor, dot(texColor, vec3(0.2126, 0.7152, 0.0722)) * sunsetTint, uGolden * (1.0 - smoothstep(0.12, 0.7, upY)) * 0.85);
+			texColor *= mix(vec3(1.0), vec3(0.86, 0.88, 1.06), uGolden * upY * 0.8);
+			texColor += mix(uPinkColor, uGlowColor, ss2) * uGolden * band * (0.3 + 0.7 * ss2) * 0.35;
+			// twilight / night: stylised gradient (the physical sky goes black after sunset) + a warm afterglow on the sun side
 			vec3 nightSky = mix(uNightHorizon, uNightZenith, pow(upY, 0.45));
+			nightSky += mix(uPinkColor * 0.5, uGlowColor, ss2 * ss2) * uAfter * pow(hz, 6.0) * (0.15 + 0.85 * ss2);
 			texColor = mix(texColor, nightSky + texColor * 0.25, uNight);
+			// our sun: a crisp warm disc + tight glow (bloom turns it into a soft halo)
+			float cosS = dot(direction, vSunDirection);
+			float sunDisc = smoothstep(0.99989, 0.99994, cosS);
+			float sunGlow = pow(max(cosS, 0.0), 2400.0) * 0.8 + pow(max(cosS, 0.0), 180.0) * 0.12;
+			texColor += uSunCol * (sunDisc * 6.0 + sunGlow) * smoothstep(-0.03, 0.01, direction.y);
 			texColor = mix(texColor, uOvercastColor, uOvercast);
 			gl_FragColor = vec4( min( texColor, vec3( 12.0 ) ), 1.0 );`,
       );
@@ -103,10 +128,17 @@ export class Environment implements System {
   /** Sky grade (see tameSky). */
   private readonly skySatU = { value: 1.35 };
   private readonly goldenU = { value: 0 };
-  private readonly glowColorU = { value: new THREE.Color(1.0, 0.45, 0.16) };
+  private readonly glowColorU = { value: new THREE.Color(1.0, 0.42, 0.14) };
+  private readonly pinkColorU = { value: new THREE.Color(0.85, 0.36, 0.5) };
   private readonly nightU = { value: 0 };
   private readonly nightHorizonU = { value: new THREE.Color(0x1d2f5c) };
   private readonly nightZenithU = { value: new THREE.Color(0x070d24) };
+  /** Afterglow strength (warm band on the sun side of the twilight sky). */
+  private readonly afterU = { value: 0 };
+  /** Sun disc colour × intensity (0 hides it: night / overcast). */
+  private readonly sunDiscU = { value: new THREE.Color(0, 0, 0) };
+  /** Sky luminance knee: (start, asymptote). */
+  readonly kneeU = { value: new THREE.Vector2(1.1, 3.2) };
   /** 0..1 golden-hour factor (sun low but up), for other systems (e.g. Weather) to read. */
   golden = 0;
 
@@ -271,31 +303,42 @@ export class Environment implements System {
     this.golden = golden;
     this.nightFactor = 1 - THREE.MathUtils.smoothstep(e, -0.2, 0.02);
     const night = this.nightFactor;
+    // Lighting pass: twilight terms. The physical sky goes black the moment the sun sets and the moon/night grade only
+    // ramped in ~40 game-minutes later, so dusk (~21:00–21:40) was the DARKEST part of the whole cycle.
+    //  warm  = sunset colour in the sky: peaks with the sun on the horizon and lingers into the afterglow
+    //  dusk  = how far the physical sky has faded (0 day → 1 dark): drives the stylised twilight/night sky + exposure
+    //  after = afterglow bell around sunset/sunrise (warm band on the horizon, lilac fill light)
+    const warm = (1 - THREE.MathUtils.smoothstep(e, 0.2, 0.5)) * THREE.MathUtils.smoothstep(e, -0.18, 0.0);
+    const dusk = 1 - THREE.MathUtils.smoothstep(e, -0.16, 0.04);
+    const after = THREE.MathUtils.smoothstep(e, -0.22, -0.02) * (1 - THREE.MathUtils.smoothstep(e, -0.02, 0.1));
+    const q = this.game.renderer.quality;
 
-    // Sun / moon light — warm Goat-Sim sunshine, deep amber at golden hour, cool blue moonlight
+    // Sun / moon light — warm Goat-Sim sunshine, deep amber at golden hour, cool blue moonlight. Both fade to 0 at the
+    // hand-over (e = -0.02) so the light doesn't pop when its direction flips from sun to moon.
     const sunCol = _c1.set(0xfff1dc).lerp(_c2.set(0xffa860), golden);
     const light = this.sun;
     if (e > -0.02) {
       light.color.copy(sunCol);
-      light.intensity = 0.2 + 3.3 * day - 0.35 * golden * day;
+      light.intensity = (0.2 + 3.3 * day - 0.35 * golden * day) * THREE.MathUtils.smoothstep(e, -0.02, 0.05);
     } else {
       light.color.set(0x9fb4ff);
-      light.intensity = 0.95 * night; // moonlit, not pitch black
+      light.intensity = 0.95 * (1 - THREE.MathUtils.smoothstep(e, -0.24, -0.02)); // moonlit, not pitch black
     }
     // Hemisphere fill: saturated sky blue from above, warm grass/earth bounce from below
     const skyDay = _c3.set(0xb6d2f2);
     const skyGold = _c4.set(0xffc39a);
     // Night fill: brighter blue (moon shadows used to be pure black and Jimothy a silhouette). Still reads as night —
-    // glowing windows/lamps pop against it.
-    const hemiSky = _c5.set(0x4460a2).lerp(skyDay.lerp(skyGold, golden * 0.65), day);
+    // glowing windows/lamps pop against it. Twilight: a lilac fill carries the scene while neither sun nor moon does.
+    const hemiSky = _c5.set(0x4460a2).lerp(_c1.set(0x7b72b0), after).lerp(skyDay.lerp(skyGold, golden * 0.65), day);
     this.hemi.color.copy(hemiSky);
     this.hemi.groundColor.set(0x7d6b48).lerp(_c1.set(0x2c3752), night);
-    this.hemi.intensity = 1.12 + 0.2 * day;
+    this.hemi.intensity = 1.12 + 0.2 * day + 1.1 * after;
 
-    // Fog & background (horizon haze: pale blue by day, peach at golden hour, deep blue at night)
+    // Fog & background (horizon haze: pale blue by day, peach at golden hour, dusky violet in twilight, deep blue at night)
     const fogDay = _c2.set(0xc9e0f5);
     const fogGold = _c3.set(0xf6c79f);
-    const fogCol = _c4.set(0x1c2b4f).lerp(fogDay.lerp(fogGold, golden * 0.8), day);
+    // (night haze a touch less saturated than before: on 'low' the short fog range paints most of the view with it)
+    const fogCol = _c4.set(0x1d2b4a).lerp(_c1.set(0x4a4a78), after * 0.8).lerp(fogDay.lerp(fogGold, golden * 0.8), day);
     const fog = this.game.scene.fog as THREE.Fog;
     fog.color.copy(fogCol);
     fog.near = this.fogNear;
@@ -304,22 +347,38 @@ export class Environment implements System {
 
     // Sky grade + stars
     (this.sky.material as THREE.ShaderMaterial).uniforms.rayleigh.value = 0.4 + 1.0 * day;
-    this.goldenU.value = golden;
-    this.nightU.value = THREE.MathUtils.smoothstep(night, 0.05, 0.85);
+    this.goldenU.value = warm;
+    // lower sky knee + a slightly dimmer, more saturated sky while the sun is low: the sun side stays below the tone
+    // mapper's white-out (AgX bleaches anything much above ~1.5) and keeps a rich orange/pink
+    this.kneeU.value.set(1.1 - 0.6 * warm, 3.2 - 2.2 * warm);
+    this.skySatU.value = 1.35 + 0.3 * warm;
+    const skyExp = 0.75 * (1 - 0.35 * warm);
+    (this.sky.material as THREE.ShaderMaterial).uniforms.skyExposure.value = skyExp;
+    (this.envSky.material as THREE.ShaderMaterial).uniforms.skyExposure.value = skyExp;
+    this.nightU.value = dusk;
+    this.afterU.value = after * 1.6;
     this.nightHorizonU.value.copy(fogCol).lerp(_c5.set(0x1d2f5c), 0.5);
+    this.nightZenithU.value.set(0x070d24).lerp(_c5.set(0x1a2150), after);
+    // sun disc: warm white by day, deep orange as it sets; hidden once it's below the horizon
+    this.sunDiscU.value.setRGB(1.0, 0.93, 0.8).lerp(_c5.setRGB(1.0, 0.55, 0.22), warm).multiplyScalar(THREE.MathUtils.smoothstep(e, -0.04, 0.02));
     const starMat = this.stars.material as THREE.PointsMaterial;
     starMat.opacity = night * 0.9;
     const moonMat = this.moon.material as THREE.MeshBasicMaterial;
     moonMat.opacity = night;
 
-    // Post: exposure lift at night (readable, not murky), glowier bloom at golden hour/night, split-tone grade
+    // Post: exposure lift at night (readable, not murky), glowier bloom at golden hour/night, split-tone grade.
+    // The lift follows max(night, dusk) so twilight never ends up darker than midnight.
     const r = this.game.renderer;
+    const lift = Math.max(night, dusk);
     r.bloom.intensity = 0.5 + night * 0.45 + golden * 0.15;
-    r.exposure.value = 1.0 + 0.06 * golden + 0.3 * night;
+    r.exposure.value = 1.0 + 0.06 * golden + 0.3 * lift;
+    // 'low' has no bloom/contrast/vignette and a short, dense fog, so the same blue night grade read oversaturated there
+    const nightBlue = q === 'low' ? _c4.setRGB(0.95, 0.99, 1.05) : _c4.setRGB(0.9, 0.98, 1.12);
     r.gradeHighlights.value.setRGB(1.04, 1.0, 0.94).lerp(_c1.setRGB(1.08, 0.99, 0.87), golden).lerp(_c2.setRGB(1.04, 1.0, 1.0), night);
-    r.gradeShadows.value.setRGB(1.0, 0.99, 1.02).lerp(_c3.setRGB(1.0, 0.95, 1.02), golden).lerp(_c4.setRGB(0.9, 0.98, 1.12), night);
-    // Jimothy's fur rim light: soft sky sheen by day, amber at golden hour, moon-blue at night
-    furUniforms.uFurRim.value.setRGB(0.55, 0.55, 0.5).lerp(_c1.setRGB(1.0, 0.62, 0.32), golden).lerp(_c2.setRGB(0.32, 0.45, 0.9), night);
+    r.gradeShadows.value.setRGB(1.0, 0.99, 1.02).lerp(_c3.setRGB(1.0, 0.95, 1.02), golden).lerp(nightBlue, night);
+    // Jimothy's fur rim light: soft sky sheen by day, amber at golden hour, moon-blue at night (a little brighter and
+    // less saturated than before so his round silhouette reads against dark streets)
+    furUniforms.uFurRim.value.setRGB(0.55, 0.55, 0.5).lerp(_c1.setRGB(1.0, 0.62, 0.32), golden).lerp(_c2.setRGB(0.45, 0.56, 0.95), night);
 
     // Environment map (reflections) — regenerate occasionally
     const now = this.game.realTime;

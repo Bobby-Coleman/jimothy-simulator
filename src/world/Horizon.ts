@@ -5,6 +5,9 @@ import type { World } from './World';
 import { northMaterials } from './zones/north/kit';
 import { plantTrees } from './zones/north/flora';
 
+const _haze = new THREE.Color();
+const _white = new THREE.Color(1, 1, 1);
+
 /**
  * Cheap distant scenery so the edge of the world never shows: a ring of rolling hills around the map (open to the
  * bay in the south), the jagged Olympics to the west, and a big snow-capped "Mount Rainier-ish" across the bay to the
@@ -73,12 +76,21 @@ export class Horizon implements System {
     // --- mountains: fog off (they'd vanish), hazy colours baked in instead
     // Aerial-perspective haze: a bluish emissive lift (faded at night in lateUpdate) so far peaks read light and the snow pops
     const mountainMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, fog: false, flatShading: true, emissive: 0x5a6d88, emissiveIntensity: 0.55 });
+    // Lighting pass: a sky-light fill (albedo × uMtnFill) so the snow reads bright even on the faces we see in shade —
+    // from town we look at Rainier's north side, which the sun never lights.
+    mountainMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uMtnFill = this.fillU;
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uMtnFill;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * uMtnFill;');
+    };
+    mountainMat.customProgramCacheKey = () => 'horizon_mountain';
     this.mountainMat = mountainMat;
     const peak = (height: number, radius: number, jag: number, seed: number) => {
       const g = new THREE.ConeGeometry(radius, height, 40, 8, false);
       const p = g.getAttribute('position') as THREE.BufferAttribute;
       const colors = new Float32Array(p.count * 3);
-      const rock = new THREE.Color(0x7c8fa8);
+      const rock = new THREE.Color(0x566a88); // lighting pass: darker blue rock so the snow caps read through the haze
       const snow = new THREE.Color(0xf4f7fb);
       const cc = new THREE.Color();
       for (let i = 0; i < p.count; i++) {
@@ -122,11 +134,25 @@ export class Horizon implements System {
 
   lateUpdate(_dt: number, game: Game) {
     if (!this.mountainMat) return;
-    const night = game.get<any>('environment')?.nightFactor ?? 0;
-    this.mountainMat.emissiveIntensity = 0.55 * (1 - night);
-    // darker silhouette at night (otherwise the moon + sky grade make it read pale lavender)
-    this.mountainMat.color.setScalar(1 - 0.62 * night);
+    const env = game.get<any>('environment');
+    const night: number = env?.nightFactor ?? 0;
+    const golden: number = env?.golden ?? 0;
+    const fog = game.scene.fog as THREE.Fog | null;
+    // Lighting pass: aerial perspective instead of a fixed lavender emissive. Colour = lit surface × transmittance +
+    // horizon haze (the live fog colour, which already follows time of day and rain) × (1 − transmittance):
+    // hazy blue with bright snow by day, warm sun + peach haze at golden hour (alpenglow), and a dark silhouette just
+    // below the night-sky horizon at night (the old version read pale lavender after dark).
+    const T = 0.72 - 0.12 * golden;
+    this.mountainMat.color.setScalar(T * (1 - 0.85 * night));
+    // haze = horizon colour, nudged toward cyan by day (AgX turns mid-bright pure blues lilac)
+    if (fog) this.mountainMat.emissive.copy(fog.color).multiply(_haze.setRGB(0.8, 0.97, 1.0).lerp(_white, Math.max(golden, night))).multiplyScalar(1 - T);
+    this.mountainMat.emissiveIntensity = 1 - 0.8 * night;
+    // sky fill: cool daylight, warm at golden hour (alpenglow on the snow), faint at night (moonlit snow)
+    const hemi = env?.hemi as THREE.HemisphereLight | undefined;
+    if (hemi) this.fillU.value.copy(hemi.color).multiplyScalar((0.55 + 0.35 * golden) * (1 - 0.75 * night));
   }
+
+  private fillU = { value: new THREE.Color(0, 0, 0) };
 
   /** Forest on the east/west edge berms (the north builder covers the north edge) so they read as wooded hills. */
   private async plantSideForests(game: Game) {

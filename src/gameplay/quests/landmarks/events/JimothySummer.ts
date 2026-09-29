@@ -149,6 +149,7 @@ export class JimothySummer extends Landmark {
     });
     this.mayor?.face(this.podium);
     this.mayor?.expression('happy');
+    this.frameCeremony(this.facing);
     this.game.sfx('crowd_ooh', this.podium, 0.8);
     k.dialog('Mayor Puddlesworth', this.first ? SPEECH_FIRST : SPEECH_AGAIN, () => {
       if (this.state === 'speech') this.climax();

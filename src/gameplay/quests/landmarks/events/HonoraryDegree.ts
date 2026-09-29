@@ -152,6 +152,7 @@ export class HonoraryDegree extends Landmark {
     });
     this.dean?.face(this.stage);
     this.dean?.expression('happy');
+    this.frameCeremony(this.facing);
     this.game.sfx('crowd_ooh', this.stage, 0.7);
     const lines = this.first ? SPEECH_FIRST : SPEECH_AGAIN;
     k.dialog('Dean Suds, University of Washing', lines, () => {
