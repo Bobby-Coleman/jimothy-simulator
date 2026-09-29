@@ -1,7 +1,7 @@
 import type { ScoreSystem } from '../gameplay/Score';
 import type { ObjectivesSystem } from '../gameplay/Objectives';
 import type { MutatorSystem } from '../gameplay/Mutators';
-import * as SoundBank from '../audio/soundBank';
+import { MUSIC_FILES } from '../audio/soundBank';
 import { h, esc, fmt, pick } from './dom';
 import { ICONS, JIMOTHY_FACE } from './icons';
 import { keyChip } from './glyphs';
@@ -10,6 +10,7 @@ import { PAUSE_QUIPS } from './content';
 import type { MenuHost, PageDef } from './MenuHost';
 import type { Settings } from './settings';
 import type { UiCtx } from './types';
+import { bindFullscreenButton, isFullscreen, toggleFullscreen } from './fullscreen';
 
 /** What menu pages need from the UI system. */
 export interface MenuApi extends UiCtx {
@@ -77,6 +78,35 @@ function bigButton(text: string, iconSvg: string, onClick: () => void, cls = '')
   return h('button', { class: `btn ${cls}`, html: `<span class="btn-icon">${iconSvg}</span><span>${esc(text)}</span>`, onclick: onClick });
 }
 
+/**
+ * Pause-menu fullscreen toggle. Label follows the real state (fullscreenchange). The pointer is already free in the
+ * pause menu, and Resume re-locks it, so entering fullscreen here never fights pointer lock. Browsers only allow
+ * fullscreen from a click / tap / key press (not a gamepad button), so a refused request says how else to do it.
+ */
+function fullscreenButton(api: MenuApi) {
+  let note = 0;
+  const b = h('button', { class: 'btn btn-small btn-fs' });
+  const render = (on: boolean) => {
+    if (performance.now() < note) return;
+    b.innerHTML = `<span class="btn-icon">${on ? ICONS.fullscreenExit : ICONS.fullscreen}</span><span>${on ? 'Exit fullscreen' : 'Fullscreen'}</span>`;
+    b.setAttribute('aria-pressed', String(on));
+  };
+  b.addEventListener('click', () => {
+    api.sfx('ui_toggle');
+    void toggleFullscreen().then((ok) => {
+      if (ok) return;
+      note = performance.now() + 2600;
+      b.innerHTML = `<span class="btn-icon">${ICONS.fullscreen}</span><span>${api.device === 'pad' ? 'Blocked: click it or F11' : 'Blocked: try F11'}</span>`;
+      setTimeout(() => {
+        note = 0;
+        render(isFullscreen());
+      }, 2700);
+    });
+  });
+  bindFullscreenButton(b, render);
+  return b;
+}
+
 export function clock(hours: number) {
   const hh = Math.floor(((hours % 24) + 24) % 24);
   const mm = Math.floor((hours - Math.floor(hours)) * 60);
@@ -117,6 +147,7 @@ function buildPauseMain(api: MenuApi, host: MenuHost) {
         { class: 'pause-small' },
         bigButton('Back to the den', ICONS.home, () => api.respawnHome(), 'btn-small'),
         bigButton('Photo mode', ICONS.camera, () => api.photoFromMenu(), 'btn-small'),
+        fullscreenButton(api),
         bigButton('Reset progress', ICONS.close, () => host.push('reset'), 'btn-small btn-danger'),
       ),
     ),
@@ -357,6 +388,11 @@ function buildControls(api: MenuApi) {
   return wrap;
 }
 
+/** External link: new tab, no opener. */
+export function extLink(text: string, url: string, cls = 'ext-link') {
+  return h('a', { class: cls, href: url, target: '_blank', rel: 'noopener noreferrer', text });
+}
+
 function buildCredits(_api: MenuApi) {
   const wrap = h('div', { class: 'scroll credits' });
   wrap.append(
@@ -379,22 +415,14 @@ function buildCredits(_api: MenuApi) {
     row('Raccoons, Slopothys & hats', 'modelled for this game in Blender (by the AI, somehow)'),
     row('Engine', 'three.js, Rapier, postprocessing, Vite'),
   );
-  const music = (SoundBank as any).MUSIC_BANK as Record<string, { files: { title: string; author: string }[] }> | undefined;
-  if (music) {
-    const seen = new Set<string>();
-    const tracks: string[] = [];
-    for (const def of Object.values(music)) {
-      for (const f of def.files ?? []) {
-        const k = `${f.title} — ${f.author}`;
-        if (!seen.has(k)) {
-          seen.add(k);
-          tracks.push(k);
-        }
-      }
-    }
-    if (tracks.length) {
-      wrap.append(h('h3', { class: 'set-section', text: 'Music (CC0, via OpenGameArt.org)' }));
-      for (const t of tracks) wrap.append(h('div', { class: 'cred-track', text: t }));
+  if (MUSIC_FILES.length) {
+    wrap.append(h('h3', { class: 'set-section', text: 'Music (CC0, via OpenGameArt.org)' }));
+    for (const f of MUSIC_FILES) {
+      const title = f.page ? extLink(f.title, f.page) : f.title;
+      const [a, b] = f.links ?? [];
+      // "Title — Author" (author → OGA profile); the lofi loop credits the original + the loop edit.
+      const by = !a ? [f.author] : b ? [extLink(a.label, a.url), ' (loop edit: ', extLink(b.label, b.url), ')'] : [extLink(a.label, a.url)];
+      wrap.append(h('div', { class: 'cred-track' }, title, ' — ', ...by));
     }
   }
   wrap.append(

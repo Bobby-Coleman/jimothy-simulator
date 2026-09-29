@@ -248,6 +248,8 @@ export class AudioManager {
   private currentTrack: MusicTrack | null = null;
   private wantedTrack: MusicTrack | null = null;
   private wantedFade = 2;
+  /** Playlist index a theme's player starts at when it's created (musicSelect before unlock). */
+  private startIdx = new Map<MusicTrack, number>();
   private hiddenPaused: MusicPlayer[] = [];
 
   // ------------------------------------------------------------------------------ lifecycle
@@ -449,6 +451,47 @@ export class AudioManager {
   /** The music theme currently playing / requested. */
   get musicTrack(): MusicTrack | null {
     return this.wantedTrack;
+  }
+
+  /**
+   * Playlist state of a theme (the title-screen music player reads this every frame).
+   * `wanted`: requested (plays as soon as audio is unlocked); `playing`: audibly playing right now.
+   */
+  musicInfo(track: MusicTrack) {
+    const def = MUSIC_BANK[track];
+    const p = this.music.get(track);
+    const index = p ? p.idx : (this.startIdx.get(track) ?? 0);
+    const wanted = this.wantedTrack === track;
+    return {
+      index,
+      count: def?.files.length ?? 0,
+      file: def?.files[index] ?? null,
+      wanted,
+      playing: wanted && !!p && p.want && !p.dead && !p.el.paused && this.unlocked,
+      time: p ? p.el.currentTime || 0 : 0,
+      duration: p && Number.isFinite(p.el.duration) ? p.el.duration : 0,
+    };
+  }
+
+  /**
+   * Jump a theme's playlist to file `index` (wraps). Restarts that file if it's the current one. Keeps playing
+   * if the theme is playing; otherwise just cues it (also works before the player exists / audio is unlocked).
+   */
+  musicSelect(track: MusicTrack, index: number): void {
+    try {
+      const def = MUSIC_BANK[track];
+      if (!def || !def.files.length) return;
+      const n = def.files.length;
+      const idx = ((Math.round(index) % n) + n) % n;
+      this.startIdx.set(track, idx);
+      const p = this.music.get(track);
+      if (!p || p.dead) return;
+      p.failed.delete(idx);
+      this.setMusicFile(p, idx);
+      if (p.want && !p.stopping && this.unlocked) this.playElement(p);
+    } catch (e) {
+      this.warnOnce('musicSelect', '[audio] musicSelect failed', e);
+    }
   }
 
   /** Temporarily lowers the music to `gain` (0..1) for `sec` seconds (jingles, explosions). */
@@ -849,7 +892,7 @@ export class AudioManager {
         this.warnOnce('musicfail:' + track, `[audio] music "${track}" failed to load; skipping`);
       } else this.advancePlaylist(p);
     });
-    this.setMusicFile(p, 0);
+    this.setMusicFile(p, Math.min(def.files.length - 1, this.startIdx.get(track) ?? 0));
     this.music.set(track, p);
     return p;
   }

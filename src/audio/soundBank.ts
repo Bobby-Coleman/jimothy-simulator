@@ -186,6 +186,12 @@ export const SOUND_BANK: Record<string, SoundDef> = {
 
 export type MusicTrack = 'day' | 'night' | 'slop' | 'title';
 
+/** A link shown next to a track's author (title music player, credits). */
+export interface MusicLink {
+  label: string;
+  url: string;
+}
+
 export interface MusicFile {
   /** Relative to assets/audio/music/. */
   file: string;
@@ -193,6 +199,10 @@ export interface MusicFile {
   gain: number;
   title: string;
   author: string;
+  /** The track's OpenGameArt page. */
+  page?: string;
+  /** Author profile link(s); the first is the main one. */
+  links?: MusicLink[];
 }
 
 export interface MusicDef {
@@ -203,36 +213,55 @@ export interface MusicDef {
   volume: number;
 }
 
+const OGA = 'https://opengameart.org';
+const oga = (slug: string) => `${OGA}/content/${slug}`;
+const user = (label: string, name: string): MusicLink => ({ label, url: `${OGA}/users/${name}` });
+
+/** Every music file the game ships (CREDITS.md). Author links are the "Author" field of each OGA page. */
+const T = {
+  bounce: { file: 'respectable_bounce.ogg', gain: 2.3, title: 'A respectable amount of Bounce', author: 'Some Weirdo', page: oga('a-respectable-amount-of-bounce'), links: [user('Some Weirdo', 'some-weirdo')] },
+  banana: { file: 'banana_track.ogg', gain: 0.59, title: 'Banana Track', author: 'skrjablin', page: oga('banana-track'), links: [user('skrjablin', 'skrjablin')] },
+  workings: { file: 'wacky_workings.ogg', gain: 0.76, title: 'Wacky Workings', author: 'Fupi', page: oga('wacky-workings'), links: [user('Fupi', 'fupi')] },
+  garden: { file: 'trouble_in_the_garden.ogg', gain: 2.1, title: 'Trouble in the Garden', author: 'HaelDB', page: oga('trouble-in-the-garden'), links: [user('HaelDB', 'haeldb')] },
+  wobblings: { file: 'wacky_wobblings.ogg', gain: 0.72, title: 'Wacky Wobblings', author: 'Fupi', page: oga('wacky-wobblings'), links: [user('Fupi', 'fupi')] },
+  lofi: {
+    file: 'chill_lofi_loop.ogg',
+    gain: 0.72,
+    title: 'Chill lofi inspired (loop edit)',
+    author: 'omfgdude, loop edit by qubodup',
+    page: oga('chill-lofi-inspired-loop-edit'),
+    links: [user('omfgdude', 'omfgdude'), user('qubodup', 'qubodup')],
+  },
+  napping: { file: 'napping_on_a_cloud.ogg', gain: 0.4, title: 'Napping on a Cloud', author: 'congusbongus', page: oga('napping-on-a-cloud'), links: [user('congusbongus', 'congusbongus')] },
+  aiContact: { file: 'ai_contact.mp3', gain: 0.31, title: 'Ai Contact', author: 'Of Far Different Nature', page: oga('ai-contact'), links: [user('Of Far Different Nature', 'of-far-different-nature')] },
+  dialup: { file: 'dialup_song.ogg', gain: 0.61, title: 'Dialup Song', author: 'Fupi', page: oga('dialup-song'), links: [user('Fupi', 'fupi')] },
+} satisfies Record<string, MusicFile>;
+
+/** The same file with a theme volume folded into its gain (so the title playlist matches in-game loudness). */
+const at = (f: MusicFile, volume: number): MusicFile => ({ ...f, gain: +(f.gain * volume).toFixed(3) });
+
 export const MUSIC_BANK: Record<MusicTrack, MusicDef> = {
   title: {
-    desc: 'Title screen: bouncy, goofy e-piano.',
+    desc: 'Title screen music player: every track, upbeat first (the player picks; prev / play-pause / next).',
     volume: 1,
-    files: [{ file: 'respectable_bounce.ogg', gain: 2.3, title: 'A respectable amount of Bounce', author: 'Some Weirdo' }],
+    files: [T.workings, T.banana, T.garden, T.wobblings, T.bounce, at(T.dialup, 0.9), at(T.aiContact, 0.9), at(T.lofi, 0.85), at(T.napping, 0.85)],
   },
   day: {
     desc: 'Daytime free-roam: jaunty, silly, a little dumb.',
     volume: 1,
-    files: [
-      { file: 'banana_track.ogg', gain: 0.59, title: 'Banana Track', author: 'skrjablin' },
-      { file: 'wacky_workings.ogg', gain: 0.76, title: 'Wacky Workings', author: 'Fupi' },
-      { file: 'trouble_in_the_garden.ogg', gain: 2.1, title: 'Trouble in the Garden', author: 'HaelDB' },
-      { file: 'wacky_wobblings.ogg', gain: 0.72, title: 'Wacky Wobblings', author: 'Fupi' },
-    ],
+    files: [T.banana, T.workings, T.garden, T.wobblings],
   },
   night: {
     desc: 'Night: chill lo-fi / sleepy chiptune (raccoon hours).',
     volume: 0.85,
-    files: [
-      { file: 'chill_lofi_loop.ogg', gain: 0.72, title: 'Chill lofi inspired (loop edit)', author: 'omfgdude, loop edit by qubodup' },
-      { file: 'napping_on_a_cloud.ogg', gain: 0.4, title: 'Napping on a Cloud', author: 'congusbongus' },
-    ],
+    files: [T.lofi, T.napping],
   },
   slop: {
     desc: 'SlopCorp campus: glitchy talking-synth wubs and dial-up modem jams.',
     volume: 0.9,
-    files: [
-      { file: 'ai_contact.mp3', gain: 0.31, title: 'Ai Contact', author: 'Of Far Different Nature' },
-      { file: 'dialup_song.ogg', gain: 0.61, title: 'Dialup Song', author: 'Fupi' },
-    ],
+    files: [T.aiContact, T.dialup],
   },
 };
+
+/** Every distinct music file, in title-playlist order (credits). */
+export const MUSIC_FILES: MusicFile[] = [T.workings, T.banana, T.garden, T.wobblings, T.bounce, T.dialup, T.aiContact, T.lofi, T.napping];
