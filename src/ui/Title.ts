@@ -6,6 +6,10 @@ import { ICONS, JIMOTHY_FACE } from './icons';
 import { fillTokens } from './glyphs';
 import { DISCLAIMER, TAGLINE, tipSequence } from './content';
 import type { UiCtx } from './types';
+import { MusicPlayer } from './MusicPlayer';
+import { bindFullscreenButton, toggleFullscreen } from './fullscreen';
+
+export { toggleFullscreen } from './fullscreen';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const _t = new THREE.Vector3();
@@ -45,6 +49,8 @@ export class TitleScreen {
   private replayBtn: HTMLButtonElement;
   private orbitA = Math.random() * Math.PI * 2;
   private settled = false;
+  /** Now-playing card (the title playlist: prev / play-pause / next). */
+  readonly music: MusicPlayer;
 
   constructor(
     private api: TitleApi,
@@ -59,8 +65,15 @@ export class TitleScreen {
       'aria-label': 'Fullscreen',
       title: 'Fullscreen',
       html: `<span class="btn-icon">${ICONS.fullscreen}</span>`,
-      onclick: () => toggleFullscreen(),
+      onclick: () => void toggleFullscreen(),
     });
+    bindFullscreenButton(fsBtn, (on) => {
+      const label = on ? 'Exit fullscreen' : 'Fullscreen';
+      fsBtn.setAttribute('aria-label', label);
+      fsBtn.title = label;
+      fsBtn.innerHTML = `<span class="btn-icon">${on ? ICONS.fullscreenExit : ICONS.fullscreen}</span>`;
+    });
+    this.music = new MusicPlayer(api);
     this.tipEl = h('div', { class: 'title-tip-text' });
     this.el = h(
       'div',
@@ -78,6 +91,7 @@ export class TitleScreen {
           h('div', { class: 'title-row' }, this.replayBtn, small('Settings', ICONS.gear, 'settings'), small('Controls', ICONS.keyboard, 'controls'), small('Credits', ICONS.star, 'credits'), fsBtn),
         ),
       ),
+      this.music.el,
       h('div', { class: 'title-disclaimer' }, h('b', { text: 'Disclaimer' }), h('p', { text: DISCLAIMER })),
       h('div', { class: 'title-tip' }, h('span', { class: 'title-tip-badge', text: 'TIP' }), this.tipEl),
       h('div', { class: 'title-version', text: 'v0.1 · early access to a raccoon' }),
@@ -129,6 +143,7 @@ export class TitleScreen {
       this.tipT = 0;
       this.showTip(this.tipIdx + 1);
     }
+    this.music.update();
     this.syncPlayer(dt);
   }
 
@@ -193,14 +208,5 @@ export class TitleScreen {
       cam.fov = 48;
       cam.updateProjectionMatrix();
     }
-  }
-}
-
-export function toggleFullscreen() {
-  try {
-    if (document.fullscreenElement) document.exitFullscreen?.();
-    else document.documentElement.requestFullscreen?.().catch(() => {});
-  } catch {
-    /* unsupported */
   }
 }

@@ -388,6 +388,8 @@ export class AudioSystem implements System {
   private updateMusic(p: PlayerView | undefined) {
     const g = this.game;
     let want: MusicTrack;
+    // 'title' is the title-screen music player's playlist: requested once here; the player widget
+    // (src/ui/MusicPlayer.ts) then picks tracks / pauses it directly. Gameplay hands back to day/night/slop.
     if (g.state === 'title') want = 'title';
     else if (p && this.area(p) === SLOP_AREA) want = 'slop';
     else {

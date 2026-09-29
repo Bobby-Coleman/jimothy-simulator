@@ -9,7 +9,8 @@ import { DialogBox } from './Dialog';
 import { SlopBot } from './SlopBot';
 import { MenuHost } from './MenuHost';
 import { pausePages, titlePages, type MenuApi } from './pages';
-import { TitleScreen, toggleFullscreen, type TitleApi } from './Title';
+import { TitleScreen, type TitleApi } from './Title';
+import { enterFullscreen, fullscreenSupported, isFullscreen } from './fullscreen';
 import { Intro, type IntroApi } from './Intro';
 import { TouchControls, type TouchApi } from './Touch';
 import { ObjectivesDrawer } from './Drawer';
@@ -342,7 +343,7 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     this.titleMenu.close();
     this.title.hide();
     this.requestLock();
-    if (IS_TOUCH && !document.fullscreenElement) toggleFullscreen();
+    if (IS_TOUCH && fullscreenSupported() && !isFullscreen()) void enterFullscreen();
     if (playIntro) {
       this.setMode('intro');
       this.intro.start();

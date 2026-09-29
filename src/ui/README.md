@@ -15,6 +15,8 @@ FontFace API (`boot.ts`), with system fallbacks.
 | `Guide.ts` | Suggested Instincts, the tracked goal (top pill + world waypoint star; the big map/minimap draw it too) and the first-time onboarding coach |
 | `MenuHost.ts` + `pages.ts` | Pause menu + title sub-pages (Instincts, Mutators, Settings, Controls, Credits, Reset) |
 | `Title.ts` / `Intro.ts` | Title screen (orbit camera, tips) / viral-video intro cutscene |
+| `MusicPlayer.ts` | Title-screen now-playing card: title, author (→ OGA profile, new tab), prev / play-pause / next over the AudioManager's `'title'` playlist (all tracks, upbeat first, auto-advance). Gameplay hands back to the AudioSystem's day / night / slop logic |
+| `fullscreen.ts` | Fullscreen API helpers (webkit fallback), `bindFullscreenButton` (label follows `fullscreenchange`, hidden where unsupported, e.g. iPhone). Used by the title icon button and the pause menu's "Fullscreen / Exit fullscreen" button |
 | `Touch.ts` | Phone/tablet controls (only when `(pointer: coarse)`) |
 | `PadNav.ts` | Gamepad + arrow-key menu navigation |
 | `settings.ts` | Persisted settings (`localStorage['jimothy.settings.v1']`) |
