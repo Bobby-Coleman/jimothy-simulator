@@ -53,7 +53,7 @@ const TOP_T = 3.5;
 const WAIT_T = 1.0;
 const RIDE_T = WAIT_T + UP_T + TOP_T + UP_T;
 
-type State = 'idle' | 'boarding' | 'riding' | 'return' | 'cool';
+type State = 'idle' | 'boarding' | 'riding' | 'exiting' | 'return' | 'cool';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -141,38 +141,46 @@ export class WheelRide implements ExtrasFeature {
     this.arm.add(bulbs);
     game.scene.add(this.arm);
 
-    // --- two cabins (rider = teal/gold "Raccoon Class", counterweight = red)
-    const signR = this.host.atlas.add(512, 160, drawBoard('RACCOON CLASS', 'Express Gondola', '#19a6b0', '#ffd23f'));
+    // --- two open-top "tub" cabins hanging from a swing frame (rider = teal/gold "Raccoon Class",
+    //     counterweight = red) — open so the view (and the camera) isn't blocked
+    const signR = this.host.atlas.add(512, 128, drawBoard('RACCOON CLASS', '', '#19a6b0', '#ffd23f'));
     for (let k = 0; k < 2; k++) {
       const body = k === 0 ? teal : 0xe63946;
       const trim = k === 0 ? gold : white;
       const parts: Part[] = [
-        // floor + skirt
+        // floor + chunky rounded-ish base
         { g: new THREE.BoxGeometry(2.0, 0.12, 1.7), c: 0x6e4a2a, m: T(0, -0.06, 0) },
-        { g: new THREE.BoxGeometry(2.1, 0.36, 1.8), c: body, m: T(0, -0.3, 0) },
-        // back wall (wheel side) + low side walls + low front rail (open view to the bay)
-        { g: new THREE.BoxGeometry(2.0, 1.55, 0.1), c: body, m: T(0, 0.78, -0.82) },
-        { g: new THREE.BoxGeometry(0.1, 0.6, 1.7), c: body, m: T(-0.97, 0.3, 0) },
-        { g: new THREE.BoxGeometry(0.1, 0.6, 1.7), c: body, m: T(0.97, 0.3, 0) },
-        { g: new THREE.BoxGeometry(2.0, 0.08, 0.08), c: trim, m: T(0, 0.62, 0.82) },
-        // corner posts + roof + hanger
-        { g: new THREE.BoxGeometry(2.3, 0.14, 2.0), c: trim, m: T(0, 1.95, 0) },
-        { g: new THREE.ConeGeometry(1.35, 0.4, 4).rotateY(Math.PI / 4), c: body, m: TR(0, 2.2, 0, 0, 0, 0, [1.2, 1, 1]) },
-        { g: new THREE.CylinderGeometry(0.06, 0.06, HANG - 2.2, 8), c: 0x9aa3ad, m: T(0, 2.2 + (HANG - 2.2) / 2, 0) },
+        { g: new THREE.BoxGeometry(2.1, 0.16, 1.8), c: body, m: T(0, -0.19, 0) },
+        // low walls all round
+        { g: new THREE.BoxGeometry(2.1, 0.46, 0.1), c: body, m: T(0, 0.23, -0.86) },
+        { g: new THREE.BoxGeometry(2.1, 0.46, 0.1), c: body, m: T(0, 0.23, 0.86) },
+        { g: new THREE.BoxGeometry(0.1, 0.46, 1.72), c: body, m: T(-1.02, 0.23, 0) },
+        { g: new THREE.BoxGeometry(0.1, 0.46, 1.72), c: body, m: T(1.02, 0.23, 0) },
+        // rim trim
+        { g: new THREE.BoxGeometry(2.18, 0.07, 0.14), c: trim, m: T(0, 0.48, -0.86) },
+        { g: new THREE.BoxGeometry(2.18, 0.07, 0.14), c: trim, m: T(0, 0.48, 0.86) },
+        { g: new THREE.BoxGeometry(0.14, 0.07, 1.8), c: trim, m: T(-1.02, 0.48, 0) },
+        { g: new THREE.BoxGeometry(0.14, 0.07, 1.8), c: trim, m: T(1.02, 0.48, 0) },
+        // swing frame: side posts up to a crossbar, hanger to the pin
+        { g: new THREE.BoxGeometry(0.1, 2.3, 0.1), c: trim, m: T(-1.02, 1.15, 0) },
+        { g: new THREE.BoxGeometry(0.1, 2.3, 0.1), c: trim, m: T(1.02, 1.15, 0) },
+        { g: new THREE.BoxGeometry(2.14, 0.12, 0.12), c: trim, m: T(0, 2.3, 0) },
+        { g: new THREE.CylinderGeometry(0.06, 0.06, HANG - 2.3, 8), c: 0x9aa3ad, m: T(0, 2.3 + (HANG - 2.3) / 2, 0) },
         { g: new THREE.TorusGeometry(0.14, 0.04, 6, 12), c: 0x9aa3ad, m: T(0, HANG, 0) },
       ];
-      for (const [x, z] of [[-0.97, -0.82], [0.97, -0.82], [-0.97, 0.82], [0.97, 0.82]]) {
-        parts.push({ g: new THREE.BoxGeometry(0.09, 1.9, 0.09), c: trim, m: T(x, 0.95, z) });
-      }
       const g = new THREE.Group();
       g.add(paintMesh(parts));
       if (k === 0) {
-        const q = this.host.atlas.quad(signR, 1.6, 0.5);
-        q.position.set(0, 1.25, -0.76);
-        g.add(q);
+        // on the front (bay side) and the back (boardwalk side)
+        for (const s of [1, -1]) {
+          const q = this.host.atlas.quad(signR, 1.5, 0.36);
+          q.position.set(0, 0.22, s * 0.915);
+          if (s < 0) q.rotation.y = Math.PI;
+          g.add(q);
+        }
       }
       const cb: Part[] = [];
-      for (let i = 0; i < 5; i++) cb.push({ g: new THREE.SphereGeometry(0.06, 6, 5), c: 0xfff0b0, m: T(-0.9 + i * 0.45, 1.86, 0.95) });
+      for (let i = 0; i < 5; i++) cb.push({ g: new THREE.SphereGeometry(0.07, 6, 5), c: 0xfff0b0, m: T(-0.8 + i * 0.4, 2.38, 0) });
       g.add(new THREE.Mesh(mergeParts(cb), bulbMat()));
       game.scene.add(g);
       this.cabins.push(g);
@@ -199,6 +207,26 @@ export class WheelRide implements ExtrasFeature {
     };
     mk(board, this.cx - 2.3, this.cz + 4.35, 0);
     mk(hint, this.cx - 3.2, this.cz - 4.65, Math.PI);
+
+    // boarding ramp from the lawn up onto the 0.4 m platform, right in front of the gondola
+    const ramp = new THREE.Group();
+    const a = Math.atan2(0.4, 1.6);
+    const rc = new THREE.Vector3(this.cx, 0.15, this.cz + 4.5 + 0.8);
+    ramp.position.copy(rc);
+    ramp.rotation.x = a;
+    ramp.add(
+      paintMesh([
+        { g: new THREE.BoxGeometry(1.9, 0.1, 1.68), c: 0xd9d2c3 },
+        { g: new THREE.BoxGeometry(0.08, 0.14, 1.68), c: gold, m: T(-0.95, 0.05, 0) },
+        { g: new THREE.BoxGeometry(0.08, 0.14, 1.68), c: gold, m: T(0.95, 0.05, 0) },
+      ]),
+    );
+    game.scene.add(ramp);
+    try {
+      game.physics.staticBox(rc, new THREE.Vector3(0.95, 0.05, 0.84), new THREE.Quaternion().setFromEuler(new THREE.Euler(a, 0, 0)));
+    } catch {
+      /* optional */
+    }
   }
 
   private buildFloor() {
@@ -276,7 +304,7 @@ export class WheelRide implements ExtrasFeature {
         const d = Math.hypot(player.position.x - seat.x, player.position.z - seat.z);
         if (d < 5 && !this.host.busy && !sceneBusy(game)) prompt(game, 'Express Gondola: hop in for a Pretty Good View');
         const onFloor = player.groundEntity === this.floorEntity;
-        const inside = d < 0.9 && Math.abs(player.position.y - seat.y) < 0.7;
+        const inside = d < 1.3 && Math.abs(player.position.y - seat.y) < 1.0;
         if ((onFloor || inside) && player.mode === 'walk' && !player.frozen && !this.host.busy && !sceneBusy(game)) this.board();
         break;
       }
@@ -305,7 +333,22 @@ export class WheelRide implements ExtrasFeature {
           this.dismount(false);
           break;
         }
-        if (this.rideT >= RIDE_T) this.dismount(true);
+        if (this.rideT >= RIDE_T) {
+          // step out onto the platform (east side) before handing control back
+          this.state = 'exiting';
+          this.t = 0;
+          this.boardFrom.copy(player.position);
+        }
+        break;
+      }
+      case 'exiting': {
+        const u = clamp(this.t / 0.6, 0, 1);
+        const exit = this.seat(this.theta, _v2).add(_v.set(1.75, 0.02, 0.35));
+        const target = _v.copy(this.boardFrom).lerp(exit, smooth(u));
+        target.y += Math.sin(u * Math.PI) * 0.35;
+        this.steer(player, target, safeDt);
+        player.facing = dampAngle(player.facing, Math.PI / 2, 8, dt);
+        if (u >= 1) this.dismount(true);
         break;
       }
       case 'return':
@@ -342,7 +385,7 @@ export class WheelRide implements ExtrasFeature {
     if (player?.body) {
       player.frozen = false;
       player.body.setGravityScale(player.gravityMul ?? 1, true);
-      if (completed) player.body.setLinvel({ x: 2.6, y: 3.6, z: 0.4 }, true);
+      if (completed) player.body.setLinvel({ x: 1.5, y: 0, z: 0 }, true);
       else player.body.setLinvel({ x: vel.x, y: vel.y + 6, z: vel.z + 3.5 }, true);
       if (!completed) game.sfx('jump', player.position, 0.6);
     }
@@ -398,26 +441,50 @@ export class WheelRide implements ExtrasFeature {
     const seat = new THREE.Vector3();
     const want = new THREE.Vector3();
     const look = new THREE.Vector3();
+    let pov = false;
+    let povT = 0;
     const fn = (cam: THREE.PerspectiveCamera, dt: number) => {
       const d = Math.min(dt, 0.1);
       if (game.paused) return;
       this.seat(this.theta, seat);
-      // progress around the loop 0..1 → the camera swings from the bay side, around the outside of the wheel,
-      // over the top (behind Jimothy, looking out to sea) and down the other side
+      const atTop = this.state === 'riding' && this.rideT >= WAIT_T + UP_T + 0.2 && this.rideT < WAIT_T + UP_T + TOP_T - 0.1;
+      if (atTop) {
+        // Jimothy's-eye view: out over the waterfront and Salmon Bay
+        if (!pov) {
+          pov = true;
+          povT = 0;
+        }
+        povT += d;
+        const pan = Math.sin(povT * 0.5) * 0.35;
+        cam.position.set(seat.x, seat.y + 0.36, seat.z + 1.08);
+        look.set(seat.x + Math.sin(pan) * 30, seat.y - 9, seat.z + Math.cos(pan) * 30);
+        this.camLook.copy(look);
+        cam.lookAt(look);
+        cam.fov = 62;
+        cam.updateProjectionMatrix();
+        return;
+      }
+      if (pov) {
+        // cut back out to the follow view
+        pov = false;
+        this.camPsi = this.theta > Math.PI / 2 ? -0.75 : 0.75;
+        want.set(seat.x + Math.sin(this.camPsi) * 7, seat.y + 1.3, seat.z + Math.cos(this.camPsi) * 7);
+        cam.position.copy(want);
+        this.camLook.copy(seat);
+      }
+      // 3/4 front follow: always on the open (bay) side of the gondola, swinging from the east side on the way up
+      // to the west side on the way down; rides up and down with him
       const f = clamp((this.theta + Math.PI / 2) / (Math.PI * 2), 0, 1);
-      const keys = [0.55, 1.3, Math.PI, Math.PI * 2 - 1.3, Math.PI * 2 - 0.55];
-      const i = Math.min(3, Math.floor(f * 4));
-      const psi = lerp(keys[i], keys[i + 1], smooth(f * 4 - i));
-      this.camPsi = damp(this.camPsi, psi, 2.5, d);
+      const psi = f < 0.5 ? lerp(0.35, 0.9, smooth(f * 2)) : lerp(-0.9, -0.35, smooth((f - 0.5) * 2));
+      this.camPsi = damp(this.camPsi, psi, 2.2, d);
       const s = Math.sin(Math.PI * f);
-      const dist = 7.5 + 2.5 * s;
-      const h = 1.5 + 3 * s;
-      want.set(seat.x + Math.sin(this.camPsi) * dist, seat.y + h, seat.z + Math.cos(this.camPsi) * dist);
-      look.copy(seat).lerp(_v.set(seat.x, seat.y - 4, seat.z + 30), 0.18 + 0.3 * s);
+      const dist = 6.5 + 1.5 * s;
+      want.set(seat.x + Math.sin(this.camPsi) * dist, seat.y + 1.1 + 0.9 * s, seat.z + Math.cos(this.camPsi) * dist);
+      look.copy(seat).add(_v.set(0, 0.25, 0));
       cam.position.lerp(want, 1 - Math.exp(-d * (this.state === 'boarding' ? 2.5 : 4)));
-      this.camLook.lerp(look, 1 - Math.exp(-d * 5));
+      this.camLook.lerp(look, 1 - Math.exp(-d * 6));
       cam.lookAt(this.camLook);
-      cam.fov += (56 - cam.fov) * (1 - Math.exp(-d * 2));
+      cam.fov += (54 - cam.fov) * (1 - Math.exp(-d * 2));
       cam.updateProjectionMatrix();
     };
     this.camFn = fn;
@@ -426,7 +493,7 @@ export class WheelRide implements ExtrasFeature {
 
   /** Abort (finale): drop Jimothy at the bottom, return the camera. */
   abort() {
-    if (this.state === 'boarding' || this.state === 'riding') {
+    if (this.state === 'boarding' || this.state === 'riding' || this.state === 'exiting') {
       const player = playerOf(this.game);
       if (player) {
         player.frozen = false;

@@ -52,6 +52,9 @@ export const Downtown: ZoneBuilder = {
     const y0 = walkY(90, 0);
     world.npcSpawns.push({ zone: 'Downtown', center: new THREE.Vector3(94, y0, 0), radius: 17, count: 8, types: ['pedestrian', 'tourist', 'fan'] });
     world.npcSpawns.push({ zone: 'Downtown', center: new THREE.Vector3(STATUE.x - 2, y0, 6.5), radius: 4, count: 1, types: ['officer'] });
+    // a superfan who always hangs around the (only) Wildlife Officer, so 'Please Don't Approach Jimothy' is doable
+    // (the random plaza crowd has no fans in ~1 of 5 games)
+    world.npcSpawns.push({ zone: 'Downtown', center: new THREE.Vector3(STATUE.x + 3, y0, 8), radius: 4, count: 1, types: ['fan'] });
     world.npcSpawns.push({ zone: 'Downtown', center: new THREE.Vector3(108, y0, 0), radius: 4, count: 3, types: ['fan', 'tourist'] });
     world.npcSpawns.push({ zone: 'Downtown', center: new THREE.Vector3(NOODLE.x - 9, walkY(NOODLE.x - 9, NOODLE.z), NOODLE.z), radius: 8, count: 4, types: ['tourist', 'pedestrian', 'fan'] });
     for (const z of [-24, 24]) {
@@ -880,7 +883,8 @@ async function buildPlazaDecor(game: Game, world: World, batch: Batch, rng: Rng)
     { x: 112, y, z: 18.5, ry: 0 },
   ], { collider: new THREE.Vector3(1.6, 0.62, 0.8) });
   placeBatched(world, batch, bikeRack(), [{ x: 120, y, z: 19.5, ry: 0 }], { collider: new THREE.Vector3(2.2, 0.9, 0.2) });
-  for (const [x, z] of [[76, -12], [76, 12], [113, -6.5], [136, -26], [160, 24]] as [number, number][]) spawnTrashCan(game, new THREE.Vector3(x, walkY(x, z), z), rng.range(0, 6));
+  // polish: (136,-26) was on the grass at sidewalk height (floated 20 cm) → moved onto the paved plaza edge
+  for (const [x, z] of [[76, -12], [76, 12], [113, -6.5], [139.5, -28.6], [160, 24]] as [number, number][]) spawnTrashCan(game, new THREE.Vector3(x, walkY(x, z), z), rng.range(0, 6));
   // press rows facing the podium
   for (let row = 0; row < 2; row++) for (let k = 0; k < 7; k++) {
     const x = 106 + row * 1.25,

@@ -189,7 +189,7 @@ export class BigFireworks {
         const vx = (right.x * dir.x + up.x * dir.y) * speed;
         const vy = (right.y * dir.x + up.y * dir.y) * speed;
         const vz = (right.z * dir.x + up.z * dir.y) * speed;
-        this.spawn(x, y, z, vx, vy, vz, c, rand(1.5, 2.1) * s, life * rand(0.9, 1.1), 1.4, GRAV * 0.25);
+        this.spawn(x, y, z, vx, vy, vz, c, rand(1.9, 2.6) * s, life * rand(0.9, 1.1), 1.4, GRAV * 0.25);
       }
     };
     switch (r.pattern) {
@@ -197,14 +197,14 @@ export class BigFireworks {
         const n = Math.round(170 * k);
         for (let i = 0; i < n; i++) {
           randDir(dir);
-          const sp = rand(15, 19) * s;
-          this.spawn(x, y, z, dir.x * sp, dir.y * sp, dir.z * sp, i % 3 === 0 ? c2 : c1, rand(1.6, 2.3) * s, rand(1.8, 2.6), 1.35, GRAV * 0.4);
+          const sp = rand(19, 24) * s;
+          this.spawn(x, y, z, dir.x * sp, dir.y * sp, dir.z * sp, i % 3 === 0 ? c2 : c1, rand(2.0, 2.8) * s, rand(1.8, 2.6), 1.35, GRAV * 0.4);
         }
         break;
       }
       case 'ring': {
         const n = Math.round(120 * k);
-        flat(n, (i, o) => o.set(Math.cos((i / n) * Math.PI * 2), Math.sin((i / n) * Math.PI * 2), 0), 17 * s, c1, 2.2);
+        flat(n, (i, o) => o.set(Math.cos((i / n) * Math.PI * 2), Math.sin((i / n) * Math.PI * 2), 0), 22 * s, c1, 2.2);
         for (let i = 0; i < 30 * k; i++) {
           randDir(dir);
           this.spawn(x, y, z, dir.x * 6, dir.y * 6, dir.z * 6, c2, 1.4 * s, 1.6, 1.8, GRAV * 0.3);
@@ -221,7 +221,7 @@ export class BigFireworks {
             const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
             o.set(hx / 17, hy / 17 + 0.15, 0);
           },
-          18 * s,
+          23 * s,
           [2.7, 0.45, 0.75],
           2.6,
         );
@@ -232,19 +232,19 @@ export class BigFireworks {
         const n = Math.round(110 * k);
         const face: [number, number, number] = [1.9, 1.8, 1.7];
         const mask: [number, number, number] = [0.9, 0.95, 1.4];
-        flat(n, (i, o) => o.set(Math.cos((i / n) * Math.PI * 2), Math.sin((i / n) * Math.PI * 2), 0), 16 * s, face, 2.8);
+        flat(n, (i, o) => o.set(Math.cos((i / n) * Math.PI * 2), Math.sin((i / n) * Math.PI * 2), 0), 20 * s, face, 2.8);
         for (const ex of [-0.62, 0.62]) {
           const m = Math.round(24 * k);
-          flat(m, (i, o) => o.set(ex + Math.cos((i / m) * Math.PI * 2) * 0.28, 0.95 + Math.sin((i / m) * Math.PI * 2) * 0.28, 0), 16 * s, face, 2.8);
+          flat(m, (i, o) => o.set(ex + Math.cos((i / m) * Math.PI * 2) * 0.28, 0.95 + Math.sin((i / m) * Math.PI * 2) * 0.28, 0), 20 * s, face, 2.8);
         }
         const mm = Math.round(40 * k);
-        flat(mm, (i, o) => o.set(-0.75 + (i / mm) * 1.5, 0.12 + Math.sin((i / mm) * Math.PI) * -0.12, 0), 16 * s, mask, 2.8);
+        flat(mm, (i, o) => o.set(-0.75 + (i / mm) * 1.5, 0.12 + Math.sin((i / mm) * Math.PI) * -0.12, 0), 20 * s, mask, 2.8);
         for (const ex of [-0.33, 0.33]) {
           const m = Math.round(10 * k);
-          flat(m, (i, o) => o.set(ex + Math.cos((i / m) * Math.PI * 2) * 0.07, 0.15 + Math.sin((i / m) * Math.PI * 2) * 0.07, 0), 16 * s, [2.8, 2.6, 1.2], 2.8);
+          flat(m, (i, o) => o.set(ex + Math.cos((i / m) * Math.PI * 2) * 0.07, 0.15 + Math.sin((i / m) * Math.PI * 2) * 0.07, 0), 20 * s, [2.8, 2.6, 1.2], 2.8);
         }
         const nose = Math.round(8 * k);
-        flat(nose, (i, o) => o.set(Math.cos((i / nose) * Math.PI * 2) * 0.06, -0.3 + Math.sin((i / nose) * Math.PI * 2) * 0.05, 0), 16 * s, [1, 0.9, 1], 2.8);
+        flat(nose, (i, o) => o.set(Math.cos((i / nose) * Math.PI * 2) * 0.06, -0.3 + Math.sin((i / nose) * Math.PI * 2) * 0.05, 0), 20 * s, [1, 0.9, 1], 2.8);
         break;
       }
       case 'willow': {
@@ -252,7 +252,7 @@ export class BigFireworks {
         const gold: [number, number, number] = [2.4, 1.5, 0.45];
         for (let i = 0; i < n; i++) {
           randDir(dir);
-          const sp = rand(9, 13) * s;
+          const sp = rand(12, 16) * s;
           this.spawn(x, y, z, dir.x * sp, dir.y * sp + 2, dir.z * sp, gold, rand(1.3, 1.8) * s, rand(3.2, 4.2), 0.9, GRAV * 0.7);
         }
         break;
@@ -261,7 +261,7 @@ export class BigFireworks {
         const n = Math.round(150 * k);
         for (let i = 0; i < n; i++) {
           randDir(dir);
-          const sp = rand(6, 16) * s;
+          const sp = rand(8, 20) * s;
           this.spawn(x, y, z, dir.x * sp, dir.y * sp, dir.z * sp, [2.2, 2.1, 1.8], rand(1.1, 1.6) * s, rand(1.3, 2.2), 1.6, GRAV * 0.35, 1);
         }
         break;

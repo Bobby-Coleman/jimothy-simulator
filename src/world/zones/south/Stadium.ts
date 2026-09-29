@@ -195,6 +195,16 @@ function field(kit: Kit, b: Batch) {
     b.box([x, 0.1, z], [0.42, 0.1, 0.42], 0xffffff, { rotY: Math.PI / 4, collide: false });
   }
   b.cyl([MOUND.x, 0.13, MOUND.z], 2.2, 0.26, DIRT, { rTop: 1.4, seg: 24, mat: 'sand', collide: false });
+  {
+    // polish: the mound was visual-only (Jimothy sank 26 cm into it, the resting baseball dropped through); a convex
+    // frustum hull gives it a smooth ramp instead of a step
+    const pts: number[] = [];
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      pts.push(MOUND.x + Math.cos(a) * 2.2, 0, MOUND.z + Math.sin(a) * 2.2, MOUND.x + Math.cos(a) * 1.4, 0.26, MOUND.z + Math.sin(a) * 1.4);
+    }
+    kit.hullCollider(pts);
+  }
   b.box([MOUND.x, 0.27, MOUND.z], [0.6, 0.04, 0.15], 0xffffff, { collide: false, shadow: false });
   // home plate + chalk: batter's boxes and foul lines
   const hp = new THREE.Shape([new THREE.Vector2(-0.22, 0), new THREE.Vector2(0.22, 0), new THREE.Vector2(0.22, 0.22), new THREE.Vector2(0, 0.44), new THREE.Vector2(-0.22, 0.22)]);
@@ -659,8 +669,10 @@ function lightTowers(kit: Kit, b: Batch) {
   });
   const panelMat = new THREE.MeshStandardMaterial({ map: bulbTex, emissive: 0xffffff, emissiveMap: bulbTex, emissiveIntensity: 0.15, roughness: 0.4 });
   kit.glow(panelMat, 0.15, 3.2);
-  const beamMat = new THREE.MeshBasicMaterial({ color: 0xfff4d0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: true });
-  kit.glow(beamMat, 0, 0.022, 'opacity');
+  // polish: beams fade out toward the ground (vertex alpha) — before, standing on the field put the camera inside
+  // six overlapping double-sided additive cones and the whole night view turned into a beige haze.
+  const beamMat = new THREE.MeshBasicMaterial({ color: 0xfff4d0, vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: true });
+  kit.glow(beamMat, 0, 0.03, 'opacity');
   const target = new THREE.Vector3(FC.x, 0, FC.z + 8);
   const spots: [number, number][] = [at(22, D3, 21, N3), at(42, D3, 21, N3), at(22, D1, 21, N1), at(42, D1, 21, N1), onArc(A_L + 0.45, FR + 13), onArc(A_R - 0.45, FR + 13)];
   const Ht = 24;
@@ -681,7 +693,12 @@ function lightTowers(kit: Kit, b: Batch) {
     const aim = new THREE.Vector3(target.x + (i % 2 ? 6 : -6), 0, target.z + (i < 2 ? -6 : 6));
     const from = new THREE.Vector3(x, Ht + 1.6, z);
     const len = from.distanceTo(aim);
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 9, len, 20, 1, true), beamMat);
+    const beamGeo = new THREE.CylinderGeometry(1.6, 9, len, 20, 1, true);
+    const bp = beamGeo.attributes.position;
+    const bcol = new Float32Array(bp.count * 4);
+    for (let k = 0; k < bp.count; k++) bcol.set([1, 1, 1, bp.getY(k) > 0 ? 1 : 0], k * 4); // +Y = at the lamp
+    beamGeo.setAttribute('color', new THREE.BufferAttribute(bcol, 4));
+    const beam = new THREE.Mesh(beamGeo, beamMat);
     beam.position.copy(from).add(aim).multiplyScalar(0.5);
     beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), aim.clone().sub(from).normalize());
     beam.renderOrder = 5;
@@ -747,7 +764,7 @@ function plaza(kit: Kit, b: Batch) {
     const fx = Math.sin(rotY);
     const fz = Math.cos(rotY);
     b.box([x + fx * 1.42, 1.25, z + fz * 1.42], [3.2, 1.0, 0.05], 0x2b2f38, { rotY, collide: false, mat: 'glossy' });
-    b.box([x + fx * 1.65, 0.95, z + fz * 1.65], [3.6, 0.08, 0.5], 0xd9c7a6, { rotY, collide: false });
+    b.box([x + fx * 1.65, 0.95, z + fz * 1.65], [3.6, 0.08, 0.5], 0xd9c7a6, { rotY, collide: true }); // polish: solid counter (food used to drop through)
     const t = kit.textSign([{ text: name, px: 64, color: '#fff', stroke: '#1b1d24' }, { text: sub, px: 28, color: '#fff', font: FONT_ROUND }], { w: 4, h: 0.9, bg });
     kit.sign(b, { pos: [x + fx * 1.45, 3.5, z + fz * 1.45], rotY, w: 4, h: 0.9, tex: t, depth: 0.06, collide: false });
     return [x + fx * 1.65, z + fz * 1.65] as [number, number];

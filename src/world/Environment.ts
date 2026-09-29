@@ -12,7 +12,7 @@ const _v = new THREE.Vector3();
 const VIEW = {
   high: { near: 90, far: 620, cam: 1500 },
   medium: { near: 80, far: 440, cam: 520 },
-  low: { near: 45, far: 250, cam: 300 },
+  low: { near: 40, far: 225, cam: 280 },
 } as const;
 
 /**
@@ -236,16 +236,18 @@ export class Environment implements System {
       light.intensity = 0.2 + 3.2 * day;
     } else {
       light.color.copy(moonCol);
-      light.intensity = 0.55 * this.nightFactor;
+      light.intensity = 0.8 * this.nightFactor; // polish: was 0.55 — moonlit, not pitch black
     }
     // Hemisphere fill
     const skyDay = new THREE.Color(0xb7d4ff);
     const skyGold = new THREE.Color(0xffc9a0);
-    const skyNight = new THREE.Color(0x2a3b66);
+    // polish: brighter blue night fill (was 0x2a3b66 at 0.55): moon shadows used to be pure black and Jimothy a
+    // silhouette. Still reads as night — glowing windows/lamps pop against it.
+    const skyNight = new THREE.Color(0x3f5796);
     const hemiSky = skyNight.clone().lerp(skyDay.clone().lerp(skyGold, golden * 0.6), day);
     this.hemi.color.copy(hemiSky);
-    this.hemi.groundColor.set(0x5b4c3a).lerp(new THREE.Color(0x1b1f2a), this.nightFactor);
-    this.hemi.intensity = 0.55 + 0.75 * day;
+    this.hemi.groundColor.set(0x5b4c3a).lerp(new THREE.Color(0x2b3244), this.nightFactor);
+    this.hemi.intensity = 1.05 + 0.25 * day;
 
     // Fog & background
     const fogDay = new THREE.Color(0xd3e6f7);

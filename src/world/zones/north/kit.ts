@@ -6,6 +6,7 @@
  *  - Animators: one cheap per-frame callback list (porch lights, sprinklers, petals, servers…).
  */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Game } from '../../../core/Game';
 import type { World } from '../../World';
 import { RAPIER, G, groups } from '../../../core/Physics';
@@ -25,6 +26,8 @@ const _s = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _m2 = new THREE.Matrix4();
+/** instances(): lists up to this long are baked into merged meshes instead of InstancedMeshes (perf). */
+const INSTANCE_BAKE_MAX = 24;
 
 // ------------------------------------------------------------------ shared unit geometries
 export const GEO = {
@@ -915,6 +918,30 @@ export function instances(world: World, template: THREE.Object3D, list: [number,
     if (m.isMesh) meshes.push(m);
   });
   const group = new THREE.Group();
+  // perf: short lists are baked into plain merged meshes — the StaticBatcher then folds them into the zone's
+  // same-material batches. One InstancedMesh per template part for 1–3 trees cost ~30 extra draw calls in the Hills.
+  if (list.length <= INSTANCE_BAKE_MAX && meshes.every((m) => !Array.isArray(m.material))) {
+    for (const src of meshes) {
+      const local = src.matrixWorld.clone();
+      const geos = list.map(([x, y, z, ry, sc]) => {
+        _q.setFromAxisAngle(UP, ry);
+        _s.setScalar(sc);
+        _p.set(x, y, z);
+        _m.compose(_p, _q, _s).multiply(local);
+        return src.geometry.clone().applyMatrix4(_m);
+      });
+      const merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
+      if (!merged) continue;
+      if (merged !== geos[0]) for (const g of geos) g.dispose();
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(merged, src.material);
+      mesh.castShadow = opts.castShadow ?? true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+    world.staticRoot.add(group);
+    return group;
+  }
   for (const src of meshes) {
     const im = new THREE.InstancedMesh(src.geometry, src.material, list.length);
     im.castShadow = opts.castShadow ?? true;

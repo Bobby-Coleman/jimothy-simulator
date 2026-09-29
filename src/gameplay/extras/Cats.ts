@@ -67,7 +67,7 @@ const SPOTS: Spot[] = [
   {
     id: 'market',
     name: 'Sardine',
-    tint: [1.25, 1.02, 0.8],
+    tint: [1.9, 1.2, 0.62],
     place: (h) => {
       const g = h.game;
       const m = poi(g, 'fishMarket', new THREE.Vector3(0, 0.1, 94.2));
@@ -88,7 +88,7 @@ const SPOTS: Spot[] = [
   {
     id: 'booth',
     name: 'Judge Biscuit',
-    tint: [0.62, 0.6, 0.66],
+    tint: [1.65, 1.55, 1.38],
     place: (h) => {
       const g = h.game;
       const park = poi(g, 'teeHeePark', new THREE.Vector3(92, 0.2, 154));

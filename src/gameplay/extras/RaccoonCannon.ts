@@ -62,8 +62,8 @@ export interface CannonSpec {
   spread: number;
   scale?: number;
   trail?: number;
-  /** Standing sign offset (root-local x, z) — or null for none. */
-  signAt?: [number, number] | null;
+  /** Standing sign: root-local x, z and the yaw its face points to (π = toward the breech side) — or null for none. */
+  signAt?: [number, number, number] | null;
   crowd?: THREE.Vector3;
   /** Where the flight is "meant" to end up (for hints). */
   target: string;
@@ -175,12 +175,12 @@ export class Cannon {
 
     // --- sign
     if (s.signAt !== null) {
-      const [sx, sz] = s.signAt ?? [2.2, -1.5];
+      const [sx, sz, sy] = s.signAt ?? [2.2, -1.5, Math.PI];
       const [bg, border] = s.signColors ?? ['#0f8a93', '#ffd23f'];
       const region = this.host.atlas.add(512, 256, drawBoard(s.sign[0], s.sign[1], bg, border));
       const signGroup = new THREE.Group();
       signGroup.position.set(sx, 0, sz);
-      signGroup.rotation.y = Math.PI; // readable from behind the cannon (where you load it)
+      signGroup.rotation.y = sy; // π: readable from behind the cannon (where you load it)
       const post = paintMesh([
         { g: new THREE.BoxGeometry(0.12, 1.9, 0.12), c: 0x3d3a44, m: T(-0.8, 0.95, 0.06) },
         { g: new THREE.BoxGeometry(0.12, 1.9, 0.12), c: 0x3d3a44, m: T(0.8, 0.95, 0.06) },
@@ -188,8 +188,7 @@ export class Cannon {
       ]);
       signGroup.add(post);
       const q = this.host.atlas.quad(region, 2.2, 1.1);
-      q.position.set(0, 1.55, -0.02);
-      q.rotation.y = Math.PI;
+      q.position.set(0, 1.55, 0.06);
       signGroup.add(q);
       root.add(signGroup);
       root.updateMatrixWorld(true);
@@ -222,8 +221,8 @@ export class Cannon {
     this.barrel.localToWorld(this.muzzle.set(0, 0, MUZZLE));
   }
 
-  /** Where Jimothy peeks out of the barrel (current barrel pose). */
-  private insidePoint(out: THREE.Vector3, along = MUZZLE - 0.42) {
+  /** Where Jimothy peeks out of the barrel (current barrel pose): his face just pokes out of the muzzle. */
+  private insidePoint(out: THREE.Vector3, along = MUZZLE - 0.12) {
     this.root.updateMatrixWorld(true);
     return this.barrel.localToWorld(out.set(0, 0, along));
   }
@@ -285,7 +284,7 @@ export class Cannon {
         const u = clamp(this.t / 0.75, 0, 1);
         const target = _v;
         if (u < 0.35) target.copy(this.startPos).lerp(this.breech, smooth(u / 0.35));
-        else this.insidePoint(target, lerp(BREECH - 0.3, MUZZLE - 0.42, smooth((u - 0.35) / 0.65)));
+        else this.insidePoint(target, lerp(BREECH - 0.3, MUZZLE - 0.12, smooth((u - 0.35) / 0.65)));
         this.hold(player, target, dt, 14);
         if (u >= 1) {
           this.state = 'aim';
@@ -407,7 +406,10 @@ export class Cannon {
   }
 
   // ---------------------------------------------------------------------------------------------- camera
-  /** Side-on cinematic view of the cannon while loading/aiming. */
+  /**
+   * Cinematic camera: while loading, glide to a side view of the cannon; when aiming, cut to a low 3/4 front view
+   * of the muzzle (Jimothy's worried little face poking out) with a slow push-in.
+   */
   private startCamera() {
     const game = this.game;
     const rig = rigOf(game);
@@ -420,17 +422,39 @@ export class Cannon {
     const side = toCam.dot(right) >= 0 ? 1 : -1;
     const mid = this.breech.clone().lerp(this.muzzle, 0.55);
     const sc = this.scale;
-    const want = mid.clone().addScaledVector(right, side * 7.5 * sc).addScaledVector(fwd, -1.8 * sc).add(new THREE.Vector3(0, 1.6 * sc, 0));
-    clearView(game, mid, want, 2);
+    const sideWant = mid.clone().addScaledVector(right, side * 7.5 * sc).addScaledVector(fwd, -1.8 * sc).add(new THREE.Vector3(0, 1.6 * sc, 0));
+    clearView(game, mid, sideWant, 2);
+    const frontFrom = this.muzzle.clone().addScaledVector(fwd, 6.2 * sc).addScaledVector(right, side * 4.2 * sc).add(new THREE.Vector3(0, -0.6 * sc, 0));
+    const frontTo = this.muzzle.clone().addScaledVector(fwd, 4.6 * sc).addScaledVector(right, side * 3.1 * sc).add(new THREE.Vector3(0, -0.35 * sc, 0));
+    aboveGround(game, frontFrom, 0.5);
+    aboveGround(game, frontTo, 0.5);
     this.camLook.copy(game.camera.position).add(_v2.set(0, 0, -1).applyQuaternion(game.camera.quaternion).multiplyScalar(6));
+    let front = false;
+    let ft = 0;
     const fn = (cam: THREE.PerspectiveCamera, dt: number) => {
       const d = Math.min(dt, 0.1);
       if (game.paused) return;
-      const look = this.insidePoint(_v2).lerp(mid, 0.35);
-      cam.position.lerp(want, 1 - Math.exp(-d * 3.2));
-      this.camLook.lerp(look, 1 - Math.exp(-d * 5));
-      cam.lookAt(this.camLook);
-      cam.fov += (54 - cam.fov) * (1 - Math.exp(-d * 3));
+      if (this.state === 'aim') {
+        const look = this.insidePoint(_v2).add(_v.set(0, 0.15 * sc, 0));
+        if (!front) {
+          // cut
+          front = true;
+          ft = 0;
+          cam.position.copy(frontFrom);
+          this.camLook.copy(look);
+        }
+        ft += d;
+        cam.position.lerpVectors(frontFrom, frontTo, smooth(ft / 2.2));
+        this.camLook.lerp(look, 1 - Math.exp(-d * 10));
+        cam.lookAt(this.camLook);
+        cam.fov += (46 - cam.fov) * (1 - Math.exp(-d * 4));
+      } else {
+        const look = this.insidePoint(_v2).lerp(mid, 0.35);
+        cam.position.lerp(sideWant, 1 - Math.exp(-d * 3.2));
+        this.camLook.lerp(look, 1 - Math.exp(-d * 5));
+        cam.lookAt(this.camLook);
+        cam.fov += (54 - cam.fov) * (1 - Math.exp(-d * 3));
+      }
       cam.updateProjectionMatrix();
     };
     this.camFn = fn;
@@ -512,7 +536,9 @@ export class Flight {
       want.copy(p).addScaledVector(this.dir, -back).addScaledVector(side, 2.2).add(_v2.set(0, up, 0));
       clearView(game, p, want, 1.5);
       aboveGround(game, want, 0.6);
-      cam.position.lerp(want, 1 - Math.exp(-d * (this.landed ? 2.5 : 4.2)));
+      // follow harder the faster he goes, so the Bay Blaster (50 m/s) doesn't leave the camera behind
+      const sp = Math.hypot(v.x, v.y, v.z);
+      cam.position.lerp(want, 1 - Math.exp(-d * (this.landed ? 2.5 : 4.2 + Math.min(8, sp * 0.14))));
       this.look.lerp(p, 1 - Math.exp(-d * 12));
       cam.lookAt(this.look);
       const fov = this.landed ? 58 : 70;
@@ -627,7 +653,7 @@ export class CannonFeature implements ExtrasFeature {
           elev: [0.68, 0.86],
           spread: 0.09,
           scale: 1,
-          signAt: [2.3, -1.6],
+          signAt: [2.3, -1.6, Math.PI],
           crowd: home.clone().setY(4).lerp(center, 0.3),
           target: 'Downtown',
         }),
@@ -665,7 +691,8 @@ export class CannonFeature implements ExtrasFeature {
             spread: 0.1,
             scale: 0.72,
             trail: 0.7,
-            signAt: [-1.95, -0.55],
+            // beside the west wheel near the railing, parallel to the deck walkway, facing the restaurant
+            signAt: [-2.35, 1.3, Math.PI],
             target: 'Salmon Bay',
           }),
         );

@@ -34,7 +34,7 @@ const RANGE: Record<string, number> = {
  * surface (K = 100 ≈ 6 px radius at 720p). Instanced clusters (flowers, fruit piles, seats…) are judged by the
  * size of ONE instance with a 3× more tolerant factor (≈ 2 px per instance) — they read as a mass.
  */
-const SIZE_K = { high: 100, medium: 80, low: 60 } as const;
+const SIZE_K = { high: 100, medium: 80, low: 50 } as const;
 const INST_K_MUL = 3;
 /** Never size-cull closer than this. */
 const MIN_D = 30;
@@ -52,6 +52,8 @@ const _box = new THREE.Box3();
 
 interface Unit {
   obj: THREE.Object3D;
+  /** Instanced cluster that casts shadows (turned off on the low preset). */
+  instShadow?: boolean;
   center: THREE.Vector3; // local-space bounding sphere
   radius: number;
   /** For instanced clusters: local radius of one instance (sampled). */
@@ -91,6 +93,8 @@ export class DetailCuller implements System {
     this.scale = q === 'low' ? 0.6 : q === 'medium' ? 0.85 : 1;
     this.sizeK = SIZE_K[q] ?? 120;
     this.shadowD = PROP_SHADOW_D[q] ?? 22;
+    // low: instanced static clusters (trees, flowers, seats…) stop casting shadows (≈15 shadow draws in leafy areas)
+    for (const u of this.units) if (u.instShadow) (u.obj as THREE.Mesh).castShadow = q !== 'low';
   }
 
   private collect(game: Game) {
@@ -124,7 +128,17 @@ export class DetailCuller implements System {
       if (!Number.isFinite(r)) return;
       const cullDist = typeof o.userData.cullDist === 'number' ? o.userData.cullDist : undefined;
       this.unitSet.add(o);
-      this.units.push({ obj: o, center: sphere.center.clone(), radius: sphere.radius, inst, cullDist, mask: o.layers.mask, culled: false });
+      this.units.push({
+        obj: o,
+        center: sphere.center.clone(),
+        radius: sphere.radius,
+        inst,
+        cullDist,
+        mask: o.layers.mask,
+        culled: false,
+        instShadow: inst != null && (m as THREE.Mesh).castShadow,
+      });
+      if (inst != null && this.quality === 'low') (m as THREE.Mesh).castShadow = false;
     };
     world?.staticRoot?.traverse(add);
     // the StaticBatcher's merged batches (big: only the fog rule really applies to them)
@@ -194,6 +208,21 @@ export class DetailCuller implements System {
       }
     }
     if (this.staticCull) this.cullStatic(cam, (game.scene.fog as THREE.Fog | null)?.far ?? Infinity);
+  }
+
+  /** Run `fn` with every size/fog-culled static object drawable again (e.g. the map's top-down capture). */
+  suspend<T>(fn: () => T): T {
+    const restore: Unit[] = [];
+    for (const u of this.units) {
+      if (!u.culled) continue;
+      u.obj.layers.mask = u.mask;
+      restore.push(u);
+    }
+    try {
+      return fn();
+    } finally {
+      for (const u of restore) u.obj.layers.mask = 0;
+    }
   }
 
   private setPropShadow(obj: THREE.Object3D, on: boolean) {

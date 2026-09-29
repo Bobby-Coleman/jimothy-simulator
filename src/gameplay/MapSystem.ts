@@ -80,11 +80,11 @@ export class MapSystem implements System {
     this.mini.style.cssText =
       'position:fixed;left:16px;bottom:16px;width:160px;height:160px;border-radius:50%;border:4px solid rgba(255,255,255,.9);box-shadow:0 4px 14px rgba(0,0,0,.45);z-index:20;pointer-events:none;background:#6aa84f';
     document.body.appendChild(this.mini);
-    // Touch devices: smaller minimap tucked under the score, tap it to open the big map
+    // Touch devices: smaller minimap tucked under the score/combo, tap it (ui/Touch.ts .touch-map) for the big map
     if (IS_TOUCH) {
       this.mini.style.left = 'max(12px, env(safe-area-inset-left))';
       this.mini.style.bottom = 'auto';
-      this.mini.style.top = 'calc(92px + env(safe-area-inset-top))';
+      this.mini.style.top = 'calc(118px + env(safe-area-inset-top))'; // below the score + combo bar
       this.mini.style.width = '104px';
       this.mini.style.height = '104px';
       this.mini.style.pointerEvents = 'auto';
@@ -188,20 +188,35 @@ export class MapSystem implements System {
     cam.up.set(0, 0, -1);
     cam.lookAt(0, 0, 0);
     const rt = new THREE.WebGLRenderTarget(RES, RES, { colorSpace: THREE.SRGBColorSpace });
-    const fog = scene.fog;
+    // perf: keep the Fog OBJECT (its presence is part of every material's program key, like shadowMap.enabled) and
+    // just push it out of range for the capture.
+    const fog = scene.fog as THREE.Fog | null;
+    const fogNear = fog?.near ?? 0;
+    const fogFar = fog?.far ?? 0;
     const bg = scene.background;
     const env = game.get<any>('environment');
     const skyVis = env?.sky?.visible;
-    scene.fog = null;
+    if (fog) {
+      fog.near = 1e6;
+      fog.far = 2e6;
+    }
     scene.background = new THREE.Color(0x2b6f8f);
     if (env?.sky) env.sky.visible = false;
     const prevTone = r.toneMapping;
     r.toneMapping = THREE.ACESFilmicToneMapping;
-    const prevShadow = r.shadowMap.enabled;
-    r.shadowMap.enabled = false;
+    // perf: DON'T toggle shadowMap.enabled — it is part of every lit material's shader program key, so the capture
+    // compiled ~50 programs synchronously (a 5+ s freeze a few seconds into the game on a fast desktop). Keeping it
+    // enabled and just not re-rendering the shadow map costs nothing (only the area around Jimothy shows shadows).
+    // (toneMapping is ignored for render-target renders anyway.)
+    const prevAuto = r.shadowMap.autoUpdate;
+    r.shadowMap.autoUpdate = false;
+    r.shadowMap.needsUpdate = false;
     try {
       r.setRenderTarget(rt);
-      r.render(scene, cam);
+      // include small far details the DetailCuller has currently layer-culled
+      const culler = game.get<any>('culler');
+      if (culler?.suspend) culler.suspend(() => r.render(scene, cam));
+      else r.render(scene, cam);
       const px = new Uint8Array(RES * RES * 4);
       r.readRenderTargetPixels(rt, 0, 0, RES, RES, px);
       const ctx = this.mapCanvas.getContext('2d')!;
@@ -222,11 +237,14 @@ export class MapSystem implements System {
     } finally {
       r.setRenderTarget(null);
       rt.dispose();
-      scene.fog = fog;
+      if (fog) {
+        fog.near = fogNear;
+        fog.far = fogFar;
+      }
       scene.background = bg;
       if (env?.sky) env.sky.visible = skyVis;
       r.toneMapping = prevTone;
-      r.shadowMap.enabled = prevShadow;
+      r.shadowMap.autoUpdate = prevAuto;
       r.shadowMap.needsUpdate = true;
     }
   }

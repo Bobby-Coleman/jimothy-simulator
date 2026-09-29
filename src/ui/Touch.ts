@@ -33,7 +33,7 @@ export class TouchControls {
   private lookId = -1;
   private lx = 0;
   private ly = 0;
-  private held = new Map<number, { a: Action; el: HTMLElement }>();
+  private held = new Map<number, { a: Action; el: HTMLElement; frame: number }>();
   private shown = false;
 
   constructor(
@@ -51,7 +51,7 @@ export class TouchControls {
       el.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         el.setPointerCapture?.(e.pointerId);
-        this.held.set(e.pointerId, { a: b.a, el });
+        this.held.set(e.pointerId, { a: b.a, el, frame: this.api.game.frame });
         this.api.game.input.virtual.buttons.add(b.a);
         el.classList.add('down');
       });
@@ -155,10 +155,14 @@ export class TouchControls {
     const hb = this.held.get(id);
     if (!hb) return;
     this.held.delete(id);
-    let stillHeld = false;
-    for (const o of this.held.values()) if (o.a === hb.a) stillHeld = true;
-    if (!stillHeld) this.api.game.input.virtual.buttons.delete(hb.a);
     hb.el.classList.remove('down');
+    const drop = () => {
+      for (const o of this.held.values()) if (o.a === hb.a) return;
+      this.api.game.input.virtual.buttons.delete(hb.a);
+    };
+    // A quick tap can start and end between two frames: keep it pressed for one frame so the game sees it.
+    if (this.api.game.frame === hb.frame) requestAnimationFrame(drop);
+    else drop();
   }
 
   /** Show/hide; hiding releases everything so nothing gets stuck. */

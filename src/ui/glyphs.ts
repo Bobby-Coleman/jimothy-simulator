@@ -72,5 +72,11 @@ export function glyph(action: string, device: Device): string {
  * e.g. "Hold {wash} near water" → "Hold [R] near water" / "Hold (Y) near water".
  */
 export function fillTokens(text: string, device: Device): string {
-  return esc(text).replace(/\{([a-z]+)\}/g, (m, a: string) => (GLYPHS[a] ? glyph(a, device) : m));
+  return esc(text).replace(/\{([a-z]+)\}( ([A-Za-z]+))?/g, (m, a: string, sp?: string, word?: string) => {
+    if (!GLYPHS[a]) return m;
+    const chip = glyph(a, device);
+    // Touch chips are words: "{grab} Grab food" would read "[Grab] Grab food" — drop the echo.
+    if (word && device === 'touch' && GLYPHS[a].touch.toLowerCase() === word.toLowerCase()) return chip;
+    return chip + (sp ?? '');
+  });
 }

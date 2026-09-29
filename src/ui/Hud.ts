@@ -358,6 +358,11 @@ export class Hud {
     this.hintT = duration;
   }
 
+  /** A big area / proclamation banner is on screen (the tracked-goal pill steps aside). */
+  get bannerShowing() {
+    return this.bannerT > 0;
+  }
+
   /** Raw text of the latest hint and the seconds it stays up (the onboarding coach waits for a free line). */
   hintRaw = '';
   get hintLeft() {

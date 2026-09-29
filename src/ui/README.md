@@ -11,7 +11,8 @@ FontFace API (`boot.ts`), with system fallbacks.
 | `Speech.ts` | World-anchored speech bubbles |
 | `Dialog.ts` | Quest dialogue box |
 | `SlopBot.ts` | SlopBot™ popup assistant |
-| `Drawer.ts` + `ObjectivesView.ts` | Tab "Instincts" panel (and the pause-menu page) |
+| `Drawer.ts` + `ObjectivesView.ts` | Tab "Instincts" panel (and the pause-menu page), with a "Suggested next" section + Track buttons |
+| `Guide.ts` | Suggested Instincts, the tracked goal (top pill + world waypoint star; the big map/minimap draw it too) and the first-time onboarding coach |
 | `MenuHost.ts` + `pages.ts` | Pause menu + title sub-pages (Instincts, Mutators, Settings, Controls, Credits, Reset) |
 | `Title.ts` / `Intro.ts` | Title screen (orbit camera, tips) / viral-video intro cutscene |
 | `Touch.ts` | Phone/tablet controls (only when `(pointer: coarse)`) |
@@ -39,6 +40,10 @@ ui.flash(0..1)                         // white screen flash
 ui.speech(entityOrObject3D, text, secs?, style?)
 ui.openPause(page?) / ui.resume()      // page: 'objectives' | 'mutators' | 'settings' | 'controls' | 'credits'
 ui.menuOpen, ui.mode                   // 'title' | 'intro' | 'play' | 'pause'
+ui.guide.current()                     // tracked goal { id, title, label, pos } | null (id 'poi:<name>' for map pins)
+ui.guide.track(objectiveId) / trackPoi(poiName, label) / untrack() / suggestions (top 3)
+ui.releasePointer() / ui.relock()      // free the mouse for a panel without opening the pause menu, and re-capture it
+ui.respawnHome() / ui.photoFromMenu()  // pause-menu buttons: resume + press respawn / camera
 ui.slopBot.show()                      // force SlopBot (testing); ui.slopBot.schedule(secs)
 ```
 
@@ -75,6 +80,7 @@ Emitted:
 | `slopbotBonked` | `{}` | player bonked SlopBot (Bonk key or clicking him) — for "Bonk SlopBot 5×" |
 | `audioVolume` | `{ master, sfx, music }` | volume settings applied (also calls `audio.setVolumes`) |
 | `settingsChanged` | `{ key, settings }` | a setting changed |
+| `guideTrack` | `{ id, label? }` | the tracked goal changed (Track button, map icon, completion) |
 | `progressReset` | `{}` | right before the page reloads after "Reset progress" |
 | `score` | via `game.score(50, 'Bonked SlopBot')` | bonking SlopBot |
 
@@ -90,7 +96,15 @@ camera_shutter whoosh boing impact_heavy jingle_win trill bonk`.
   While a dialog is open, E/Space/Enter/clicks are swallowed (they don't reach gameplay).
   D-pad ←/→ answer SlopBot (unused by the gameplay map). F4 toggles the UI debug readout (F3 = DebugStats).
 - **Pointer lock:** losing the lock while playing (Esc, alt-tab) opens the pause menu; resuming re-locks. A small
-  "Click to play" prompt shows when playing unlocked on desktop (never in automated browsers).
+  "Click to play" prompt shows when playing unlocked on desktop (never in automated browsers). The Instincts drawer
+  and the big map free the mouse on purpose (so Track buttons / map icons can be clicked) and re-lock when closed with
+  Tab / M / a click. Tab-switching, app-switching or window blur while playing also opens the pause menu.
+- **Esc order:** big map → pause menu. Tab / photo mode / map are ignored while a dialogue is open.
+- **Guide:** `Guide.ts` has the curated suggestion order (DEFS) — add an entry there for new Instincts that have a place
+  to go (POI name, heart-quest id or landmark id, or a live target function). Persisted in `jimothy.guide.v1`.
+- **Settings:** `flashes` is shown inverted as Accessibility › "Reduce flashing & shake" (also swallows
+  `CameraRig.shake` via an instance override and the intro's camera shake); `showGuide` = Interface › "Goal tracker";
+  "Look sensitivity" scales mouse, gamepad right stick and touch drag.
 - **Automated browsers** (`navigator.webdriver`): no "Click to play" prompt, no random SlopBot (`?slopbot=5`) and no area banners (`?banners`).
 - **Reset progress** clears every `localStorage` key starting with `jimothy.` except `jimothy.settings.v1` and
   `jimothy.quality`, then reloads — keep your saves under that prefix.
@@ -103,3 +117,10 @@ camera_shutter whoosh boing impact_heavy jingle_win trill bonk`.
 `key()`, `click()`, `hold()` helpers — see `title.js`, `intro.js`, `menus.js`, `keys.js`, `mobile.js`, `rings.js`
 next to it. `tools/shots/ui/vite.nohmr.config.mjs` starts a private dev server on :5191 without HMR so other agents'
 saves don't reload the page mid-test.
+
+UX QA scripts: `tools/shots/ux/ux.mjs` (same helpers + `tap`, `drag` (CDP touch), `blurPage`, `resize`, and
+multi-phase scripts split by a `//---RELOAD---` line for persistence tests). Scripts next to it: `first5.js` (new
+player: title → intro → coach → guide → drawer → map), `mobile.js` (full touch flow + HUD overlap audit, run with
+`--touch --size 390x844` / `844x390`), `menus.js` (settings persistence + reset, 3 phases), `robust.js` (Esc/Tab/M/V
+spam, focus loss, dialogs vs menus, resize), `guide.js` (follow the first goal), `dialogs.js`. Test against a stable
+build: `npx vite build --outDir tools/_downloads/ux_build --emptyOutDir` + `npx vite preview --outDir tools/_downloads/ux_build --port 5196`.

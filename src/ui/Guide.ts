@@ -147,6 +147,12 @@ function poiTarget(env: Env, name: string, label: string): GuideTarget | null {
 
 const heldTag = (env: Env, tag: string) => !!env.held?.tags?.has(tag);
 
+/** Quest texts carry keyboard hints like "(Q)": turn them into {action} tokens so pads / touch get their own chips. */
+const KEY_TOKENS: Record<string, string> = { Q: 'roll', C: 'chitter', R: 'wash', E: 'grab', F: 'bonk', Z: 'flop', Space: 'jump', Shift: 'sprint', Tab: 'objectives' };
+function chipify(text: string): string {
+  return text.replace(/\((Q|C|R|E|F|Z|Space|Shift|Tab)\)/g, (_m, k: string) => `{${KEY_TOKENS[k]}}`);
+}
+
 /** The curated order. `rank` is roughly "how early in a first session this is fun"; distance nudges it. */
 const DEFS: Def[] = [
   {
@@ -364,6 +370,8 @@ export class Guide {
   private visible = false;
   private announceT = -1;
   private announceWait = 0;
+  private stepKey = '';
+  private nudgedAt = new Map<string, number>();
 
   constructor(
     readonly ctx: UiCtx,
@@ -406,11 +414,12 @@ export class Guide {
 
   // ------------------------------------------------------------------ public API
 
-  /** The goal being tracked right now (manual pin, map POI, or the top suggestion). */
-  current(): (GuideTarget & { id: string; title: string }) | null {
+  /** The goal being tracked right now (manual pin, map POI, or the top suggestion). `pos` is null for goals without a place. */
+  current(): { id: string; title: string; label: string; pos: THREE.Vector3 | null } | null {
     if (this.customPoi && this.customTarget) return { ...this.customTarget, id: 'poi:' + this.customPoi.name, title: this.customPoi.label };
     const c = this.cur;
-    return c?.target ? { ...c.target, id: c.id, title: c.title } : null;
+    if (!c) return null;
+    return { id: c.id, title: c.title, label: c.target?.label ?? '', pos: c.target?.pos ?? null };
   }
 
   isTracked(id: string) {
@@ -486,7 +495,7 @@ export class Guide {
           this.announceWait += 0.5;
         } else {
           this.announceWait = 0;
-          if (!this.coach.active) this.announce(false);
+          this.announce(false);
         }
       }
     }
@@ -541,8 +550,8 @@ export class Guide {
       out.push({ ...s, score });
     }
     out.sort((a, b) => a.score - b.score);
-    // Pinned entry (may be further down the list).
-    if (this.manual && !out.some((s) => s.id === this.manual)) this.manual = null;
+    // Pinned entry (may be further down the list). Dropped only once it's actually done.
+    if (this.manual && objs.get(this.manual)?.done) this.manual = null;
     this.suggestions = out.slice(0, 3);
     const pinned = this.manual ? out.find((s) => s.id === this.manual) ?? null : null;
     this.cur = pinned ?? out[0] ?? null;
@@ -555,6 +564,20 @@ export class Guide {
     if (key !== this.curKey) {
       this.curKey = key;
       this.shownKey = '';
+      this.stepKey = '';
+    }
+    // Same goal, new sub-step (e.g. picked up the cotton candy → now find a puddle): say what to do next.
+    const c = this.customPoi ? null : this.cur;
+    const def = c ? DEFS.find((d) => d.id === c.id) : null;
+    if (c && def?.howFn) {
+      const sk = c.id + '|' + c.how;
+      // Only when something was just picked up (not on every drop), at most every 20 s per goal.
+      const now = performance.now();
+      if (this.stepKey && sk !== this.stepKey && env.held && now - (this.nudgedAt.get(c.id) ?? -1e9) > 20000 && this.ctx.settings.showGuide && this.hud.hintLeft <= 0.5 && this.opts.canShow()) {
+        this.nudgedAt.set(c.id, now);
+        this.hud.hint('★ ' + c.how, 4.5);
+      }
+      this.stepKey = sk;
     }
   }
 
@@ -566,12 +589,12 @@ export class Guide {
         const q = hearts.find((x) => x.id === d.quest);
         if (q?.done) return null;
         if (q?.position) target = { pos: q.position.clone(), label: d.place ?? q.title };
-        if (q?.step) how = q.step;
+        if (q?.step) how = chipify(q.step);
       } else if (d.landmark) {
         const m = marks.find((x) => x.id === d.landmark);
         if (m?.done) return null;
         if (m?.position) target = { pos: m.position.clone(), label: d.place ?? m.title };
-        if (m?.hint) how = m.hint;
+        if (m?.hint) how = chipify(m.hint);
       }
       if (d.target) target = d.target(env) ?? target;
       if (!target && d.poi) target = poiTarget(env, d.poi, d.place ?? o.title);
@@ -616,23 +639,33 @@ export class Guide {
       this.pill.style.setProperty('--cat', this.customPoi ? 'var(--gold)' : cat.color);
       this.pillIcon.innerHTML = this.customPoi ? ICONS.pin : cat.icon;
       const prog = !this.customPoi && this.cur?.progress ? ` <i>${esc(this.cur.progress)}</i>` : '';
-      this.pillTitle.innerHTML = `${esc(c.title)}${prog}`;
-      this.pill.title = c.label;
+      // Sub-target ("Puddle", "Hot Dog", "Trash can") when it differs from the title: tells you the next step.
+      const sub = c.label && c.label !== c.title && !this.customPoi ? `<small> · ${esc(c.label)}</small>` : '';
+      this.pillTitle.innerHTML = `${esc(c.title)}${prog}${sub}`;
+      this.pill.title = c.label || c.title;
       replayIn(this.pill);
     }
-    const dist = Math.hypot(c.pos.x - p.position.x, c.pos.z - p.position.z);
+    const pos = c.pos;
+    this.pill.classList.toggle('nopos', !pos);
+    if (!pos) {
+      // A goal without a place (e.g. "chitter at 15 people"): the pill still says what it is.
+      if (this.pillDist.textContent) this.pillDist.textContent = '';
+      this.marker.classList.remove('show');
+      return;
+    }
+    const dist = Math.hypot(pos.x - p.position.x, pos.z - p.position.z);
     const dTxt = dist < 3.5 ? 'here!' : `${Math.round(dist)} m`;
     if (this.pillDist.textContent !== dTxt) this.pillDist.textContent = dTxt;
     // Compass arrow relative to the camera (up = straight ahead).
     const rig = game.get<any>('camera');
     const yaw = rig?.yaw ?? 0;
     const fwdA = Math.atan2(-Math.sin(yaw), -Math.cos(yaw));
-    const tgtA = Math.atan2(c.pos.x - p.position.x, c.pos.z - p.position.z);
+    const tgtA = Math.atan2(pos.x - p.position.x, pos.z - p.position.z);
     let rel = fwdA - tgtA;
     while (rel > Math.PI) rel -= Math.PI * 2;
     while (rel < -Math.PI) rel += Math.PI * 2;
     this.pillArrow.style.transform = `rotate(${((rel * 180) / Math.PI).toFixed(1)}deg)`;
-    this.placeMarker(c.pos, dist);
+    this.placeMarker(pos, dist);
   }
 
   /** World waypoint: a star over the target, clamped to the screen edge (with an arrow) when off-screen. */

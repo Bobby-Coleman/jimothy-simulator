@@ -227,6 +227,10 @@ function buildHQ(game: Game, world: World, b: Batch, m: CurtainMats) {
   ]) {
     f3.box(b, 'wood', lx, 0.35, lz, 3.2, 0.7, 2.2, 0x8b6a4a);
     f3.geo(b, 'leaves', GEO.ico, lx, 1.0, lz, 2.4, 1.1, 1.6, 0x5fae4a);
+    // polish: solid planters — bobblehead n6 sits on this bush, 1.6 m above a raccoon standing on the roof
+    // (pickup reach is ~1.3 m); now Jimothy can hop onto the planter and grab it.
+    const pc = f3.p(lx, 0.35, lz);
+    colliderBox(game, pc.x, pc.y, pc.z, 3.2, 0.7, 2.2, -0.14);
   }
   // antenna mast with a blinking light
   f3.geo(b, 'metal', GEO.cyl8, -6.5, 3.0, 4.5, 0.2, 6, 0.2, 0xcfd6dc);

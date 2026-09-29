@@ -100,7 +100,15 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     // Pill on the root (above the touch layer so it can be tapped); waypoint inside the HUD layer.
     this.guide = new Guide(this, this.hud, this.root, this.hud.el, {
       canShow: () =>
-        this.mode === 'play' && this.game.state === 'playing' && !this.photoMode && !this.dialog.open && !this.drawer.open && !this.mapOpen && this._hudVisible && this.settings.showHud,
+        this.mode === 'play' &&
+        this.game.state === 'playing' &&
+        !this.photoMode &&
+        !this.dialog.open &&
+        !this.drawer.open &&
+        !this.mapOpen &&
+        !this.hud.bannerShowing &&
+        this._hudVisible &&
+        this.settings.showHud,
       canCoach: () => this.mode === 'play' && this.game.state === 'playing' && !this.photoMode && !this.dialog.open,
       openPanel: () => this.toggleObjectives(),
     });
@@ -503,6 +511,19 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     const host = this.activeHost();
     if (host && (k === 'up' || k === 'down') && SCROLL_PAGES.has(host.page ?? '')) {
       host.scrollBy(k === 'down' ? 90 : -90);
+      return;
+    }
+    // Instincts page: ←/→ (D-pad / arrows) hop between the "Suggested next" Track buttons; A / Enter presses.
+    if (host?.page === 'objectives' && (k === 'left' || k === 'right')) {
+      const tracks = [...root.querySelectorAll<HTMLElement>('.sugg-track')];
+      if (tracks.length) {
+        const i = tracks.indexOf(document.activeElement as HTMLElement);
+        const next = i < 0 ? tracks[0] : tracks[(i + (k === 'right' ? 1 : -1) + tracks.length) % tracks.length];
+        next.focus();
+        next.scrollIntoView({ block: 'nearest' });
+        this.root.classList.add('kbd-nav');
+        this.sfx('ui_hover', 0.6);
+      }
       return;
     }
     if (navigate(root, k)) {

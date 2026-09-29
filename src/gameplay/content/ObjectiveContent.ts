@@ -34,7 +34,7 @@ import { OBJECTIVES } from './objectiveDefs';
  *   salmonRun           'salmonRunWon'                               rookieCard      'collectible' {kind:'rookieCard'} | grab
  *   awww                'chitter' near 15 unique NPCs                localCelebrity  score total 100k
  *   strike              'bonk' {rolling} | 'npcRagdoll' {cause:'roll'} on 5 NPCs in one roll
- *   chainReaction       'npcRagdoll' (not byPlayer:false) ×N unique in 5 s
+ *   chainReaction       'npcRagdoll' (not traffic/falls/faints) ×5 unique in 5 s
  *   kaboom              'explosion'                                  carSurfer       'hanging' while moving, 10 s
  *   leapOfFaith         'land' | 'leapOfFaith' {height ≥ 25}         frequentFlyer   8 m rise while airborne (live; teleports reset)
  *   jaywalker           'hitByCar' | playerRagdoll cause car         flopEra         'playerRagdoll' ×25
@@ -323,8 +323,9 @@ export class ObjectiveContent implements System {
         this.rollHits.add(p.entity.id);
         this.set('strike', this.rollHits.size);
       }
-      // Jimothy's chaos only (traffic knocking people over across town isn't his chain reaction)
-      if (p.byPlayer === false) return;
+      // Jimothy's chaos only: traffic knocking people over across town isn't his chain reaction. (Don't use
+      // byPlayer: explosion knockdowns arrive via Npc.onBonk as cause 'impact' with byPlayer false.)
+      if (/vehicle|fall|faint|script/.test(String(p.cause ?? ''))) return;
       const t = this.game.time;
       this.ragdolls.push({ t, id: p.entity?.id ?? `r${t}` });
       while (this.ragdolls.length && t - this.ragdolls[0].t > 5) this.ragdolls.shift();

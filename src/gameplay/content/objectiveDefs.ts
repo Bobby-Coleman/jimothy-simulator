@@ -34,9 +34,9 @@ export const OBJECTIVES: ObjectiveDef[] = [
 
   // ------------------------------------------------------------------ heartwarming
   { id: 'mamasBoy', category: 'heart', points: 2000, target: 3, title: "Mama's Boy", desc: "Bring Mom 3 snacks. She's so proud of you." },
-  { id: 'familyReunion', category: 'heart', points: 3000, title: 'Family Reunion', desc: 'Find Danny, the other round raccoon. The resemblance is uncanny.' },
+  { id: 'familyReunion', category: 'heart', points: 3000, title: 'Family Reunion', desc: 'Find Danny, the other round raccoon, and roll with him. The resemblance is uncanny.' },
   { id: 'kitCollector', category: 'heart', points: 3000, target: 5, title: 'Kit Collector', desc: 'Bring all 5 lost kits home to Mom. Count them twice.', reward: 'tiny' },
-  { id: 'crowDeals', category: 'heart', points: 2000, target: 3, title: 'Crow Deals', desc: 'Trade shiny things with the crows 3 times. They drive a hard bargain.', reward: 'crowRider' },
+  { id: 'crowDeals', category: 'heart', points: 2000, target: 3, title: 'Crow Deals', desc: 'Trade shiny (or freshly washed) things with the crows 3 times. They drive a hard bargain.', reward: 'crowRider' },
   { id: 'teddyRescue', category: 'heart', points: 2500, title: 'Teddy Rescue', desc: 'Wash the lost teddy bear and return it to the sad kid.' },
   { id: 'grandmasFavorite', category: 'heart', points: 2500, title: "Grandma's Favorite", desc: "Visit Grandma Rosie at night. She's been knitting something.", reward: 'grandmaHat' },
   { id: 'honoraryDegree', category: 'heart', points: 3000, title: 'Honorary Degree', desc: 'Accept your degree from the University of Washing. Magna cum raccoon.', reward: 'honoraryGrad' },
@@ -48,7 +48,7 @@ export const OBJECTIVES: ObjectiveDef[] = [
 
   // ------------------------------------------------------------------ slapstick chaos
   { id: 'strike', category: 'chaos', points: 1500, target: 5, title: 'Strike!', desc: 'Bowl over 5 people in a single roll.' },
-  { id: 'chainReaction', category: 'chaos', points: 2500, target: 10, title: 'Chain Reaction', desc: 'Ragdoll 10 people within 5 seconds.' },
+  { id: 'chainReaction', category: 'chaos', points: 2500, target: 5, title: 'Chain Reaction', desc: 'Ragdoll 5 people within 5 seconds. Crowds + propane = cartoon science.' },
   { id: 'kaboom', category: 'chaos', points: 750, title: 'Kaboom', desc: 'Blow something up. For science. Cartoon science.' },
   { id: 'carSurfer', category: 'chaos', points: 1500, target: 10, title: 'Car Surfer', desc: 'Hang onto a moving car for 10 seconds in total.' },
   { id: 'leapOfFaith', category: 'chaos', points: 1500, target: 25, title: 'Leap of Faith', desc: 'Fall 25 m and walk it off. Round things bounce.' },

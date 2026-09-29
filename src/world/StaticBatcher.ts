@@ -26,7 +26,7 @@ import { makeShadowOnly, registerShadowLight } from './shadowOnly';
  *    is folded into one positions-only, shadow-only proxy per 48 m cell and stops casting itself. The shadow pass
  *    went from ~10–35 batch draws (~150–250k tris) to a handful of small proxies.
  */
-const CELL = 80;
+const CELL = 120; // zone-aligned (offset 60) — see cellKey()
 const PROXY_CELL = 48;
 
 function isVisibleChain(o: THREE.Object3D | null): boolean {
@@ -317,7 +317,7 @@ export class StaticBatcher implements System {
     for (const m of meshes) {
       if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
       c.copy(m.geometry.boundingSphere!.center).applyMatrix4(m.matrixWorld);
-      const cell = `${Math.floor(c.x / CELL)},${Math.floor(c.z / CELL)}`;
+      const cell = `${Math.floor((c.x + 60) / CELL)},${Math.floor((c.z + 60) / CELL)}`;
       const mat = m.material as THREE.Material;
       const sig = signatureFor(mat, m.geometry);
       if (!sig) continue;

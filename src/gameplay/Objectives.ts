@@ -90,7 +90,9 @@ export class ObjectivesSystem implements System {
     o.progress = o.target ?? 1;
     o.doneAt = this.game.time;
     this.save();
-    this.game.score(o.points, o.title);
+    // Own label: several titles equal the popup of the act that completes them ("Touch Grass", "Not A Cat"…), and the
+    // score system's same-label anti-spam would otherwise shave the reward (5000 → 3125).
+    this.game.score(o.points, `Instinct: ${o.title}`);
     this.game.sfx('objective_complete');
     this.game.events.emit('objective', { id: o.id, title: o.title, desc: o.desc, points: o.points, reward: o.reward, category: o.category });
     if (o.reward) this.game.get<any>('mutators')?.unlock(o.reward);

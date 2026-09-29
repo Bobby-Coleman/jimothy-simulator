@@ -486,7 +486,12 @@ function frontPlaza(kit: Kit, b: Batch) {
   g.traverse((o) => ((o as THREE.Mesh).isMesh ? ((o as THREE.Mesh).castShadow = true) : 0));
   kit.root.add(g);
   kit.ballCollider([sx, 0.97 + 0.62, sz], 0.62);
-  kit.ballCollider([sx, 0.97 + 1.5, sz - 0.4], 0.45);
+  // polish: head collider matches the visual head (was 0.3 m too high and r 0.45 < the camera's "thin" cut-off, so the
+  // camera clipped inside the bronze head)
+  kit.ballCollider([sx, 0.97 + 1.19, sz - 0.44], 0.52);
+  // …and the ringed tail (sticks out 1.2 m toward the plaza; the camera used to park inside it). r ≥ 0.5 so the camera
+  // doesn't treat it as a "thin" pole.
+  kit.ballCollider([sx, 0.97 + 0.6, sz + 0.95], 0.5);
   const plaque = kit.textSign(
     [
       { text: 'JIMOTHY THE BRONZE BALL', px: 44, color: '#3b2a12' },
@@ -733,7 +738,7 @@ function park(kit: Kit, b: Batch) {
     b.box([x, 1.3, z], [3.4, 2.6, 2.4], 0xf6efe0, { mat: 'siding' });
     b.box([x, 2.75, z], [3.9, 0.3, 2.9], new THREE.Color(col).getHex());
     b.box([x, 1.2, z - 1.23], [2.4, 0.9, 0.06], 0x2b2f38, { collide: false, mat: 'glossy' });
-    b.box([x, 0.95, z - 1.45], [2.8, 0.08, 0.5], 0xd9c7a6, { collide: false });
+    b.box([x, 0.95, z - 1.45], [2.8, 0.08, 0.5], 0xd9c7a6, { collide: true }); // polish: solid counter (the food on it used to drop through)
     const t = kit.textSign([{ text: name, px: 64, color: '#fff', stroke: '#1b1d24' }, { text: sub, px: 26, color: '#fff', font: FONT_ROUND }], { w: 3.4, h: 0.8, bg: col });
     kit.sign(b, { pos: [x, 3.35, z - 0.9], rotY: Math.PI, w: 3.4, h: 0.8, tex: t, depth: 0.06, collide: false });
   });

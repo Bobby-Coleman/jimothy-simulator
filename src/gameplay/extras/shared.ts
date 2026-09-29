@@ -149,7 +149,8 @@ interface Region {
   draw: Draw;
 }
 
-const ATLAS_W = 1024;
+// two 512-px signs side by side per row (+ gutters); WebGL2 is fine with the non-power-of-two width
+const ATLAS_W = 1032;
 const ATLAS_H = 1024;
 export const FONT_DISPLAY = `'Luckiest Guy', 'Lilita One', 'Arial Black', Impact, sans-serif`;
 export const FONT_BOLD = `'Lilita One', 'Arial Black', sans-serif`;
@@ -303,8 +304,8 @@ export function drawBoard(title: string, sub: string, bg: string, border: string
     c.fillStyle = bg;
     roundRect(c, 12, 12, w - 24, h - 24, h * 0.1);
     c.fill();
-    fitText(c, title, w / 2, h * (sub ? 0.4 : 0.5), w * 0.88, h * 0.36, FONT_DISPLAY, { fill: titleColor, stroke: '#1d1a26', strokeW: h * 0.05 });
-    if (sub) fitText(c, sub, w / 2, h * 0.74, w * 0.86, h * 0.17, FONT_BOLD, { fill: subColor });
+    fitText(c, title, w / 2, h * (sub ? 0.41 : 0.5), w * 0.78, h * 0.32, FONT_DISPLAY, { fill: titleColor, stroke: '#1d1a26', strokeW: h * 0.045 });
+    if (sub) fitText(c, sub, w / 2, h * 0.73, w * 0.78, h * 0.15, FONT_BOLD, { fill: subColor });
   };
 }
 

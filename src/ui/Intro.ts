@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { G, groups } from '../core/Physics';
 import type { CameraRig } from '../player/CameraRig';
-import { h, clamp } from './dom';
+import { h, clamp, IS_TOUCH } from './dom';
 import { logoHtml } from './Title';
 import type { UiCtx } from './types';
 
@@ -107,7 +107,7 @@ export class Intro {
     this.card = h('div', { class: 'intro-card', html: logoHtml('logo-card') });
     this.confetti = h('div', { class: 'intro-confetti' });
     this.skipEl = h('div', { class: 'intro-skip' });
-    this.skipEl.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" class="ring-bg"/><circle cx="12" cy="12" r="9" class="ring-fg" pathLength="100"/></svg><span>Hold to skip · Esc</span>`;
+    this.skipEl.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" class="ring-bg"/><circle cx="12" cy="12" r="9" class="ring-fg" pathLength="100"/></svg><span>${IS_TOUCH ? 'Hold anywhere to skip' : 'Hold to skip · Esc'}</span>`;
     this.skipRing = this.skipEl.querySelector('.ring-fg') as SVGCircleElement;
     this.el = h('div', { class: 'intro' }, this.vf, this.card, this.confetti, this.skipEl);
     parent.append(this.el);

@@ -642,6 +642,28 @@ function buildAlleyStuff(game: Game, world: World, batch: Batch, water?: WaterSy
     );
     cylinderCollider(game, new THREE.Vector3(x, y + 4.5, ALLEY_S.z1 - 0.4), 0.18, 9);
   }
+  // polish: wall lamps + warm light pools along both back alleys (they were pitch black at night). All batched:
+  // the fixtures join the zone's furniture/glow batches, the pools its light-pool batch → no extra draw calls.
+  const glow = warmGlowMat(game);
+  const fixture = mergeColored([
+    { geo: new THREE.BoxGeometry(0.08, 0.08, 0.5), color: 0x2d3035, matrix: T(0, 0.16, 0.25) },
+    { geo: new THREE.CylinderGeometry(0.16, 0.3, 0.22, 10), color: 0x2d3035, matrix: T(0, 0.1, 0.5) },
+  ]);
+  const bulb = new THREE.SphereGeometry(0.13, 10, 8);
+  const wallLamps: { x: number; z: number; dir: 1 | -1 }[] = [
+    // south alley: shop backs at z = BACK_S face +z (skip the open plaza x 16–34 and the den's own porch light)
+    ...[-44, -24, -4, 40].map((x) => ({ x, z: BACK_S, dir: 1 as const })),
+    // north alley: shop backs at z = -22 face -z
+    ...[-40, -20, 0, 20, 40].map((x) => ({ x, z: ALLEY_N.z1, dir: -1 as const })),
+  ];
+  const pools: { x: number; y: number; z: number; r: number }[] = [];
+  for (const l of wallLamps) {
+    const gy = roadY(l.x, l.z + l.dir * 2);
+    batch.add(fixture, fm, { matrix: T(l.x, gy + 3.3, l.z, l.dir > 0 ? 0 : Math.PI), castShadow: false });
+    batch.add(bulb, glow, { matrix: T(l.x, gy + 3.28, l.z + l.dir * 0.5), castShadow: false });
+    pools.push({ x: l.x, y: roadY(l.x, l.z + l.dir * 2.4), z: l.z + l.dir * 2.4, r: 4.6 });
+  }
+  lightPools(game, world, pools, batch);
 }
 
 // ============================================================================================ market & parking
