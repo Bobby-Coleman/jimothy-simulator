@@ -18,6 +18,7 @@ import { PhotoModeSystem } from './gameplay/PhotoMode';
 import { MapSystem } from './gameplay/MapSystem';
 import { NewsTicker } from './ui/NewsTicker';
 import { Janitor } from './gameplay/Janitor';
+import { CutsceneTidy } from './gameplay/CutsceneTidy';
 import { StaticBatcher } from './world/StaticBatcher';
 import { DetailCuller } from './world/DetailCuller';
 import { AutoQuality } from './core/AutoQuality';
@@ -62,6 +63,7 @@ export function registerSystems(game: Game) {
   game.add(new VehicleSystem());
   game.add(new SlowMoSystem());
   game.add(new Janitor());
+  game.add(new CutsceneTidy());
   game.add(new PhotoModeSystem());
   game.add(new SouthSystem());
   game.add(new ObjectiveContent());
