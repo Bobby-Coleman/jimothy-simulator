@@ -9,6 +9,8 @@ import { loadNpcFont } from './Face';
 import { TYPE_INFO } from './Looks';
 import { NPC_TYPES, type NpcSpawnOptions, type NpcType } from './types';
 
+/** 'family' in a spawn's types = a mix of parents, kids and grandparents. */
+const FAMILY: NpcType[] = ['pedestrian', 'pedestrian', 'kid', 'kid', 'grandma'];
 const DEFAULT_TYPES: NpcType[] = ['pedestrian', 'pedestrian', 'pedestrian', 'tourist', 'tourist', 'fan', 'fan', 'jogger', 'techbro', 'kid', 'grandma'];
 const SPOT_FILTER = groups(G.ALL, G.WORLD | G.PROP | G.VEHICLE);
 const _v = new THREE.Vector3();
@@ -52,6 +54,8 @@ export class NpcSystem implements System {
   private officerTimer = 0;
   private ambientTimer = 10;
   private nextIdx = 0;
+  private roadSegs: number[] = [];
+  private roadBoxes: { minX: number; maxX: number; minZ: number; maxZ: number; from: number; to: number }[] = [];
   private frustum = new THREE.Frustum();
   private projScreen = new THREE.Matrix4();
 
@@ -118,6 +122,7 @@ export class NpcSystem implements System {
   populate() {
     if (this.populated) return;
     this.populated = true;
+    this.buildRoadIndex();
     const world = this.game.get<any>('world');
     const spawns: { center: THREE.Vector3; radius: number; count: number; types?: string[]; path?: THREE.Vector3[] }[] = world?.npcSpawns ?? [];
     if (!spawns.length) {
@@ -131,7 +136,7 @@ export class NpcSystem implements System {
     for (const sp of spawns) {
       if (!(sp.count > 0)) continue;
       const n = Math.max(1, Math.round(sp.count * scale));
-      const types = (sp.types ?? []).filter((t): t is NpcType => (NPC_TYPES as readonly string[]).includes(t));
+      const types = (sp.types ?? []).flatMap((t) => (t === 'family' ? FAMILY : [t])).filter((t): t is NpcType => (NPC_TYPES as readonly string[]).includes(t));
       for (let i = 0; i < n; i++) {
         const type = types.length ? types[Math.floor(Math.random() * types.length)] : DEFAULT_TYPES[Math.floor(Math.random() * DEFAULT_TYPES.length)];
         const at = sp.path?.length ? sp.path[Math.floor(Math.random() * sp.path.length)] : sp.center;
@@ -170,6 +175,48 @@ export class NpcSystem implements System {
       }
     }
     console.info(`[npcs] world.npcSpawns is empty — spawned ${this.list.length} test humans`);
+  }
+
+  /** Index world.lanes (car lanes) so wandering humans prefer sidewalks. */
+  private buildRoadIndex() {
+    const lanes: { points: THREE.Vector3[]; loop: boolean }[] = this.game.get<any>('world')?.lanes ?? [];
+    this.roadSegs = [];
+    this.roadBoxes = [];
+    for (const l of lanes) {
+      const pts = l.points;
+      if (!pts || pts.length < 2) continue;
+      const from = this.roadSegs.length;
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      const n = l.loop ? pts.length : pts.length - 1;
+      for (let i = 0; i < n; i++) {
+        const a = pts[i];
+        const b = pts[(i + 1) % pts.length];
+        this.roadSegs.push(a.x, a.z, b.x, b.z);
+        minX = Math.min(minX, a.x, b.x);
+        maxX = Math.max(maxX, a.x, b.x);
+        minZ = Math.min(minZ, a.z, b.z);
+        maxZ = Math.max(maxZ, a.z, b.z);
+      }
+      this.roadBoxes.push({ minX, maxX, minZ, maxZ, from, to: this.roadSegs.length });
+    }
+  }
+
+  /** Is (x, z) on a car lane (within `margin` m of a lane centerline)? */
+  onRoad(x: number, z: number, margin = 4.3): boolean {
+    const m2 = margin * margin;
+    const S = this.roadSegs;
+    for (const bx of this.roadBoxes) {
+      if (x < bx.minX - margin || x > bx.maxX + margin || z < bx.minZ - margin || z > bx.maxZ + margin) continue;
+      for (let i = bx.from; i < bx.to; i += 4) {
+        const ax = S[i], az = S[i + 1], vx = S[i + 2] - ax, vz = S[i + 3] - az;
+        const l2 = vx * vx + vz * vz || 1e-6;
+        const t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / l2));
+        const dx = ax + vx * t - x;
+        const dz = az + vz * t - z;
+        if (dx * dx + dz * dz < m2) return true;
+      }
+    }
+    return false;
   }
 
   /** Random free standing spot inside a circle (null if nothing suitable). */
@@ -211,8 +258,15 @@ export class NpcSystem implements System {
 
   // ================================================================== internals used by Npc
 
+  /** Does any other system listen to this event? (UI speech layer, FX flashes, ...) */
+  private othersListen(name: string) {
+    const set = (this.game.events as any).map?.get?.(name);
+    return !!set && set.size > 0;
+  }
+
   showBubble(npc: Npc, text: string, secs: number) {
-    if (!this.drawBubbles || npc.camDist > 40) return;
+    // The UI renders 'speech' events itself when present; ours are the fallback.
+    if (!this.drawBubbles || npc.camDist > 40 || this.othersListen('speech')) return;
     let b = this.bubbles.get(npc);
     if (!b) {
       b = this.bubblePool.pop() ?? new Bubble();
@@ -240,7 +294,7 @@ export class NpcSystem implements System {
   }
 
   flash(pos: THREE.Vector3) {
-    this.flashes.flash(pos);
+    if (!this.othersListen('cameraFlash')) this.flashes.flash(pos);
   }
 
   /** Rate-limited sfx. */
@@ -296,15 +350,12 @@ export class NpcSystem implements System {
 
   onKnockdown(npc: Npc, cause: string, byPlayer: boolean) {
     const game = this.game;
-    game.events.emit('npcRagdoll', { entity: npc.entity, cause, npc });
     const pos = npc.position.clone();
     pos.y += 1.4;
-    if (cause !== 'faint' && cause !== 'script') this.scream(npc.position);
+    // (the audio system screams on 'npcRagdoll')
+    game.events.emit('npcRagdoll', { entity: npc.entity, cause, npc, byPlayer, position: pos.clone() });
     if (cause !== 'script' && cause !== 'faint' && cause !== 'fall') this.alarm(npc.position, 9, cause, npc);
-    if (!byPlayer) {
-      if (cause === 'vehicle') game.score(40, 'Look Both Ways!', pos);
-      return;
-    }
+    if (!byPlayer) return;
     const info = TYPE_INFO[npc.type];
     const who = npc.name !== info.display ? npc.name : `${info.article ? info.article + ' ' : ''}${info.display}`;
     let pts = 75;
@@ -645,6 +696,19 @@ export class NpcSystem implements System {
       const vis = d < 140 && this.frustum.intersectsSphere(_sphere);
       n.visible = vis;
       root.visible = vis;
+      const io = n.held?.object;
+      if (io) {
+        // held items live at scene level: hide/show them with their person (the detail culler owns its own flag)
+        if (!vis) {
+          if (io.visible) {
+            io.visible = false;
+            io.userData.npcHidden = true;
+          }
+        } else if (io.userData.npcHidden) {
+          io.visible = true;
+          io.userData.npcHidden = false;
+        }
+      }
       n.rig.mesh.castShadow = d < 45;
     }
     // bubbles

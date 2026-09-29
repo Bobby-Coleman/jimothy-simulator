@@ -310,10 +310,10 @@ export function grandmaHat(): MutatorImpl {
         if (!p) return;
         const fx = sharedFx(game);
         const top = p.position.clone();
-        top.y += PLAYER_R * (2 * p.sizeMul - 1) + 0.2;
+        top.y += PLAYER_R * (2 * p.sizeMul - 1) + 0.12;
         for (let i = 0; i < 4; i++) {
-          _a.set((Math.random() - 0.5) * 0.8, 1.2 + Math.random() * 0.6, (Math.random() - 0.5) * 0.8);
-          fx.puffs.spawn(top, _a, i % 2 ? 0xff5c8a : 0xff8fb1, 0.2 + Math.random() * 0.08, 1.2, { shape: Shape.Heart, drag: 1.5, gravity: -0.3 });
+          _a.set((Math.random() - 0.5) * 0.6, 0.5 + Math.random() * 0.35, (Math.random() - 0.5) * 0.6);
+          fx.puffs.spawn(top, _a, i % 2 ? 0xff4d7d : 0xff8fb1, 0.13 + Math.random() * 0.05, 1.1, { shape: Shape.Heart, drag: 1.2, gravity: -0.15, fadeIn: 0.15 });
         }
       });
       game.hint("Grandma's Hat: hand-knitted with love. Everyone thinks you're precious.", 3);

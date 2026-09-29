@@ -10,8 +10,8 @@ const AUTO_HIDE = 16;
 
 /**
  * SlopBot™ — an unhelpful Clippy-parody assistant that pops in at the bottom-right every ~4 minutes.
- * Emits 'slopbotShown' { line }, 'slopbotDismissed' { reason: 'no'|'nope'|'close'|'timeout'|'bonk' },
- * 'slopbotGenerate' { line } and 'slopbotBonked' {}.
+ * Emits 'slopbotShown' { line }, 'slopbotDismissed' { reason: 'no'|'nope'|'close'|'bonk' } (player said no),
+ * 'slopbotIgnored' {} (timed out), 'slopbotGenerate' { line } and 'slopbotBonked' {}.
  * Keys while visible: 1 = No, 2 = Absolutely not, 3 = Generate; Bonk (F / RMB / RB) bonks him;
  * gamepad D-pad ← dismisses, D-pad → generates.
  */
@@ -99,7 +99,10 @@ export class SlopBot {
     if (this.state !== 'asking' && this.state !== 'result') return;
     const wasAsking = this.state === 'asking';
     this.leave(reason === 'bonk');
-    if (wasAsking || reason === 'bonk') this.ctx.game.events.emit('slopbotDismissed', { reason });
+    // Only the player's own "no" counts as dismissing him (objectives count these); ignoring him is different.
+    if (reason === 'timeout') {
+      if (wasAsking) this.ctx.game.events.emit('slopbotIgnored', {});
+    } else if (wasAsking || reason === 'bonk') this.ctx.game.events.emit('slopbotDismissed', { reason });
     this.ctx.sfx(reason === 'bonk' ? 'bonk' : 'ui_back', 0.7);
   }
 

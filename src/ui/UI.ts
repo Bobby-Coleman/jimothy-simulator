@@ -75,6 +75,7 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
   private sawKeyboard = false;
   private _hudVisible = true;
   private photoMode = false;
+  private areaBanners = true;
 
   init(game: Game) {
     this.game = game;
@@ -118,6 +119,8 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     if (AUTOMATED && !q.has('slopbot')) this.slopBot.auto = false;
     if (q.has('slopbot')) this.slopBot.schedule(Number(q.get('slopbot')) || 5);
     if (q.has('debug')) this.hud.debug = true;
+    // Area banners are cosmetic; keep other agents' automated screenshots clean unless asked for.
+    this.areaBanners = !AUTOMATED || q.has('banners');
 
     applySettings(game, this.settings, this.baseSens);
     this.hudVisible = true;
@@ -129,9 +132,11 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
       else this.drawer.hide();
     });
     document.addEventListener('pointerlockchange', () => this.onLockChange());
-    window.addEventListener('keydown', (e) => this.onKey(e));
+    // Capture phase: runs before core/Input's window listener, so keys the UI consumes (dialog advance) never
+    // reach gameplay. Esc/P/Tab are read here (not via input.pressed) so fast taps aren't lost between frames.
+    window.addEventListener('keydown', (e) => this.onKey(e), true);
+    window.addEventListener('pointerdown', (e) => this.onPointerDown(e), true);
     window.addEventListener('pointermove', () => this.root.classList.remove('kbd-nav'), { passive: true });
-    window.addEventListener('pointerdown', () => this.root.classList.remove('kbd-nav'), { passive: true });
 
     if (!q.has('skipintro')) {
       this.setMode('title');
@@ -253,7 +258,7 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     this.sfx('ui_open');
   }
 
-  onIntroDone(skipped: boolean) {
+  onIntroDone(_skipped: boolean) {
     const first = !this.introSeen;
     this.introSeen = true;
     try {
@@ -290,11 +295,12 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
 
   // ================================================================== settings / progress
 
-  commitSettings() {
+  /** Persist settings and apply the one that changed. */
+  commitSettings(key: keyof Settings) {
     saveSettings(this.settings);
-    applySettings(this.game, this.settings, this.baseSens);
+    applySettings(this.game, this.settings, this.baseSens, key);
     this.hudVisible = this._hudVisible;
-    this.game.events.emit('settingsChanged', { ...this.settings });
+    this.game.events.emit('settingsChanged', { key, settings: { ...this.settings } });
   }
 
   /** Forget objectives, mutators, best score, quest/collectible progress (every `jimothy.*` key except settings/quality). */
@@ -335,11 +341,8 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
 
     this.handleNav(this.nav.poll(dt));
 
-    const inp = game.input;
-    const now = nowSec();
     switch (this.mode) {
       case 'title':
-        if (inp.pressed('pause') && this.titleMenu.isOpen) this.titleMenu.back();
         this.title.update(dt);
         this.titleMenu.update(dt);
         break;
@@ -347,17 +350,10 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
         this.intro.update(dt);
         break;
       case 'pause':
-        if (inp.pressed('pause') && now > this.pauseIgnoreUntil) this.pause.back();
-        else if (inp.pressed('objectives')) {
-          if (this.pause.page === 'objectives') this.pause.back();
-          else this.pause.push('objectives');
-        }
         this.pause.update(dt);
         break;
       case 'play':
         if (this.photoMode) break;
-        if ((game.state === 'playing' || game.state === 'cutscene') && inp.pressed('pause') && now > this.pauseIgnoreUntil) this.openPause();
-        else if (game.state === 'playing' && inp.pressed('objectives')) this.drawer.toggle();
         this.updateArea(dt);
         this.updateTutorial(dt);
         break;
@@ -375,6 +371,12 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
   }
 
   // ================================================================== internals
+
+  /** A dialogue is up and taking input (not behind the pause menu). */
+  private get dialogLive() {
+    const st = this.game.state;
+    return this.mode === 'play' && this.dialog.open && (st === 'playing' || st === 'cutscene');
+  }
 
   private setMode(m: UIMode) {
     this.mode = m;
@@ -413,6 +415,8 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
       return;
     }
     // The browser released the lock (Esc, alt-tab…): open the pause menu / skip the intro.
+    // (Ignored right after a skip/resume so one Esc press can't both skip the intro and pause.)
+    if (nowSec() < this.pauseIgnoreUntil) return;
     if (this.mode === 'intro') this.intro.skip();
     else if (this.mode === 'play' && !this.photoMode && (this.game.state === 'playing' || this.game.state === 'cutscene')) {
       this.openPause();
@@ -444,8 +448,48 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     }
   }
 
+  /**
+   * "Pause" command (Esc / P / gamepad Start). `fromPad`: Start resumes straight from any pause page,
+   * while Esc steps back one page.
+   */
+  private cmdPause(fromPad: boolean) {
+    const g = this.game;
+    const now = nowSec();
+    switch (this.mode) {
+      case 'title':
+        if (this.titleMenu.isOpen) this.titleMenu.back();
+        else if (fromPad) this.startGame(!this.introSeen);
+        break;
+      case 'intro':
+        this.intro.skip();
+        break;
+      case 'pause':
+        if (now < this.pauseIgnoreUntil) break;
+        if (fromPad) this.resume();
+        else this.pause.back();
+        break;
+      case 'play':
+        if (this.photoMode || now < this.pauseIgnoreUntil) break;
+        if (g.state === 'playing' || g.state === 'cutscene') this.openPause();
+        break;
+    }
+  }
+
+  /** "Objectives" command (Tab / gamepad View). */
+  private cmdObjectives() {
+    if (this.mode === 'play' && this.game.state === 'playing' && !this.photoMode) this.drawer.toggle();
+    else if (this.mode === 'pause') {
+      if (this.pause.page === 'objectives') this.pause.back();
+      else this.pause.push('objectives');
+    }
+  }
+
   private handleNav(keys: NavKey[]) {
     if (!keys.length) return;
+    for (const k of keys) {
+      if (k === 'start') this.cmdPause(true);
+      else if (k === 'back') this.cmdObjectives();
+    }
     const root = this.activeMenuRoot();
     if (root) {
       for (const k of keys) {
@@ -462,8 +506,13 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
       }
       return;
     }
-    // In gameplay the d-pad left/right are unused by the Input map: they answer SlopBot.
-    if (this.mode === 'play') for (const k of keys) if (k === 'left' || k === 'right') this.slopBot.padInput(k);
+    if (this.mode !== 'play') return;
+    for (const k of keys) {
+      // A advances dialogue (the frozen player ignores the matching 'jump' press).
+      if (k === 'a' && this.dialogLive) this.dialog.input();
+      // D-pad left/right are unused by the gameplay Input map: they answer SlopBot.
+      else if (k === 'dleft' || k === 'dright') this.slopBot.padInput(k === 'dleft' ? 'left' : 'right');
+    }
   }
 
   private onKey(e: KeyboardEvent) {
@@ -472,6 +521,22 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
       // F3 belongs to core/DebugStats; F4 toggles the UI's state/position readout.
       e.preventDefault();
       this.hud.debug = !this.hud.debug;
+      return;
+    }
+    if (!e.repeat && (e.code === 'Escape' || e.code === 'KeyP')) {
+      this.cmdPause(false);
+      return; // not consumed: PhotoMode reads Esc through input.pressed('pause')
+    }
+    if (e.code === 'Tab') {
+      e.preventDefault();
+      if (!e.repeat) this.cmdObjectives();
+      return; // not consumed: Collectibles shows its compass while Tab is held
+    }
+    // Dialogue: E / Space / Enter advance, and are swallowed so they don't also grab/jump in gameplay.
+    if (this.dialogLive && (e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!e.repeat) this.dialog.input();
       return;
     }
     const root = this.activeMenuRoot();
@@ -486,6 +551,16 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     }
     e.preventDefault();
     this.moveFocus(root, k);
+  }
+
+  /** Clicks/taps advance an open dialogue (and are swallowed so they don't also grab in gameplay). */
+  private onPointerDown(e: PointerEvent) {
+    this.root.classList.remove('kbd-nav');
+    if (!this.dialogLive) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault(); // also suppresses the compatibility mousedown the Input would read as 'grab'
+    e.stopPropagation();
+    this.dialog.input();
   }
 
   private updateArea(dt: number) {
@@ -508,7 +583,7 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     const now = nowSec();
     if (now - (this.areaShownAt.get(name) ?? -1e9) < 25) return;
     this.areaShownAt.set(name, now);
-    this.hud.banner(name, areaSubtitle(name), 'Now entering');
+    if (this.areaBanners) this.hud.banner(name, areaSubtitle(name), 'Now entering');
     this.game.events.emit('areaEnter', { name });
   }
 
@@ -521,7 +596,7 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
   }
 
   private updateLockPrompt(dt: number, playing: boolean) {
-    const want = playing && !IS_TOUCH && !AUTOMATED && !this.game.input.pointerLocked && !this.dialog.open;
+    const want = playing && !IS_TOUCH && !AUTOMATED && this.device !== 'pad' && !this.game.input.pointerLocked && !this.dialog.open;
     this.unlockedFor = want ? this.unlockedFor + dt : 0;
     const show = this.unlockedFor > 0.35;
     if (show !== this.lockEl.classList.contains('show')) this.lockEl.classList.toggle('show', show);

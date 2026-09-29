@@ -405,6 +405,26 @@ export function bouquet(game: Game, x: number, y: number, z: number, colors: num
   return spawnProp(game, { name: 'Flower Bouquet', object: mesh(geo, vmat('food')), mass: 0.3, tags: ['grabbable', 'washable'] }, V(x, y, z), x);
 }
 
+/** A little rowboat that floats (buoyancy) and can be dragged / bonked around. `obj` = the boat visual. */
+export function dinghy(game: Game, obj: THREE.Object3D, x: number, y: number, z: number, rotY = 0) {
+  return spawnProp(
+    game,
+    {
+      name: 'Dinghy',
+      object: obj,
+      mass: 55,
+      tags: ['grabbable', 'boat'],
+      friction: 0.6,
+      linearDamping: 0.5,
+      angularDamping: 2.5,
+      sleeping: false,
+      data: { buoyancy: 2.8, floatRadius: 0.45 },
+    },
+    V(x, y, z),
+    rotY,
+  );
+}
+
 /** Small raccoon-shaped static bobblehead figure geometry (for statues, decor). */
 export function jimothyFigure(): { body: THREE.BufferGeometry; head: THREE.BufferGeometry } {
   const body = cached('jimfig-body', () =>

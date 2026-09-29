@@ -76,10 +76,10 @@ export class ServerPlug {
       }
     }
     // outlet plate + slots
-    const plateY = 1.25;
-    world.box(L(0, plateY, 0.03), new THREE.Vector3(1.5, 1.9, 0.06), faceMat, { rotY: yaw, collide: false });
-    for (const sx of [-0.28, 0.28]) world.box(L(sx, plateY + 0.05, 0.065), new THREE.Vector3(0.16, 0.42, 0.02), slotMat, { rotY: yaw, collide: false, castShadow: false });
-    world.box(L(0, plateY - 0.55, 0.065), new THREE.Vector3(0.22, 0.22, 0.02), slotMat, { rotY: yaw, collide: false, castShadow: false });
+    const plateY = 0.86; // low enough for tiny raccoon hands
+    world.box(L(0, plateY + 0.12, 0.03), new THREE.Vector3(1.5, 1.55, 0.06), faceMat, { rotY: yaw, collide: false });
+    for (const sx of [-0.28, 0.28]) world.box(L(sx, plateY - 0.08, 0.065), new THREE.Vector3(0.16, 0.42, 0.02), slotMat, { rotY: yaw, collide: false, castShadow: false });
+    world.box(L(0, plateY + 0.36, 0.065), new THREE.Vector3(0.22, 0.22, 0.02), slotMat, { rotY: yaw, collide: false, castShadow: false });
     // label + warning stripes
     const label = new THREE.Mesh(
       new THREE.PlaneGeometry(2.6, 0.75),
@@ -113,6 +113,7 @@ export class ServerPlug {
     this.beaconMat = new THREE.MeshStandardMaterial({ color: 0x661111, emissive: new THREE.Color(0xff2a2a), emissiveIntensity: 0, roughness: 0.3 });
     this.beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.4, 14), this.beaconMat);
     this.beacon.position.copy(L(0, TH + 0.2, -0.6));
+    this.beacon.userData.noMerge = true; // it spins + flashes (keep it out of the static batcher)
     world.staticRoot.add(markOwned(this.beacon));
     this.beaconLight = new THREE.PointLight(0xff2020, 0, 14, 2);
     this.beaconLight.position.copy(this.beacon.position).add(new THREE.Vector3(0, 0.4, 0));
@@ -150,12 +151,12 @@ export class ServerPlug {
     this.plugObj.add(shell, grip, boot, logo);
     for (const sx of [-0.28, 0.28]) {
       const prong = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.36, PRONG), prongMat);
-      prong.position.set(sx, 0.05, -PD / 2 - PRONG / 2);
+      prong.position.set(sx, -0.08, -PD / 2 - PRONG / 2);
       this.prongs.push(prong);
       this.plugObj.add(prong);
     }
     const ground = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, PRONG * 0.9, 10).rotateX(Math.PI / 2), prongMat);
-    ground.position.set(0, -0.3, -PD / 2 - PRONG * 0.45);
+    ground.position.set(0, 0.36, -PD / 2 - PRONG * 0.45);
     this.plugObj.add(ground);
     this.plugObj.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -329,7 +330,7 @@ export class ServerPlug {
       this.prongsCollide = true;
       for (const sx of [-0.28, 0.28]) {
         const cd = RAPIER.ColliderDesc.cuboid(0.065, 0.18, PRONG / 2)
-          .setTranslation(sx, 0.05, -0.475 - PRONG / 2)
+          .setTranslation(sx, -0.08, -0.475 - PRONG / 2)
           .setMass(2)
           .setCollisionGroups(groups(G.PROP));
         const c = game.physics.world.createCollider(cd, b);

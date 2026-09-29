@@ -14,8 +14,8 @@ import type { UiCtx } from './types';
 /** What menu pages need from the UI system. */
 export interface MenuApi extends UiCtx {
   readonly settings: Settings;
-  /** Persist + apply settings after a change. */
-  commitSettings(): void;
+  /** Persist + apply one changed setting. */
+  commitSettings(key: keyof Settings): void;
   resume(): void;
   resetProgress(): void;
   readonly isTouch: boolean;
@@ -172,7 +172,7 @@ function buildMutators(api: MenuApi, host: MenuHost) {
       if (!on) for (const m of muts.list) if (m.enabled && !m.unlocked) muts.setEnabled(m.id, false);
       muts.allUnlocked = on;
       api.settings.unlockAll = on;
-      api.commitSettings();
+      api.commitSettings('unlockAll');
       host.refresh();
     },
     'No Instincts were harmed. Your achievements stay honest.',
@@ -226,39 +226,39 @@ function buildSettings(api: MenuApi) {
   wrap.append(
     sliderRow('Master volume', 0, 100, 5, s.master * 100, pct, (v) => {
       s.master = v / 100;
-      api.commitSettings();
+      api.commitSettings('master');
       blip();
     }),
     sliderRow('Sound effects', 0, 100, 5, s.sfx * 100, pct, (v) => {
       s.sfx = v / 100;
-      api.commitSettings();
+      api.commitSettings('sfx');
       blip();
     }),
     sliderRow('Music', 0, 100, 5, s.music * 100, pct, (v) => {
       s.music = v / 100;
-      api.commitSettings();
+      api.commitSettings('music');
     }),
   );
   wrap.append(section('Controls'));
   wrap.append(
     sliderRow(api.isTouch ? 'Look sensitivity' : 'Mouse sensitivity', 0.2, 3, 0.1, s.sensitivity, (v) => `${v.toFixed(1)}x`, (v) => {
       s.sensitivity = Math.round(v * 10) / 10;
-      api.commitSettings();
+      api.commitSettings('sensitivity');
     }),
     toggleRow('Invert camera Y', s.invertY, (on) => {
       s.invertY = on;
-      api.commitSettings();
+      api.commitSettings('invertY');
     }, undefined, api),
   );
   wrap.append(section('World'));
   wrap.append(
     sliderRow('Day length', 5, 60, 5, s.dayLength, (v) => `${v} min`, (v) => {
       s.dayLength = v;
-      api.commitSettings();
+      api.commitSettings('dayLength');
     }),
     toggleRow('Freeze time of day', s.freezeTime, (on) => {
       s.freezeTime = on;
-      api.commitSettings();
+      api.commitSettings('freezeTime');
     }, 'Eternal golden hour, if you time it right.', api),
   );
   if (env?.setTime) {
@@ -281,15 +281,15 @@ function buildSettings(api: MenuApi) {
   wrap.append(
     toggleRow('Show HUD', s.showHud, (on) => {
       s.showHud = on;
-      api.commitSettings();
+      api.commitSettings('showHud');
     }, 'Turn off for screenshots. Jimothy is very photogenic.', api),
     toggleRow('Camera flashes', s.flashes, (on) => {
       s.flashes = on;
-      api.commitSettings();
+      api.commitSettings('flashes');
     }, 'White flash when fans take photos nearby.', api),
     toggleRow('Show FPS', s.showFps, (on) => {
       s.showFps = on;
-      api.commitSettings();
+      api.commitSettings('showFps');
     }, undefined, api),
   );
   return wrap;

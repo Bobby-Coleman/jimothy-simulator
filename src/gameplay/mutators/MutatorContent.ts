@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Game, System } from '../../core/Game';
 import type { MutatorSystem } from '../Mutators';
-import { loadAccessories } from './accessories';
+import { loadAccessories, accessoryDebug } from './accessories';
 import { honoraryGrad, rookie, grandmaHat } from './hats';
 import { jimothySummer } from './summer';
 import { aiEnhanced } from './ai';
@@ -34,6 +34,7 @@ export class MutatorContent implements System {
   init(game: Game) {
     this.game = game;
     loadAccessories(game);
+    game.debug.accessories = accessoryDebug;
     this.impls.push(
       honoraryGrad(),
       jimothySummer(),

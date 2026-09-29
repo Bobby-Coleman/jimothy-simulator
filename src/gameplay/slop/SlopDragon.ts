@@ -228,11 +228,10 @@ export class SlopDragon {
     const C = this.center;
     const P = this.pad;
     const pts: [number, number][] = [
-      [C.x + 70, C.z - 25],
-      [C.x + 115, C.z + 25],
-      [C.x + 95, C.z + 85],
-      [C.x + 20, C.z + 95],
-      [C.x - 20, C.z + 40],
+      [C.x + 60, C.z - 25],
+      [C.x + 92, C.z + 38],
+      [C.x + 22, C.z + 76],
+      [C.x - 24, C.z + 22],
     ];
     const route: THREE.Vector3[] = [new THREE.Vector3(P.x, P.y + 14, P.z)];
     for (const [x, z] of pts) route.push(new THREE.Vector3(clamp(x, -165, 165), 0, clamp(z, -165, 150)));
@@ -274,7 +273,7 @@ export class SlopDragon {
     const P = this.pad;
     const above = new THREE.Vector3(P.x, Math.max(this.pos.y, P.y + 16), P.z);
     this.path = [above, new THREE.Vector3(P.x, P.y + this.model.legReach + 0.05, P.z)];
-    this.pathSpeed = this.riding ? 16 : 10;
+    this.pathSpeed = this.riding ? 20 : 10;
     this.setState('landing');
   }
 
@@ -301,13 +300,13 @@ export class SlopDragon {
     if (this.state === 'landed' || this.state === 'landing' || this.pos.y < this.pad.y + 6) {
       this.path.unshift(new THREE.Vector3(this.pos.x, this.pos.y + 10, this.pos.z));
     }
-    this.pathSpeed = 23;
+    this.pathSpeed = 26;
     this.setState('ride');
     const game = this.game;
     game.events.emit('rodeSlopDragon', { entity: this.entity, rides: this.rides });
     if (this.rides === 1) {
       game.score(1500, 'Hallucination', player.position.clone());
-      toast(game, 'Hallucination', 'You rode the Slop Dragon: the only AI clip that was actually real.', 'dragon');
+      toast(game, 'Hallucination', 'You rode the Slop Dragon: the only AI clip that was actually real.', '🐉');
     } else game.score(300, 'Another Hallucination', player.position.clone());
     game.sfx('whoosh', this.pos, 1, 0.6);
     game.sfx('crowd_ooh', this.pos, 0.5);
@@ -358,11 +357,11 @@ export class SlopDragon {
     const player = this.game.get<Jimothy>('player');
     if (!player || player.position.distanceTo(this.pos) > 70) return;
     const game = this.game;
-    game.events.emit('speech', { entity: this.speakerA, text: p[0], duration: 2.8, position: this.speakerA.object!.getWorldPosition(new THREE.Vector3()) });
+    game.events.emit('speech', { entity: this.speakerA, text: p[0], duration: 2.8, style: 'slop', speaker: 'Left Head' });
     this.talkA = 1.6;
     game.sfx('slop_voice', this.pos, 0.5, 0.7);
     this.timeline.later(1.8, () => {
-      game.events.emit('speech', { entity: this.speakerB, text: p[1], duration: 3, position: this.speakerB.object!.getWorldPosition(new THREE.Vector3()) });
+      game.events.emit('speech', { entity: this.speakerB, text: p[1], duration: 3, style: 'slop', speaker: 'Right Head' });
       this.talkB = 1.8;
       game.sfx('slop_voice', this.pos, 0.5, 0.85);
     });

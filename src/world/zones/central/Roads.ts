@@ -25,7 +25,7 @@ import {
   hydrant,
   lightPools,
   newsBox,
-  placeInstances,
+  placeInstances, placeBatched,
   planter,
   streetTree,
   treeGrate,
@@ -116,7 +116,7 @@ export const CentralRoads: ZoneBuilder = {
   async build(game: Game, world: World) {
     await loadFonts();
     const mats = await roadMaterials(game);
-    const batch = new Batch('roads', 120);
+    const batch = new Batch('roads', 240);
     const atlas = sharedAtlas(game);
     const paint = new Paint();
     const rng = new Rng(20260713);
@@ -221,7 +221,7 @@ export const CentralRoads: ZoneBuilder = {
           occupied.push(s - 1.5, s, s + 1.5);
         }
         // trash cans
-        for (let s = av.s0 + 22 + (side > 0 ? 9 : 0); s < av.s1 - 10; s += 52) {
+        for (let s = av.s0 + 22 + (side > 0 ? 30 : 0); s < av.s1 - 10; s += 80) {
           if (!sidewalkFree(av, s, side) || !free(s, 2)) continue;
           const p = at(s, 4.75);
           trash.push({ p: new THREE.Vector3(p.x, p.y, p.z), ry: rng.range(0, 6.28) });
@@ -276,15 +276,15 @@ export const CentralRoads: ZoneBuilder = {
       }
     }
 
-    placeInstances(world, avenueLamp(game), lampXf, { collider: new THREE.Vector3(0.28, 8.2, 0.28), name: 'avenueLamps' });
-    lightPools(game, world, pools);
-    placeInstances(world, hydrant(), hydrantXf, { collider: new THREE.Vector3(0.4, 0.8, 0.4), name: 'hydrants' });
-    placeInstances(world, bench(), benchXf, { collider: new THREE.Vector3(1.8, 0.62, 0.55), name: 'benches' });
-    placeInstances(world, newsBox(), newsXf, { collider: new THREE.Vector3(0.52, 1.1, 0.46), name: 'newsBoxes' });
-    placeInstances(world, planter(1), planterXf, { collider: new THREE.Vector3(1.6, 0.62, 0.8), name: 'planters' });
-    treeXf.forEach((xfs, i) => placeInstances(world, streetTree(i), xfs, { collider: new THREE.Vector3(0.36, 3.0, 0.36), name: 'streetTrees' }));
-    placeInstances(world, treeGrate(), grateXf, { name: 'treeGrates' });
-    placeInstances(world, bollard(), bollardXf, { collider: new THREE.Vector3(0.22, 0.9, 0.22), name: 'bollards' });
+    placeBatched(world, batch, avenueLamp(game), lampXf, { collider: new THREE.Vector3(0.28, 8.2, 0.28), name: 'avenueLamps' });
+    lightPools(game, world, pools, batch);
+    placeBatched(world, batch, hydrant(), hydrantXf, { collider: new THREE.Vector3(0.4, 0.8, 0.4), name: 'hydrants' });
+    placeBatched(world, batch, bench(), benchXf, { collider: new THREE.Vector3(1.8, 0.62, 0.55), name: 'benches' });
+    placeBatched(world, batch, newsBox(), newsXf, { collider: new THREE.Vector3(0.52, 1.1, 0.46), name: 'newsBoxes' });
+    placeBatched(world, batch, planter(1), planterXf, { collider: new THREE.Vector3(1.6, 0.62, 0.8), name: 'planters' });
+    treeXf.forEach((xfs, i) => placeBatched(world, batch, streetTree(i), xfs, { collider: new THREE.Vector3(0.36, 3.0, 0.36), name: 'streetTrees' }));
+    placeBatched(world, batch, treeGrate(), grateXf, { name: 'treeGrates' });
+    placeBatched(world, batch, bollard(), bollardXf, { collider: new THREE.Vector3(0.22, 0.9, 0.22), name: 'bollards' });
     for (const t of trash) spawnTrashCan(game, t.p, t.ry);
 
     // ---------------------------------------------------------------- bus stops
@@ -453,8 +453,8 @@ function addSignalsAt(world: World, batch: Batch, mats: SignalMats, cx: number, 
     const pz = cz + ap.h.z * 5.1 + r.z * 5.1;
     const py = walkY(px, pz);
     const M = T(px, py, pz, Math.atan2(-ap.h.x, -ap.h.z));
-    batch.add(pole, fm, { matrix: M });
-    for (const c of ['red', 'yellow', 'green'] as const) batch.add(lampGeo[c], mats[ap.axis][c], { matrix: M, castShadow: false });
+    batch.add(pole, fm, { matrix: M, chunk: 'signals' });
+    for (const c of ['red', 'yellow', 'green'] as const) batch.add(lampGeo[c], mats[ap.axis][c], { matrix: M, castShadow: false, chunk: 'signals' });
     world.collider(new THREE.Vector3(px, py + 3.2, pz), new THREE.Vector3(0.3, 6.4, 0.3));
   }
 }

@@ -1,12 +1,15 @@
 import { isShown } from './dom';
 
-export type NavKey = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'start' | 'back';
+/** Directions include the left stick; `dleft`/`dright` are the D-pad buttons only (safe to use during gameplay). */
+export type NavKey = 'up' | 'down' | 'left' | 'right' | 'dleft' | 'dright' | 'a' | 'b' | 'start' | 'back';
 
 const BUTTONS: [number, NavKey][] = [
   [12, 'up'],
   [13, 'down'],
   [14, 'left'],
   [15, 'right'],
+  [14, 'dleft'],
+  [15, 'dright'],
   [0, 'a'],
   [1, 'b'],
   [9, 'start'],

@@ -7,7 +7,7 @@ import type { CameraRig } from '../../player/CameraRig';
 import { makeSlopDepthMaterial, makeSlopMaterial, makeSlopUniforms, type SlopUniforms } from './SlopMaterial';
 import { SLOP_LEGS, SP, type SlopModelData } from './SlopGeometry';
 import { FAN_CHEERS, SLOP_BONKED, SLOP_GRABBED, SLOP_IDLE, SLOP_IMITATE, SLOP_SPAWN, SLOP_THROWN, SLOP_WASHED } from './lines';
-import { clamp, findClearSpot, findNpcs, pick, rand, say, terrainY, waterOf, worldOf, type Timeline } from './util';
+import { clamp, findClearSpot, findNpcs, pick, rand, say, sayAt, terrainY, waterOf, worldOf, type Timeline } from './util';
 
 export type SlopRole = 'campus' | 'roamer' | 'tiny';
 export type ImitateKind = 'jump' | 'roll' | 'chitter' | 'wash' | 'bonk' | 'climb' | 'flop';
@@ -238,7 +238,7 @@ export class Slopothy {
 
   private onWash(game: Game) {
     if (!this.alive) return;
-    this.mgr.talk(this, pick(SLOP_WASHED), true);
+    this.mgr.talkAt(this, pick(SLOP_WASHED));
     this.dissolve('washed');
   }
 
@@ -248,15 +248,17 @@ export class Slopothy {
       const k = 0.8;
       this.body.applyImpulse({ x: impulse.x * k, y: Math.max(impulse.y * k, this.body.mass() * 3), z: impulse.z * k }, true);
     }
+    // cars / explosions call this too: only Jimothy's own bonks score
     const p = this.game.get<Jimothy>('player');
-    if (p && p.position.distanceTo(this.pos) < 3) this.lastPlayerTouch = game.time;
+    const byPlayer = !!p && p.position.distanceTo(this.pos) < 2.6 && game.time - this.mgr.lastPlayerBonk < 0.5;
+    if (byPlayer) this.lastPlayerTouch = game.time;
     this.scatter();
     this.stun(1.3);
     this.tumbleV = rand(-16, 16);
     game.sfx('slop_glitch', this.pos, 0.7, rand(0.9, 1.2));
     if (Math.random() < 0.45) this.mgr.talk(this, pick(SLOP_BONKED), true);
-    game.score(this.role === 'tiny' ? 10 : 25, 'Bonked The Slop', this.pos.clone());
-    game.events.emit('slopBonked', { entity: this.entity, position: this.pos.clone() });
+    if (byPlayer) game.score(this.role === 'tiny' ? 10 : 25, 'Bonked The Slop', this.pos.clone());
+    game.events.emit('slopBonked', { entity: this.entity, position: this.pos.clone(), byPlayer });
     return true;
   }
 
@@ -343,7 +345,7 @@ export class Slopothy {
     game.physics.removeBody(this.body);
     for (const g of this.ghosts) g.mesh.visible = false;
     this.mesh.visible = true;
-    game.events.emit('slopDissolve', { position: pos, entity: this.entity, reason });
+    game.events.emit('slopDissolve', { position: pos, entity: this.entity, reason, scale: this.scale });
     game.sfx('dissolve', pos, this.role === 'tiny' ? 0.5 : 0.85, this.role === 'tiny' ? 1.4 : 1);
     this.mgr.onDissolved(this, reason, pos);
   }
@@ -374,7 +376,7 @@ export class Slopothy {
       const vol = waterOf(game)?.volumeAt(this.pos);
       if (vol && this.pos.y < vol.surfaceY + this.r * 0.2) {
         const byPlayer = now - this.lastPlayerTouch < 8 || now - (this.entity.data.thrownAt ?? -100) < 8;
-        this.mgr.talk(this, 'Water?! That was not in my training da—', true);
+        this.mgr.talkAt(this, 'Water?! That was not in my training da—');
         this.dissolve(byPlayer ? 'washed' : 'water');
         return;
       }
@@ -812,8 +814,12 @@ export class SlopothyManager {
     private timeline: Timeline,
   ) {}
 
+  /** game.time of Jimothy's last bonk (so only his bonks score). */
+  lastPlayerBonk = -10;
+
   init() {
     const g = this.game;
+    g.events.on('bonkStart', () => (this.lastPlayerBonk = g.time));
     const imitateOn = (kind: ImitateKind) => () => this.broadcastImitation(kind);
     g.events.on('jump', imitateOn('jump'));
     g.events.on('rollStart', imitateOn('roll'));
@@ -890,8 +896,17 @@ export class SlopothyManager {
     if (!p || s.pos.distanceTo(p.position) > 32) return;
     if (!force && game.time - this.lastTalk < 2.2) return;
     this.lastTalk = game.time;
-    say(game, s.entity, text, 3.2);
+    say(game, s.entity, text, 3.2, 'slop');
     if (Math.random() < 0.5) game.sfx('slop_voice', s.pos, 0.35, rand(0.9, 1.3));
+  }
+
+  /** Last words of a Slopothy that is about to dissolve (bubble stays where it was). */
+  talkAt(s: Slopothy, text: string) {
+    const game = this.game;
+    const p = game.get<Jimothy>('player');
+    if (!p || s.pos.distanceTo(p.position) > 32) return;
+    this.lastTalk = game.time;
+    sayAt(game, s.root.position.clone().add(new THREE.Vector3(0, 0.95 * s.scale, 0)), text, 2.6);
   }
 
   private broadcastImitation(kind: ImitateKind) {
@@ -932,17 +947,28 @@ export class SlopothyManager {
       const near = this.list.filter((s) => s.alive && now > s.cheerCooldown && s.pos.distanceTo(player.position) < 45);
       if (near.length) {
         const s = pick(near);
-        const fans = findNpcs(game, s.pos, 9);
+        const fans = findNpcs(game, s.pos, 9).filter((e) => {
+          const npc = e.data?.npc;
+          if (!npc) return true;
+          return !(npc.ragdolled || npc.isCustom || npc.removed || npc.passive);
+        });
         if (fans.length) {
           s.cheerCooldown = now + rand(10, 18);
           const fan = pick(fans);
           say(game, fan, pick(FAN_CHEERS), 2.8);
-          const npcs = game.get<any>('npcs');
-          try {
-            npcs?.cheerFor?.(fan, s.entity);
-            npcs?.filmTarget?.(fan, s.entity);
-          } catch {
-            /* optional NPC hooks */
+          // they think it's Jimothy: turn to it, cheer / hold the phone up for a few seconds
+          const npc = fan.data?.npc;
+          if (npc) {
+            try {
+              npc.lookAt?.(s.pos);
+              npc.gesture = npc.held?.data?.itemKind === 'phone' ? 'film' : 'cheer';
+              npc.setExpression?.('happy');
+              this.timeline.later(4, () => {
+                if (!npc.removed && !npc.isCustom) npc.lookAt?.(null);
+              });
+            } catch {
+              /* optional NPC hooks */
+            }
           }
           game.events.emit('slopCheered', { npc: fan, slop: s.entity, position: s.pos.clone() });
         }
@@ -970,7 +996,7 @@ export class SlopothyManager {
       const s = this.list[i];
       if (s.dead) this.list.splice(i, 1);
       else if (s.alive && s.role === 'tiny' && now - s.bornAt > 90) {
-        this.talk(s, 'Context window exceeded.', false);
+        if (Math.random() < 0.3) this.talkAt(s, 'Context window exceeded.');
         s.dissolve('timeout');
       }
     }

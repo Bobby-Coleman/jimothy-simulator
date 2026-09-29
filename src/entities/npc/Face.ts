@@ -38,12 +38,12 @@ const ty = (theta: number) => ((theta - FACE_T0) / FACE_TL) * FH;
 /** canvas x of an azimuth offset from the front (+ = viewer's right) */
 const px = (dphi: number) => FW / 2 + (dphi / (2 * FACE_PHI)) * FW;
 
-const EYE_Y = ty(1.43);
-const EYE_DX = px(0.34) - FW / 2;
-const BROW_Y = ty(1.2);
-const MOUTH_Y = ty(1.93);
-const CHEEK_Y = ty(1.72);
-const CHEEK_DX = px(0.62) - FW / 2;
+const EYE_Y = ty(1.47);
+const EYE_DX = px(0.4) - FW / 2;
+const BROW_Y = ty(1.13);
+const MOUTH_Y = ty(1.97);
+const CHEEK_Y = ty(1.76);
+const CHEEK_DX = px(0.68) - FW / 2;
 
 export interface FaceStyle {
   brow: number;
@@ -96,7 +96,7 @@ function drawEye(ctx: CanvasRenderingContext2D, cx: number, cy: number, e: Expre
   ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
   ctx.fillStyle = '#ffffff';
   ctx.fill();
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 3.2;
   ctx.strokeStyle = INK;
   ctx.stroke();
   // pupil
@@ -294,6 +294,20 @@ function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, s: number)
   ctx.fill();
 }
 
+/** Run fn with the canvas scaled by k around (x, y). */
+function around(ctx: CanvasRenderingContext2D, x: number, y: number, k: number, fn: () => void) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(k, k);
+  ctx.translate(-x, -y);
+  fn();
+  ctx.restore();
+}
+
+const EYE_K = 1.42;
+const BROW_K = 1.3;
+const MOUTH_K = 1.4;
+
 function drawFace(ctx: CanvasRenderingContext2D, style: FaceStyle, e: Expression, clean: boolean) {
   ctx.clearRect(0, 0, FW, FH);
   const lx = FW / 2 - EYE_DX;
@@ -306,20 +320,20 @@ function drawFace(ctx: CanvasRenderingContext2D, style: FaceStyle, e: Expression
       ctx.fill();
     }
   }
-  drawEye(ctx, lx, EYE_Y, e, -1, style.lashes);
-  drawEye(ctx, rx, EYE_Y, e, 1, style.lashes);
+  around(ctx, lx, EYE_Y, EYE_K, () => drawEye(ctx, lx, EYE_Y, e, -1, style.lashes));
+  around(ctx, rx, EYE_Y, EYE_K, () => drawEye(ctx, rx, EYE_Y, e, 1, style.lashes));
   const bc = hex(style.brow);
-  drawBrow(ctx, lx, e, -1, bc);
-  drawBrow(ctx, rx, e, 1, bc);
+  around(ctx, lx, BROW_Y, BROW_K, () => drawBrow(ctx, lx, e, -1, bc));
+  around(ctx, rx, BROW_Y, BROW_K, () => drawBrow(ctx, rx, e, 1, bc));
   if (style.mustache != null) {
     ctx.fillStyle = hex(style.mustache);
-    const my = MOUTH_Y - 12;
+    const my = MOUTH_Y - 19;
     ctx.beginPath();
-    ctx.ellipse(FW / 2 - 11, my, 14, 7, -0.25, 0, Math.PI * 2);
-    ctx.ellipse(FW / 2 + 11, my, 14, 7, 0.25, 0, Math.PI * 2);
+    ctx.ellipse(FW / 2 - 14, my, 18, 8.5, -0.25, 0, Math.PI * 2);
+    ctx.ellipse(FW / 2 + 14, my, 18, 8.5, 0.25, 0, Math.PI * 2);
     ctx.fill();
   }
-  drawMouth(ctx, e);
+  around(ctx, FW / 2, MOUTH_Y, MOUTH_K, () => drawMouth(ctx, e));
   if (e === 'sad') {
     ctx.beginPath();
     const x = rx + 10;
@@ -331,18 +345,18 @@ function drawFace(ctx: CanvasRenderingContext2D, style: FaceStyle, e: Expression
     ctx.fill();
   }
   if (style.glasses) {
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 5;
     ctx.strokeStyle = '#1e1e1e';
     ctx.fillStyle = 'rgba(210,235,255,0.22)';
     for (const x of [lx, rx]) {
       ctx.beginPath();
-      ctx.roundRect(x - 23, EYE_Y - 22, 46, 42, 12);
+      ctx.roundRect(x - 30, EYE_Y - 29, 60, 56, 15);
       ctx.fill();
       ctx.stroke();
     }
     ctx.beginPath();
-    ctx.moveTo(lx + 23, EYE_Y - 6);
-    ctx.quadraticCurveTo(FW / 2, EYE_Y - 13, rx - 23, EYE_Y - 6);
+    ctx.moveTo(lx + 30, EYE_Y - 8);
+    ctx.quadraticCurveTo(FW / 2, EYE_Y - 16, rx - 30, EYE_Y - 8);
     ctx.stroke();
   }
   if (clean) {

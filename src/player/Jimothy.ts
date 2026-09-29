@@ -628,7 +628,10 @@ export class Jimothy implements System {
   // ---------------------------------------------------------------- grab / carry / drag
   private handPoint(out = new THREE.Vector3()) {
     const f = this.forwardVec(_b);
-    return out.copy(this.position).addScaledVector(f, 0.5).add(_a.set(0, 0.02, 0));
+    // (don't touch _a here: updateHeld keeps the drag point in _a while calling this)
+    out.copy(this.position).addScaledVector(f, 0.5);
+    out.y += 0.02;
+    return out;
   }
 
   tryGrab() {

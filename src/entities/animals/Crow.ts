@@ -619,10 +619,10 @@ export class Crow extends Animal {
       wl = this.preen > 0 ? Math.sin(t * 9) * 0.25 + 0.2 : 0;
       spread = this.preen > 0 ? 0.25 : 0;
     }
-    // folded: swept back along the body; spread: straight out
+    // folded: swept back along the body (left wing extends +X → +Y rotation sweeps it back); spread: straight out
     const sweep = (1 - spread) * 1.45;
-    P.wingL.rotation.set(0, -sweep, wl - (1 - spread) * 0.25, 'YZX');
-    P.wingR.rotation.set(0, sweep, -wl + (1 - spread) * 0.25, 'YZX');
+    P.wingL.rotation.set(0, sweep, wl - (1 - spread) * 0.25, 'YZX');
+    P.wingR.rotation.set(0, -sweep, -wl + (1 - spread) * 0.25, 'YZX');
     // head: peck / caw / look
     const peckK = this.peck > 0 ? Math.sin((1 - this.peck / 0.45) * Math.PI) : 0;
     const cawK = this.caw > 0 ? Math.sin((this.caw / 0.6) * Math.PI) : 0;

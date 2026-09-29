@@ -31,7 +31,7 @@ const CSS = `
   transition:opacity .4s,transform .4s;box-shadow:0 4px 0 rgba(0,0,0,.3)}
 .lm-toast .t{font-weight:900;color:#ffd84a}
 .lm-toast .x{font-size:14px;opacity:.9}
-.lm-race{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:rgba(20,24,34,.86);border:3px solid #ff8a65;border-radius:14px;
+.lm-race{position:absolute;left:16px;top:150px;background:rgba(20,24,34,.86);border:3px solid #ff8a65;border-radius:14px;
   color:#fff;padding:6px 14px 8px;min-width:250px;display:none;box-shadow:0 4px 0 rgba(0,0,0,.3)}
 .lm-race .h{font:900 16px "Arial Black",Impact,system-ui,sans-serif;color:#ff8a65;letter-spacing:1px;display:flex;justify-content:space-between;gap:12px}
 .lm-race .r{display:flex;justify-content:space-between;font-weight:800;font-size:15px;gap:14px;padding:1px 0}

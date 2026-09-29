@@ -264,10 +264,11 @@ export function windowTexture(kind: 'dark' | 'lit', frame = '#f1e9d8'): THREE.Te
 /** Curtain-wall office tower facade (glass grid). lit=true returns the emissive map (random lit windows). */
 export function towerTexture(kind: 'color' | 'emissive', seed = 3): THREE.Texture {
   return cached(`tower:${kind}:${seed}`, () => {
+    // 8 columns × 7 floors per repeat: with a 24 m repeat that's 3 m bays and 3.4 m floors
     const cols = 8,
-      rows = 16;
+      rows = 7;
     const W = 512,
-      H = 1024;
+      H = 512;
     const { c, ctx } = canvas(W, H);
     const r = new Rng(seed);
     const cw = W / cols,
@@ -335,6 +336,81 @@ export function latticeTexture(): THREE.Texture {
       ctx.moveTo(i + 256, 0);
       ctx.lineTo(i, 256);
       ctx.stroke();
+    }
+    return canvasTexture(c);
+  });
+}
+
+/**
+ * All awning/canopy stripe patterns live in one texture (one row per colour pair) so every awning in town
+ * shares a single material. Geometry samples a row by setting a constant V (see `applyStripeRow`).
+ */
+const STRIPE_ROWS = 32;
+const STRIPE_ROW_H = 16;
+let stripeAtlas: { c: HTMLCanvasElement; ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture; rows: Map<string, number> } | null = null;
+export function stripeRowV(a: string, b: string, stripes = 8): { tex: THREE.Texture; v: number } {
+  if (!stripeAtlas) {
+    const { c, ctx } = canvas(256, STRIPE_ROWS * STRIPE_ROW_H);
+    const tex = canvasTexture(c);
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    stripeAtlas = { c, ctx, tex, rows: new Map() };
+  }
+  const key = `${a}:${b}:${stripes}`;
+  let row = stripeAtlas.rows.get(key);
+  if (row == null) {
+    row = stripeAtlas.rows.size % STRIPE_ROWS;
+    stripeAtlas.rows.set(key, row);
+    const ctx = stripeAtlas.ctx;
+    const w = 256 / stripes;
+    for (let i = 0; i < stripes; i++) {
+      ctx.fillStyle = i % 2 ? b : a;
+      ctx.fillRect(i * w, row * STRIPE_ROW_H, w + 1, STRIPE_ROW_H);
+    }
+    stripeAtlas.tex.needsUpdate = true;
+  }
+  const H = STRIPE_ROWS * STRIPE_ROW_H;
+  return { tex: stripeAtlas.tex, v: 1 - (row * STRIPE_ROW_H + STRIPE_ROW_H / 2) / H };
+}
+
+export function stripeMaterial(): THREE.MeshStandardMaterial {
+  return cached('mat:stripes', () => {
+    const { tex } = stripeRowV('#ffffff', '#dddddd');
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, side: THREE.DoubleSide, vertexColors: true });
+  });
+}
+
+/** Set every vertex's V to a stripe row and scale U (repeats across the width). */
+export function applyStripeRow(g: THREE.BufferGeometry, a: string, b: string, uScale: number, stripes = 8) {
+  const { v } = stripeRowV(a, b, stripes);
+  const uv = g.getAttribute('uv') as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * uScale, v);
+  uv.needsUpdate = true;
+  return g;
+}
+
+/** Procedural ashlar (cut stone blocks) for civic buildings: light, slightly warm, tintable. */
+export function ashlarTexture(): THREE.Texture {
+  return cached('tex:ashlar', () => {
+    const S = 512;
+    const { c, ctx } = canvas(S, S);
+    const r = new Rng(77);
+    ctx.fillStyle = '#b9b2a4';
+    ctx.fillRect(0, 0, S, S);
+    const rows = 4;
+    const rh = S / rows;
+    for (let y = 0; y < rows; y++) {
+      const off = y % 2 ? 0 : S / 4;
+      for (let x = -S / 2 + off; x < S; x += S / 2) {
+        const v = r.int(222, 240);
+        ctx.fillStyle = `rgb(${v},${v - 4},${v - 14})`;
+        ctx.fillRect(x + 3, y * rh + 3, S / 2 - 6, rh - 6);
+        // speckle
+        for (let k = 0; k < 220; k++) {
+          const g = r.int(200, 250);
+          ctx.fillStyle = `rgba(${g},${g - 6},${g - 16},0.35)`;
+          ctx.fillRect(x + 3 + r.range(0, S / 2 - 8), y * rh + 3 + r.range(0, rh - 8), 2, 2);
+        }
+      }
     }
     return canvasTexture(c);
   });

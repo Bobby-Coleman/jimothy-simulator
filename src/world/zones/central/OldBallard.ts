@@ -5,7 +5,7 @@ import type { WaterSystem } from '../../Water';
 import { Batch, mergeColored, T, TR } from './lib/batch';
 import { ROAD, roadMaterials, SurfaceBuilder, gridRun, makeGrid, Paint, outAndBackLane, walkY, roadY, type CellKind, type StreetFrame } from './lib/roadkit';
 import { buildStore, trimMat, darkGlassMat, type BuildingKit, type StoreSpec, type BuiltStore } from './lib/buildings';
-import { bench, bikeRack, furnMat, historicLamp, hydrant, lightPools, newsBox, parkingMeter, placeInstances, planter, streetTree, treeGrate, warmGlowMat, type Xf } from './lib/furniture';
+import { bench, bikeRack, furnMat, historicLamp, hydrant, lightPools, newsBox, parkingMeter, placeInstances, placeBatched, planter, streetTree, treeGrate, warmGlowMat, type Xf } from './lib/furniture';
 import {
   spawnTrashCan,
   spawnCottonCandy,
@@ -23,7 +23,7 @@ import {
 import { loadFonts, sharedAtlas, type AtlasRect } from './lib/signs';
 import { SHOPS, drawShopSign, drawShopWindow, drawYear, drawPlaque, BOARD_JOKES, drawBoard, drawCartSign, drawHomeSign, drawCommonsSign, drawClockFace, drawParkingSign, drawMarketBanner } from './lib/shopart';
 import { muralTexture } from './lib/mural';
-import { cached, latticeTexture, loadPBR, plaidTexture } from './lib/textures';
+import { applyStripeRow, cached, latticeTexture, loadPBR, plaidTexture, stripeMaterial } from './lib/textures';
 import { loadMerged } from './lib/models';
 import { cylinderCollider, glowAtNight, onFrame, Rng } from './lib/util';
 import { BALLARD } from './Roads';
@@ -61,7 +61,7 @@ export const OldBallard: ZoneBuilder = {
     const signs = new Map<string, AtlasRect>();
     const art = new Map<string, AtlasRect>();
     for (const [k, def] of Object.entries(SHOPS)) {
-      signs.set(k, atlas.draw(512, 128, (ctx, w, h) => drawShopSign(ctx, w, h, def)));
+      signs.set(k, atlas.draw(768, 128, (ctx, w, h) => drawShopSign(ctx, w, h, def)));
       art.set(k, atlas.draw(448, 224, (ctx, w, h) => drawShopWindow(ctx, w, h, def.theme, k.length)));
     }
     const years = ['1889', '1904', '1907', '1911', '1923', 'EST. 1899'].map((y) => atlas.draw(256, 72, (ctx, w, h) => drawYear(ctx, w, h, y)));
@@ -126,7 +126,7 @@ export const OldBallard: ZoneBuilder = {
 
     // ---------------------------------------------------------------- Ballard Ave street furniture
     buildStreetFurniture(game, world, batch, rng);
-    await parkCars(game, world, rng);
+    await parkCars(game, world, rng, batch);
 
     // ---------------------------------------------------------------- lanes, NPCs, POIs
     world.lanes.push({ points: outAndBackLane({ axis: 'x', c: 0 }, -46, 46, BALLARD.lane, 3.2, 0.5, 4), loop: true, speed: 7 });
@@ -309,7 +309,6 @@ function buildPorchAndDen(game: Game, world: World, batch: Batch) {
   const posts: [number, number][] = [
     [X0 + 0.1, Z1 - 0.1],
     [X1 - 0.1, Z1 - 0.1],
-    [(X0 + X1) / 2, Z1 - 0.1],
   ];
   for (const [x, z] of posts) {
     batch.add(new THREE.BoxGeometry(0.16, 2.2, 0.16), trim, { matrix: T(x, y0 + 1.1, z), color: wood });
@@ -364,8 +363,8 @@ function buildPorchAndDen(game: Game, world: World, batch: Batch) {
   batch.add(new THREE.SphereGeometry(0.1, 8, 6), warmGlowMat(game), { matrix: T(10.0, deckY + 2.4, Z0 + 0.14), castShadow: false });
 
   // --- inside the den
-  const dirt = cached('mat:dirt', () => new THREE.MeshStandardMaterial({ color: 0x5a4330, roughness: 1 }));
-  batch.add(new THREE.PlaneGeometry(X1 - X0 - 0.2, Z1 - Z0 - 0.1).rotateX(-Math.PI / 2), dirt, { matrix: T(cx, y0 + 0.012, cz), castShadow: false });
+  const dirt = trim; // dark soil via vertex colour
+  batch.add(new THREE.PlaneGeometry(X1 - X0 - 0.2, Z1 - Z0 - 0.1).rotateX(-Math.PI / 2), dirt, { matrix: T(cx, y0 + 0.012, cz), castShadow: false, color: 0x5a4330 });
   // old blanket (lumpy plaid)
   const blanket = new THREE.BoxGeometry(1.7, 0.1, 1.2, 8, 1, 6);
   const bp = blanket.getAttribute('position') as THREE.BufferAttribute;
@@ -378,11 +377,11 @@ function buildPorchAndDen(game: Game, world: World, batch: Batch) {
   batch.add(new THREE.SphereGeometry(0.28, 10, 6).scale(1.2, 0.45, 0.8), trim, { matrix: T(11.5, y0 + 0.2, 22.6), color: 0xf2e6c8 });
   // treasure pile of shiny washed things
   const shiny = cached('mat:treasureGold', () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.22, metalness: 0.9 }));
-  const plastic = cached('mat:treasurePlastic', () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.25, metalness: 0.1 }));
+  const plastic = shiny;
   const tr = new Rng(99);
   const px = 6.9,
     pz = 22.9;
-  batch.add(new THREE.SphereGeometry(0.55, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.45, 1), dirt, { matrix: T(px, y0, pz) });
+  batch.add(new THREE.SphereGeometry(0.55, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.45, 1), dirt, { matrix: T(px, y0, pz), color: 0x5a4330 });
   const golds: any[] = [];
   const plas: any[] = [];
   for (let i = 0; i < 26; i++) {
@@ -464,7 +463,7 @@ async function buildPlaza(game: Game, world: World, batch: Batch) {
   cart(batch, world, hdx, y, hdz, 0xcfd6dc, 0x9aa4ad, '#d4312b', '#ffd23f', hdSign, atlas);
   for (let i = 0; i < 3; i++) spawnHotDog(game, new THREE.Vector3(hdx - 0.4 + i * 0.4, y + 1.0, hdz), 0.1 * i);
   // benches facing the mural
-  placeInstances(world, bench(), [
+  placeBatched(world, batch, bench(), [
     { x: 23.5, y, z: 17.2, ry: -Math.PI / 2 },
     { x: 23.5, y, z: 20.2, ry: -Math.PI / 2 },
   ], { collider: new THREE.Vector3(1.8, 0.62, 0.55) });
@@ -484,9 +483,9 @@ async function buildPlaza(game: Game, world: World, batch: Batch) {
   for (let i = 0; i < 14; i++) bushes.push({ geo: new THREE.IcosahedronGeometry(0.08, 0), color: r.pick([0xff6fa8, 0xffd23f, 0xb36bff, 0xffffff]), matrix: T(r.range(-1.1, 1.1), r.range(1.2, 1.5), r.range(-0.7, 0.7)) });
   batch.add(mergeColored(bushes), cached('mat:foliage', () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true })), { matrix: T(29.6, y, 19.6) });
   // trees + grates along the east edge
-  placeInstances(world, streetTree(2), [{ x: 31.0, y, z: 14.8, ry: 0.4 }], { collider: new THREE.Vector3(0.36, 3, 0.36) });
-  placeInstances(world, treeGrate(), [{ x: 31.0, y, z: 14.8, ry: 0 }]);
-  placeInstances(world, bikeRack(), [{ x: 19.4, y, z: 10.3, ry: Math.PI / 2 }], { collider: new THREE.Vector3(2.2, 0.9, 0.2) });
+  placeBatched(world, batch, streetTree(2), [{ x: 31.0, y, z: 14.8, ry: 0.4 }], { collider: new THREE.Vector3(0.36, 3, 0.36) });
+  placeBatched(world, batch, treeGrate(), [{ x: 31.0, y, z: 14.8, ry: 0 }]);
+  placeBatched(world, batch, bikeRack(), [{ x: 19.4, y, z: 10.3, ry: Math.PI / 2 }], { collider: new THREE.Vector3(2.2, 0.9, 0.2) });
   // café set
   spawnCafeTable(game, new THREE.Vector3(26.2, y, 16.2));
   spawnCafeChair(game, new THREE.Vector3(25.5, y, 16.2), Math.PI / 2, 0xd4312b);
@@ -526,7 +525,7 @@ async function buildPlaza(game: Game, world: World, batch: Batch) {
   lightPools(game, world, [
     { x: 25, y: y - ROAD.curb, z: 13.5, r: 5.5 },
     { x: 25, y: y - ROAD.curb, z: 18.5, r: 5.5 },
-  ]);
+  ], batch);
 }
 
 /** Vendor cart with a striped canopy and a sign. */
@@ -541,21 +540,8 @@ function cart(batch: Batch, world: World, x: number, y: number, z: number, body:
     { geo: new THREE.BoxGeometry(0.1, 0.05, 1.0), color: 0x6b4a2e, matrix: T(-1.05, 0.9, 0) },
   ]);
   batch.add(geo, trim, { matrix: T(x, y, z) });
-  const canopy = new THREE.ConeGeometry(1.45, 0.55, 4, 1, true).rotateY(Math.PI / 4);
-  const cmat = cached(`mat:canopy:${a}:${b}`, () => {
-    const c = document.createElement('canvas');
-    c.width = 256;
-    c.height = 64;
-    const ctx = c.getContext('2d')!;
-    for (let i = 0; i < 16; i++) {
-      ctx.fillStyle = i % 2 ? b : a;
-      ctx.fillRect(i * 16, 0, 16, 64);
-    }
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    return new THREE.MeshStandardMaterial({ map: t, side: THREE.DoubleSide, roughness: 0.8 });
-  });
-  batch.add(canopy, cmat, { matrix: T(x, y + 2.62, z, 0, 1, 1, 0.75) });
+  const canopy = applyStripeRow(new THREE.ConeGeometry(1.45, 0.55, 4, 1, true).rotateY(Math.PI / 4), a, b, 2, 8);
+  batch.add(canopy, stripeMaterial(), { matrix: T(x, y + 2.62, z, 0, 1, 1, 0.75), color: '#ffffff' });
   batch.add(atlas.quad(sign, 1.5, 0.5), sign.page.glowMat, { matrix: T(x, y + 1.62, z + 0.43), castShadow: false });
   batch.add(atlas.quad(sign, 1.5, 0.5), sign.page.glowMat, { matrix: T(x, y + 1.62, z - 0.43, Math.PI), castShadow: false });
   world.collider(new THREE.Vector3(x, y + 0.55, z), new THREE.Vector3(1.9, 1.1, 1.0));
@@ -576,12 +562,12 @@ function buildAlleyStuff(game: Game, world: World, batch: Batch, water?: WaterSy
   cans.forEach(([x, z], i) => spawnTrashCan(game, new THREE.Vector3(x, y, z), i, 'metal'));
   spawnTrashCan(game, new THREE.Vector3(-13.5, roadY(-13.5, -22.7), -22.7), 0, 'metal');
   spawnTrashCan(game, new THREE.Vector3(12, roadY(12, -22.7), -22.7), 0, 'metal');
-  const bags: [number, number][] = [[-2.2, 24.4], [-1.6, 24.8], [33.2, 22.8], [17.4, 23.1], [-12.8, -23.9], [39.6, -24.0]];
+  const bags: [number, number][] = [[-2.2, 24.4], [-1.6, 24.8], [17.4, 23.1], [-12.8, -23.9]];
   bags.forEach(([x, z], i) => spawnTrashBag(game, new THREE.Vector3(x, roadY(x, z), z), i));
   spawnPallet(game, new THREE.Vector3(-8, y, 23.0), 0.2);
   spawnPallet(game, new THREE.Vector3(-8, y + 0.16, 23.0), 0.5);
   spawnPallet(game, new THREE.Vector3(25, roadY(25, -23), -23.2), 1.2);
-  const boxes: [number, number, number][] = [[20, 22.8, 0.5], [20.6, 23.4, 0.2], [-27, 23.0, 0.9], [44.5, 23.2, 0.1], [8, -23.0, 0.4]];
+  const boxes: [number, number, number][] = [[20, 22.8, 0.5], [20.6, 23.4, 0.2], [44.5, 23.2, 0.1]];
   boxes.forEach(([x, z, r]) => spawnCardboardBox(game, new THREE.Vector3(x, roadY(x, z), z), r));
   spawnCrate(game, new THREE.Vector3(-30, y, 22.9), 0.3);
   spawnCrate(game, new THREE.Vector3(-30.2, y + 0.63, 22.9), 0.8);
@@ -645,7 +631,7 @@ function buildMarket(game: Game, world: World, batch: Batch) {
   const tops = ['#e8563a', '#2a7de1', '#ffd23f', '#3cb371', '#ff7eb6', '#f3efe6'];
   const r = new Rng(21);
   const stalls: [number, number][] = [[-46, -46], [-38, -46], [-30, -46], [-22, -46], [-42, -36], [-26, -36]];
-  const produce = cached('mat:produce', () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }));
+  const produce = cached('mat:foliage', () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, flatShading: true }));
   stalls.forEach(([x, z], i) => {
     const y = roadY(x, z);
     const col = tops[i % tops.length];
@@ -667,7 +653,7 @@ function buildMarket(game: Game, world: World, batch: Batch) {
       for (let k = 0; k < 8; k++) fruit.push({ geo: new THREE.IcosahedronGeometry(0.07, 0), color: fc, matrix: T(bx + r.range(-0.24, 0.24), 1.08, 0.6 + r.range(-0.16, 0.16)) });
     }
     batch.add(mergeColored(fruit), produce, { matrix: T(x, y, z) });
-    spawnCrate(game, new THREE.Vector3(x + 1.9, y, z + 0.9), r.range(0, 1));
+    if (i % 2 === 0) spawnCrate(game, new THREE.Vector3(x + 1.9, y, z + 0.9), r.range(0, 1));
   });
   // banner at the lot entrance (from the north alley)
   const banner = atlas.draw(768, 128, (ctx, w, h) => drawMarketBanner(ctx, w, h));
@@ -696,8 +682,8 @@ function buildParkingLotDecor(game: Game, world: World, batch: Batch) {
     { x: -6, y: roadY(-6, 41.5), z: 41.5, ry: 0 },
     { x: 20, y: roadY(20, 41.5), z: 41.5, ry: Math.PI },
   ];
-  placeInstances(world, historicLamp(game), lamps, { collider: new THREE.Vector3(0.3, 4.6, 0.3) });
-  lightPools(game, world, lamps.map((l) => ({ x: l.x, y: l.y, z: l.z, r: 6 })));
+  placeBatched(world, batch, historicLamp(game), lamps, { collider: new THREE.Vector3(0.3, 4.6, 0.3) });
+  lightPools(game, world, lamps.map((l) => ({ x: l.x, y: l.y, z: l.z, r: 6 })), batch);
 }
 
 // ============================================================================================ street furniture
@@ -734,46 +720,46 @@ function buildStreetFurniture(game: Game, world: World, batch: Batch, rng: Rng) 
       meters.push({ x, y: walkY(x, mz), z: mz, ry: side > 0 ? Math.PI : 0 });
     }
   }
-  placeInstances(world, historicLamp(game), lampXf, { collider: new THREE.Vector3(0.3, 4.6, 0.3), name: 'historicLamps' });
-  lightPools(game, world, pools);
-  treeXf.forEach((xf, i) => placeInstances(world, streetTree(i), xf, { collider: new THREE.Vector3(0.36, 3, 0.36) }));
-  placeInstances(world, treeGrate(), grates);
-  placeInstances(world, parkingMeter(), meters, { collider: new THREE.Vector3(0.2, 1.35, 0.2) });
-  placeInstances(world, hydrant(), [
+  placeBatched(world, batch, historicLamp(game), lampXf, { collider: new THREE.Vector3(0.3, 4.6, 0.3), name: 'historicLamps' });
+  lightPools(game, world, pools, batch);
+  treeXf.forEach((xf, i) => placeBatched(world, batch, streetTree(i), xf, { collider: new THREE.Vector3(0.36, 3, 0.36) }));
+  placeBatched(world, batch, treeGrate(), grates);
+  placeBatched(world, batch, parkingMeter(), meters, { collider: new THREE.Vector3(0.2, 1.35, 0.2) });
+  placeBatched(world, batch, hydrant(), [
     { x: -36.5, y: walkY(-36.5, -6.1), z: -6.1, ry: 0 },
     { x: 11.5, y: walkY(11.5, 6.1), z: 6.1, ry: Math.PI },
     { x: 37.5, y: walkY(37.5, -6.1), z: -6.1, ry: 0 },
   ], { collider: new THREE.Vector3(0.4, 0.8, 0.4) });
-  placeInstances(world, bench(), [
+  placeBatched(world, batch, bench(), [
     { x: -27, y: walkY(-27, -8.4), z: -8.4, ry: 0 },
     { x: 9, y: walkY(9, -8.4), z: -8.4, ry: 0 },
     { x: -36, y: walkY(-36, 8.4), z: 8.4, ry: Math.PI },
     { x: 38, y: walkY(38, 8.4), z: 8.4, ry: Math.PI },
   ], { collider: new THREE.Vector3(1.8, 0.62, 0.55) });
-  placeInstances(world, bikeRack(), [
+  placeBatched(world, batch, bikeRack(), [
     { x: -12, y: walkY(-12, -8.2), z: -8.2, ry: 0 },
     { x: 46.5, y: walkY(46.5, 8.2), z: 8.2, ry: 0 },
   ], { collider: new THREE.Vector3(2.2, 0.9, 0.2) });
   const newsColors = [0xd8412f, 0x2c6fbb, 0xf2c230, 0x2f9e5b];
-  placeInstances(world, newsBox(), [
+  placeBatched(world, batch, newsBox(), [
     { x: -50.5, y: walkY(-50.5, -8.4), z: -8.4, ry: 0, color: newsColors[0] },
     { x: -49.9, y: walkY(-49.9, -8.4), z: -8.4, ry: 0, color: newsColors[1] },
     { x: 49.5, y: walkY(49.5, 8.4), z: 8.4, ry: Math.PI, color: newsColors[2] },
     { x: 50.1, y: walkY(50.1, 8.4), z: 8.4, ry: Math.PI, color: newsColors[3] },
   ], { collider: new THREE.Vector3(0.52, 1.1, 0.46) });
-  placeInstances(world, planter(2), [
+  placeBatched(world, batch, planter(2), [
     { x: -45, y: walkY(-45, 8.3), z: 8.3, ry: 0 },
     { x: 1, y: walkY(1, -8.3), z: -8.3, ry: 0 },
   ], { collider: new THREE.Vector3(1.6, 0.62, 0.8) });
   // trash cans (physics)
-  const cans: [number, number][] = [[-40, -6.4], [-10, -6.4], [20, -6.4], [44, -6.4], [-33, 6.4], [-4, 6.4], [36, 6.4]];
+  const cans: [number, number][] = [[-40, -6.4], [-10, -6.4], [44, -6.4], [-33, 6.4], [36, 6.4]];
   for (const [x, z] of cans) spawnTrashCan(game, new THREE.Vector3(x, walkY(x, z), z), rng.range(0, 6));
   // sandwich boards outside shops
   const boards = BOARD_JOKES.map((l, i) => atlas.draw(200, 280, (ctx, w, h) => drawBoard(ctx, w, h, l, i)));
   const spots: [number, number, number][] = [[46, -7.6, 0.2], [-27.5, -7.6, -0.1], [-15, -7.6, 0.15], [-24, 7.6, Math.PI + 0.1], [5.5, 7.6, Math.PI - 0.2], [-8, 7.6, Math.PI]];
   spots.forEach(([x, z, r], i) => spawnSandwichBoard(game, atlas, boards[i % boards.length], new THREE.Vector3(x, walkY(x, z), z), r));
   // café tables outside Starbrews & Bean Me Up
-  for (const [x, z] of [[50, -7.9], [44, -7.9], [-29, -7.9]] as [number, number][]) {
+  for (const [x, z] of [[48, -7.9], [-29, -7.9]] as [number, number][]) {
     const y = walkY(x, z);
     spawnCafeTable(game, new THREE.Vector3(x, y, z));
     spawnCafeChair(game, new THREE.Vector3(x - 0.75, y, z), Math.PI / 2);
@@ -809,7 +795,7 @@ function buildStreetFurniture(game: Game, world: World, batch: Batch, rng: Rng) 
 const CAR_MODELS = ['sedan', 'taxi', 'suv', 'hatchback-sports', 'van', 'suv-luxury', 'sedan-sports', 'truck'];
 const CAR_SCALE = 1.45;
 
-async function parkCars(game: Game, world: World, rng: Rng) {
+async function parkCars(game: Game, world: World, rng: Rng, batch: Batch) {
   const spots: { x: number; z: number; ry: number }[] = [];
   // Ballard Ave parking strips (cars face the direction of travel)
   for (const x of [-40.5, -34, -21, -14.5, -1.5, 5, 11.5, 36.5]) if (rng.chance(0.85)) spots.push({ x, z: -4.45, ry: -Math.PI / 2 });
@@ -824,10 +810,14 @@ async function parkCars(game: Game, world: World, rng: Rng) {
     if (!arr) byModel.set(m, (arr = []));
     arr.push({ x: s.x, y: roadY(s.x, s.z), z: s.z, ry: s.ry, s: CAR_SCALE });
   }
+  // every car-kit model shares one colormap layout, so all parked cars use the first model's material
+  let carMat: THREE.Material | null = null;
   for (const [m, xfs] of byModel) {
     const model = await loadMerged(game, `assets/models/kenney/car-kit/${m}.glb`);
     if (!model) continue;
-    placeInstances(world, model.parts.map((p) => ({ geo: p.geo, mat: p.mat })), xfs, { name: 'parkedCars' });
+    carMat ??= model.parts[0].mat;
+    const mat = carMat;
+    placeBatched(world, batch, model.parts.map((p) => ({ geo: p.geo, mat })), xfs);
     const size = model.size.clone().multiplyScalar(CAR_SCALE);
     for (const x of xfs) {
       world.collider(new THREE.Vector3(x.x, x.y + size.y * 0.38, x.z), new THREE.Vector3(size.x * 0.95, size.y * 0.76, size.z * 0.96), x.ry);

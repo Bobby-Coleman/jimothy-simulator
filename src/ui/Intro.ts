@@ -100,9 +100,8 @@ export class Intro {
       h('div', { class: 'vf-date', text: 'JUL 13 2026 · 7:42 PM' }),
       h('div', { class: 'vf-corners' }, h('i'), h('i'), h('i'), h('i')),
       h('div', { class: 'vf-focus' }),
-      this.zoomEl,
       h('div', { class: 'vf-caption' }, this.capEl),
-      h('div', { class: 'vf-bottom' }, h('span', { class: 'vf-mode', text: 'VIDEO' }), h('span', { class: 'vf-shutter' }, h('i'))),
+      h('div', { class: 'vf-bottom' }, this.zoomEl, h('span', { class: 'vf-mode', text: 'VIDEO' }), h('span', { class: 'vf-shutter' }, h('i'))),
     );
     this.vf = h('div', { class: 'vf' }, h('div', { class: 'vf-side' }), this.frameEl, h('div', { class: 'vf-side' }));
     this.card = h('div', { class: 'intro-card', html: logoHtml('logo-card') });
@@ -194,16 +193,12 @@ export class Intro {
     const p = game.get<any>('player');
     // Wall-clock timeline (frame dt is clamped by the engine, which would slow the intro on slow machines).
     const now = performance.now();
-    const dt = Math.min(0.25, Math.max(0, (now - this.lastNow) / 1000));
+    const dt = Math.min(0.5, Math.max(0, (now - this.lastNow) / 1000));
     this.lastNow = now;
     this.t += dt;
     const t = this.t;
 
-    // --- skip input
-    if (game.input.pressed('pause')) {
-      this.skip();
-      return;
-    }
+    // --- skip input (Esc / Start are routed here by the UI; this handles click/touch-and-hold)
     if (this.holdStart >= 0) {
       const held = (performance.now() - this.holdStart) / 1000;
       this.skipEl.classList.add('holding');
@@ -299,7 +294,7 @@ export class Intro {
   }
 
   /** Phone POV → blends into the gameplay framing after the title card slam. */
-  private camera(cam: THREE.PerspectiveCamera, dt: number) {
+  private camera(cam: THREE.PerspectiveCamera, _dt: number) {
     const game = this.api.game;
     const p = game.get<any>('player');
     const rig = game.get<CameraRig>('camera');

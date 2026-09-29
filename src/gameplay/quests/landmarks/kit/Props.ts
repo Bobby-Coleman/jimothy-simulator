@@ -165,7 +165,7 @@ export function glowSprite(color = 0xffd84a, size = 0.8): THREE.Sprite {
 export function landingRing(): THREE.Mesh {
   const m = new THREE.Mesh(
     once('ringGeo', () => new THREE.RingGeometry(0.42, 0.62, 28).rotateX(-Math.PI / 2)),
-    new THREE.MeshBasicMaterial({ color: 0xff8a3a, transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2 }),
+    new THREE.MeshBasicMaterial({ color: 0xffa060, transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2 }),
   );
   m.renderOrder = 2;
   return m;
@@ -234,8 +234,11 @@ export function raceArch(world: World, origin: THREE.Vector3, yaw: number, title
 /** Traffic cone (visual only) to outline the fallback race track. */
 export function cone(): THREE.Group {
   const g = new THREE.Group();
-  g.add(mesh(once('coneGeo', () => new THREE.ConeGeometry(0.16, 0.5, 10)), stdMat(0xff6a1a, { roughness: 0.6 }), 0, 0.27, 0));
-  g.add(mesh(once('coneBase', () => new THREE.BoxGeometry(0.36, 0.04, 0.36)), stdMat(0xff6a1a, { roughness: 0.6 }), 0, 0.02, 0));
+  // (kept a little desaturated: the post chain's saturation boost turns pure orange black)
+  const orange = stdMat(0xff8c5a, { roughness: 0.6 });
+  g.add(mesh(once('coneGeo', () => new THREE.ConeGeometry(0.16, 0.5, 10)), orange, 0, 0.27, 0));
+  g.add(mesh(once('coneBase', () => new THREE.BoxGeometry(0.36, 0.04, 0.36)), orange, 0, 0.02, 0));
+  g.add(mesh(once('coneStripe', () => new THREE.CylinderGeometry(0.075, 0.105, 0.09, 10)), stdMat(0xf4f4f4, { roughness: 0.5 }), 0, 0.3, 0));
   return g;
 }
 

@@ -1,4 +1,5 @@
 import { h } from './dom';
+import { ICONS } from './icons';
 import { fillTokens } from './glyphs';
 import { renderObjectives } from './ObjectivesView';
 import type { UiCtx } from './types';
@@ -25,7 +26,12 @@ export class ObjectivesDrawer {
     this.el = h(
       'aside',
       { class: 'drawer', 'aria-label': 'Instincts' },
-      h('div', { class: 'drawer-head' }, h('span', { class: 'drawer-title ol', text: 'Instincts' })),
+      h(
+        'div',
+        { class: 'drawer-head' },
+        h('span', { class: 'drawer-title ol', text: 'Instincts' }),
+        h('button', { class: 'drawer-x', 'aria-label': 'Close', html: ICONS.close, onclick: () => this.hide() }),
+      ),
       this.body,
       this.foot,
     );
@@ -82,7 +88,7 @@ export class ObjectivesDrawer {
     }
     if (this.ctx.device !== this.lastDevice) {
       this.lastDevice = this.ctx.device;
-      this.foot.innerHTML = fillTokens(this.ctx.device === 'touch' ? 'Tap the list button to close' : '{objectives} close  ·  Wheel scrolls', this.ctx.device);
+      this.foot.innerHTML = fillTokens(this.ctx.device === 'touch' ? 'Swipe to scroll · tap × to close' : '{objectives} close  ·  Wheel scrolls', this.ctx.device);
     }
   }
 }

@@ -6,6 +6,7 @@ import type { Entity } from '../../core/Entities';
 import { RAPIER } from '../../core/Physics';
 import { spawnProp, destroyProp } from '../Props';
 import type { HoldingKind } from './types';
+import { safeColor } from './color';
 
 /**
  * Items humans carry around: phone, coffee, sandwich, pizza, ice cream, cotton candy.
@@ -33,7 +34,7 @@ class ItemBuilder {
     if (m) g.applyMatrix4(m);
     const n = g.getAttribute('position').count;
     const col = new Float32Array(n * 3);
-    _c.setHex(color);
+    safeColor(color, _c);
     const k = 1 + emissive;
     for (let i = 0; i < n; i++) {
       col[i * 3] = _c.r * k;
@@ -220,7 +221,10 @@ export const GRIP: Record<HoldingKind, { offset: THREE.Vector3 }> = {
   cottoncandy: { offset: new THREE.Vector3(0, -0.02, 0.03) },
 };
 
-/** Put an item entity into an NPC hand: disable physics, parent the visual to `hand`. */
+/**
+ * Put an item entity into an NPC hand: physics disabled, visual stays a direct child of the scene (the engine's
+ * distance culler reads obj.position as a world position) and is posed from the hand each frame by the NPC.
+ */
 export function attachItem(game: Game, item: Entity, hand: THREE.Object3D) {
   const body = item.body;
   const obj = item.object;
@@ -229,11 +233,24 @@ export function attachItem(game: Game, item: Entity, hand: THREE.Object3D) {
   body.setLinvel({ x: 0, y: 0, z: 0 }, false);
   body.setAngvel({ x: 0, y: 0, z: 0 }, false);
   body.setEnabled(false);
-  hand.add(obj);
-  const kind = item.data.itemKind as HoldingKind;
-  obj.position.copy(GRIP[kind]?.offset ?? new THREE.Vector3());
-  obj.quaternion.identity();
+  if (obj.parent !== game.scene) game.scene.attach(obj);
   item.data.heldByNpc = true;
+  poseItem(item, hand, null);
+}
+
+const _hq = new THREE.Quaternion();
+const _off = new THREE.Vector3();
+
+/** Place a held item at the hand, with world orientation `worldQuat` (null = follow the hand's orientation). */
+export function poseItem(item: Entity, hand: THREE.Object3D, worldQuat: THREE.Quaternion | null) {
+  const obj = item.object;
+  if (!obj) return;
+  hand.getWorldPosition(obj.position);
+  hand.getWorldQuaternion(_hq);
+  const kind = item.data.itemKind as HoldingKind;
+  _off.copy(GRIP[kind]?.offset ?? _off.set(0, 0, 0)).applyQuaternion(_hq);
+  obj.position.add(_off);
+  obj.quaternion.copy(worldQuat ?? _hq);
 }
 
 /** Release an item from an NPC hand at its current world transform, with an initial velocity. */
@@ -242,12 +259,13 @@ export function detachItem(game: Game, item: Entity, velocity?: THREE.Vector3, s
   const obj = item.object;
   item.data.heldByNpc = false;
   if (!body || !obj || !item.alive) return;
-  obj.updateMatrixWorld(true);
-  const p = obj.getWorldPosition(new THREE.Vector3());
-  const q = obj.getWorldQuaternion(new THREE.Quaternion());
-  game.scene.attach(obj);
-  obj.position.copy(p);
-  obj.quaternion.copy(q);
+  if (obj.parent !== game.scene) game.scene.attach(obj);
+  if (obj.userData.npcHidden) {
+    obj.visible = true;
+    obj.userData.npcHidden = false;
+  }
+  const p = obj.position;
+  const q = obj.quaternion;
   body.setEnabled(true);
   body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
   body.setTranslation({ x: p.x, y: p.y, z: p.z }, true);

@@ -35,6 +35,13 @@ export class SouthSystem implements System {
   init(game: Game) {
     this.game = game;
     this.st = southState(game);
+    // Everything we animate must stay out of the StaticBatcher's merge.
+    const st = this.st;
+    const flag = (o: THREE.Object3D) => o.traverse((c) => (c.userData.noMerge = true));
+    for (const b of st.bobbers) flag(b.obj);
+    for (const s of st.swayers) flag(s.obj);
+    for (const s of st.spinners) flag(s.obj);
+    for (const w of st.wobblers) flag(w.obj);
   }
 
   update(dt: number, game: Game) {

@@ -32,6 +32,7 @@ import {
   rng,
   pick,
   poi,
+  refreshQueries,
   type MatSet,
 } from './kit';
 import { buildHouse, SIDING, ROOFS, type HouseInfo, type HouseStyle } from './house';
@@ -170,9 +171,11 @@ export const ResidentialHills: ZoneBuilder = {
         b.add('concrete', ribbon(world, [new THREE.Vector2(wx0, sf.z), new THREE.Vector2(sf.x + row.dir * 0.15, sf.z)], -0.65, 0.65, 0.06, { tile: 2.2, across: 1 }), null, 0xd6d1c7, {
           uvTile: 0,
         });
-        // mailbox by the walk
-        const mbx = row.street === 'tumble' ? Math.sign(row.frontX) * (WALK_OUT + 0.45) : Math.sign(row.frontX) * 52.6;
-        P.spawn(game, P.mailbox(mats, pick(r, [0x2d4a7a, 0x222222, 0x8b2f2f, 0x2f6b4a])), mbx, H(mbx, sf.z + 1.1), sf.z + 1.1, row.face);
+        // mailbox by the walk (not every house has one)
+        if (r() < 0.6 || isDanny || isGrandma) {
+          const mbx = row.street === 'tumble' ? Math.sign(row.frontX) * (WALK_OUT + 0.45) : Math.sign(row.frontX) * 52.6;
+          P.spawn(game, P.mailbox(mats, pick(r, [0x2d4a7a, 0x222222, 0x8b2f2f, 0x2f6b4a])), mbx, H(mbx, sf.z + 1.1), sf.z + 1.1, row.face);
+        }
         if (isDanny) dannysLawn(game, world, mats, b, water, info);
         if (isGrandma) grandmasPorch(game, world, mats, b, info);
         if (isKit) {
@@ -213,20 +216,20 @@ export const ResidentialHills: ZoneBuilder = {
     // ================================================================ yards, fences, backyard fun
     const fence = new FenceBuilder(game, world, b);
     for (const s of [-1, 1]) {
-      fence.line(s * (STAIR_X - 2), LOT_Z0 - 0.5, s * (STAIR_X - 2), LOT_Z1 + 0.5, 1.8, 0x9b7653);
-      fence.line(s * (STAIR_X + 2), LOT_Z0 - 0.5, s * (STAIR_X + 2), LOT_Z1 + 0.5, 1.8, 0x8a6a4c);
+      fence.line(s * (STAIR_X - 2), LOT_Z0 - 0.5, s * (STAIR_X - 2), LOT_Z1 + 0.5, 1.8, 0xe8d8c8);
+      fence.line(s * (STAIR_X + 2), LOT_Z0 - 0.5, s * (STAIR_X + 2), LOT_Z1 + 0.5, 1.8, 0xd6c2ae);
     }
     for (const h of houses) {
       const row = ROWS[h.row];
       const zs = [lotSouth(h.lot)];
       if (h.lot === LOTS - 1) zs.push(LOT_Z1);
-      for (const z of zs) fence.line(h.backWall, z, row.backX, z, 1.8, 0x9b7653);
+      for (const z of zs) fence.line(h.backWall, z, row.backX, z, 1.8, 0xe8d8c8);
       // return fences from the back corners of the house to the lot lines (gate gap on the north side)
       const fx = h.backWall - row.dir * 0.3;
       const hz = h.info.frame.z;
       const hw = h.info.w / 2;
-      fence.line(fx, hz + hw, fx, lotSouth(h.lot) - 0.1, 1.8, 0x9b7653);
-      fence.line(fx, hz - hw, fx, lotNorth(h.lot) + 0.1, 1.8, 0x9b7653, 1.1);
+      fence.line(fx, hz + hw, fx, lotSouth(h.lot) - 0.1, 1.8, 0xe8d8c8);
+      fence.line(fx, hz - hw, fx, lotNorth(h.lot) + 0.1, 1.8, 0xe8d8c8, 1.1);
     }
     type Feature = 'pool' | 'tramp' | 'bbq' | 'garden';
     const yard: Record<string, Feature> = {
@@ -247,6 +250,8 @@ export const ResidentialHills: ZoneBuilder = {
       '3:3': 'garden',
       '3:4': 'tramp',
     };
+    const rhodos: [number, number][] = [];
+    const shrubs: [number, number][] = [];
     for (const h of houses) {
       const row = ROWS[h.row];
       const x0 = h.backWall - row.dir * 0.35,
@@ -263,14 +268,15 @@ export const ResidentialHills: ZoneBuilder = {
       else if (feat === 'garden') gardenBeds(game, world, mats, b, cx, cz, depth, r);
       // gnomes & shrubs in front yards
       const fx = row.frontX + row.dir * 2.6;
-      if (r() < 0.6) {
+      if (r() < 0.45) {
         const gz = h.info.frame.z + (r() < 0.5 ? -1 : 1) * (2.2 + r() * 1.5);
         P.spawn(game, P.gnome(mats, pick(r, [0xd8342c, 0x2f6fb5, 0xe8b923, 0x3d8b3d]), pick(r, [0x2f6fb5, 0x7b3fa0, 0x3d8b3d, 0xd8342c])), fx, H(fx, gz), gz, row.face + (r() - 0.5));
       }
-      const shrubs: [number, number][] = [];
-      for (const s of [-1, 1]) shrubs.push([row.frontX + row.dir * 0.8, h.info.frame.z + s * (h.info.w / 2 - 0.9)]);
-      plantTrees(game, world, mats, r() < 0.5 ? 'rhodo' : 'shrub', shrubs, { seed: h.row * 10 + h.lot, collider: false, scale: [0.9, 1.3] });
+      const list = r() < 0.5 ? rhodos : shrubs;
+      for (const s of [-1, 1]) list.push([row.frontX + row.dir * 0.8, h.info.frame.z + s * (h.info.w / 2 - 0.9)]);
     }
+    plantTrees(game, world, mats, 'rhodo', rhodos, { seed: 51, collider: false, scale: [0.9, 1.3] });
+    plantTrees(game, world, mats, 'shrub', shrubs, { seed: 52, collider: false, scale: [0.9, 1.3] });
     // crest houses' backyards (between the back wall and the back fence at z=-178.5)
     const BACK_FENCE = -178.5;
     top.forEach((t, i) => {
@@ -282,9 +288,9 @@ export const ResidentialHills: ZoneBuilder = {
       else if (i === 1) buildPool(game, world, mats, b, water, t.x, cz, 11, depth - 0.3, r);
       else if (i === 2) bbqPatio(game, world, mats, b, t.x, cz, 1, r);
       else gardenBeds(game, world, mats, b, t.x, cz, 7, r);
-      fence.line(t.x - 8.3, t.backWall, t.x - 8.3, BACK_FENCE, 1.8, 0x9b7653);
-      fence.line(t.x + 8.3, t.backWall, t.x + 8.3, BACK_FENCE, 1.8, 0x9b7653);
-      fence.line(t.x - 8.3, BACK_FENCE, t.x + 8.3, BACK_FENCE, 1.8, 0x8a6a4c);
+      fence.line(t.x - 8.3, t.backWall, t.x - 8.3, BACK_FENCE, 1.8, 0xe8d8c8);
+      fence.line(t.x + 8.3, t.backWall, t.x + 8.3, BACK_FENCE, 1.8, 0xe8d8c8);
+      fence.line(t.x - 8.3, BACK_FENCE, t.x + 8.3, BACK_FENCE, 1.8, 0xd6c2ae);
     });
 
     // ---- bins at the curb on Tumble St (it's garbage day), cones at the bottom (bowling!)
@@ -410,6 +416,7 @@ export const ResidentialHills: ZoneBuilder = {
     );
 
     b.build(world.staticRoot, mats);
+    refreshQueries(game);
   },
 };
 
@@ -457,9 +464,9 @@ class FenceBuilder {
       const y0 = g - 0.25;
       const topY = gc + h;
       heights.push(topY);
-      this.b.box('wood', cx, (y0 + topY) / 2, cz, 0.06, topY - y0, pl, color, ry);
-      this.b.box('wood', cx, topY + 0.04, cz, 0.14, 0.08, pl + 0.02, cap, ry);
-      this.b.box('wood', x0 + dx * pl * i, (y0 + topY + 0.1) / 2, z0 + dz * pl * i, 0.12, topY + 0.1 - y0, 0.12, 0x7a5c40, ry);
+      this.b.box('cedar', cx, (y0 + topY) / 2, cz, 0.06, topY - y0, pl, color, ry);
+      this.b.box('cedar', cx, topY + 0.04, cz, 0.14, 0.08, pl + 0.02, cap, ry);
+      this.b.box('cedar', x0 + dx * pl * i, (y0 + topY + 0.1) / 2, z0 + dz * pl * i, 0.12, topY + 0.1 - y0, 0.12, 0xb8a08a, ry);
       this.world.collider(new THREE.Vector3(cx, (y0 + topY) / 2, cz), new THREE.Vector3(0.1, topY - y0, pl), ry);
     }
     this.tops.push({ x0, z0, dx, dz, len, pl, heights });
@@ -492,7 +499,7 @@ function buildPool(game: Game, world: World, mats: MatSet, b: Batch, water: Wate
   const surf = floorY + 1.05;
   const deck = surf + 0.14;
   const base = fp.min - 0.3;
-  const deckCol = pick(r, [0x9c7b5b, 0x8f7a66, 0xa88a68]);
+  const deckCol = pick(r, [0xf2e6da, 0xe6d6c6, 0xffffff]);
   const fx = (sx - pwx) / 2,
     fz = (sz - pwz) / 2;
   const parts: [number, number, number, number][] = [
@@ -502,7 +509,7 @@ function buildPool(game: Game, world: World, mats: MatSet, b: Batch, water: Wate
     [cx, cz + sz / 2 - fz / 2, pwx, fz],
   ];
   for (const [x, z, w, l] of parts) {
-    b.box('wood', x, (base + deck) / 2, z, w, deck - base, l, deckCol);
+    b.box('cedar', x, (base + deck) / 2, z, w, deck - base, l, deckCol);
     world.collider(new THREE.Vector3(x, (base + deck) / 2, z), new THREE.Vector3(w, deck - base, l));
   }
   // pool shell: floor + tiled inner walls + white coping
@@ -542,8 +549,8 @@ function buildPool(game: Game, world: World, mats: MatSet, b: Batch, water: Wate
     const px = cx + ux * off,
       pz = cz + uz * off;
     const gy = world.heightAt(px, pz);
-    if (ux !== 0) b.box('wood', px, (topY + gy - 0.2) / 2, pz, run + 0.02, topY - gy + 0.2, 1.4, deckCol);
-    else b.box('wood', px, (topY + gy - 0.2) / 2, pz, 1.4, topY - gy + 0.2, run + 0.02, deckCol);
+    if (ux !== 0) b.box('cedar', px, (topY + gy - 0.2) / 2, pz, run + 0.02, topY - gy + 0.2, 1.4, deckCol);
+    else b.box('cedar', px, (topY + gy - 0.2) / 2, pz, 1.4, topY - gy + 0.2, run + 0.02, deckCol);
   }
   const len = Math.hypot(runTot, rise);
   const ang = Math.atan2(rise, runTot);
@@ -593,6 +600,10 @@ function gardenBeds(game: Game, world: World, mats: MatSet, b: Batch, cx: number
   P.spawn(game, P.gnome(mats, 0x3d8b3d, 0xd8342c), cx + 1.1, world.heightAt(cx + 1.1, cz + 5), cz + 5, r() * 6);
 }
 
+let _sprayMat: THREE.MeshBasicMaterial | null = null;
+const sprayMat = () =>
+  (_sprayMat ??= new THREE.MeshBasicMaterial({ color: 0xcfefff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+
 /** Lawn sprinkler: shallow 'sprinkler' water volume + rotating spray arcs + a wet patch. */
 function sprinkler(game: Game, world: World, mats: MatSet, water: WaterSystem, x: number, z: number) {
   const y = world.heightAt(x, z);
@@ -609,9 +620,7 @@ function sprinkler(game: Game, world: World, mats: MatSet, water: WaterSystem, x
   wet.position.set(x, y + 0.04, z);
   wet.receiveShadow = true;
   world.staticRoot.add(wet);
-  const spray = new THREE.Group();
-  spray.position.set(x, y + 0.14, z);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xcfefff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
+  const sb = new Batch(1e9);
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2;
     const reach = radius * (0.75 + i * 0.1);
@@ -620,14 +629,13 @@ function sprinkler(game: Game, world: World, mats: MatSet, water: WaterSystem, x
       const t = k / 10;
       pts.push(new THREE.Vector3(Math.cos(a) * reach * t, 1.4 * 4 * t * (1 - t) * (0.8 + i * 0.1), Math.sin(a) * reach * t));
     }
-    spray.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.035, 5), mat));
-    for (let k = 3; k <= 9; k += 2) {
-      const d = new THREE.Mesh(GEO.ico0, mat);
-      d.scale.setScalar(0.08);
-      d.position.copy(pts[k]).add(new THREE.Vector3(0, -0.12, 0));
-      spray.add(d);
-    }
+    sb.add('w', new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.035, 5), null, 0xffffff, { uvTile: 0 });
+    for (let k = 3; k <= 9; k += 2) sb.add('w', GEO.ico0, trs(pts[k].x, pts[k].y - 0.12, pts[k].z, 0.08, 0.08, 0.08), 0xffffff, { uvTile: 0 });
   }
+  const spray = sb.buildSingle(sprayMat());
+  spray.castShadow = false;
+  spray.position.set(x, y + 0.14, z);
+  spray.userData.noMerge = true;
   world.staticRoot.add(spray);
   addAnimator(game, (dt, _t, _n, g) => {
     const p = g.get<any>('player');
@@ -799,7 +807,7 @@ function furryPark(game: Game, world: World, mats: MatSet, b: Batch, zCres: numb
     fitText(ctx, 'Viewpoint  •  Est. Jimothy Summer 2026', w / 2, h * 0.72, w - 70, 30, "'Nunito', sans-serif", '800');
   });
   const sy = world.heightAt(ox - 9.5, zs - 0.9);
-  signPanel(world, tex, ox - 9.5, sy + 1.2, zs - 0.9, 2.4, 1.2, 0, { back: 0x4a3220, depth: 0.12 });
+  signPanel(world, tex, ox - 9.5, sy + 1.2, zs - 0.9, 2.4, 1.2, 0, { back: 0x4a3220, depth: 0.12, batch: b });
   b.box('wood', ox - 10.6, sy + 0.6, zs - 0.9, 0.14, 1.2, 0.14, 0x4a3220);
   b.box('wood', ox - 8.4, sy + 0.6, zs - 0.9, 0.14, 1.2, 0.14, 0x4a3220);
   // "Round Form #7" bronze sculpture of a very round raccoon
@@ -895,7 +903,7 @@ function dannysLawn(game: Game, world: World, mats: MatSet, b: Batch, water: Wat
   const sx = x0 - 0.15,
     sz = zS - 1.4;
   const sy = world.heightAt(sx, sz);
-  signPanel(world, tex, sx, sy + 0.95, sz, 1.0, 0.62, Math.PI / 2, { back: 0xffffff, depth: 0.04, collide: false });
+  signPanel(world, tex, sx, sy + 0.95, sz, 1.0, 0.62, Math.PI / 2, { back: 0xffffff, depth: 0.04, collide: false, batch: b });
   b.box('wood', sx, sy + 0.4, sz, 0.06, 0.8, 0.06, 0x7a5c40);
   sprinkler(game, world, mats, water, cx + 0.8, pz + (pz > zc ? 1.5 : -1.5));
 }
@@ -905,34 +913,15 @@ function grandmasPorch(game: Game, world: World, mats: MatSet, b: Batch, info: H
   const pz = info.d / 2 + info.porch.d / 2;
   const px = info.porch.px;
   const left = px - info.porch.w / 2;
-  // rocking chair (rocks gently; faster at night when Grandma's knitting)
-  const cb = new Batch(1e9);
-  const wood = 0x7a4a2a;
-  cb.box('p', 0, 0.45, 0, 0.6, 0.07, 0.55, wood);
-  cb.box('p', 0, 0.95, -0.27, 0.6, 0.9, 0.06, wood, 0, -0.12);
-  for (const s of [-1, 1]) {
-    cb.box('p', s * 0.28, 0.25, 0.2, 0.05, 0.42, 0.05, wood);
-    cb.box('p', s * 0.28, 0.25, -0.2, 0.05, 0.42, 0.05, wood);
-    cb.box('p', s * 0.3, 0.64, 0.02, 0.07, 0.05, 0.55, wood);
-    cb.add('p', new THREE.TorusGeometry(0.9, 0.035, 5, 24, 0.9), trs(s * 0.28, 0.93, 0, 1, 1, 1, Math.PI / 2, 0, Math.PI + 1.12), wood, { uvTile: 0 });
-  }
-  cb.box('p', 0, 0.52, 0.02, 0.5, 0.06, 0.45, 0xd8465f);
-  const chair = cb.buildSingle(mats.plain);
-  const cp = f.p(left + 1.1, 0, pz - 0.2);
-  chair.position.copy(cp);
-  chair.rotation.y = f.rotY + 0.4;
-  world.staticRoot.add(chair);
-  f.collider(game, left + 1.1, 0.5, pz - 0.2, 0.65, 1.0, 0.65);
-  addAnimator(game, (_dt, t, night) => {
-    chair.rotation.x = Math.sin(t * (1.2 + night)) * 0.09;
-  });
-  // side table with the snack bowl
-  const tx = left + 2.2;
-  f.box(b, 'wood', tx, 0.55, pz - 0.5, 0.6, 0.06, 0.6, 0x8b5e3c);
-  f.box(b, 'wood', tx, 0.27, pz - 0.5, 0.08, 0.54, 0.08, 0x6b4a2c);
-  f.geo(b, 'gloss', GEO.cyl, tx, 0.66, pz - 0.5, 0.36, 0.12, 0.36, 0x4f7fc9);
-  f.geo(b, 'gloss', GEO.sphere, tx, 0.7, pz - 0.5, 0.3, 0.08, 0.3, 0xe8c36b);
-  f.collider(game, tx, 0.35, pz - 0.5, 0.6, 0.7, 0.6);
+  const right = px + info.porch.w / 2;
+  // Grandma's rocking chair + night-time snack bowl are placed by the heart quest at POI grandmaPorch:
+  // keep that end of the porch clear and put the POI on the floor, closer to the house wall than to the railing
+  // (the quest turns the chair away from the nearest wall).
+  const gp = f.p(right - 1.5, 0.02, info.d / 2 + 0.8);
+  poi(world, 'grandmaPorch', gp.x, gp.y, gp.z);
+  // a little wall lantern + wind chime by her spot
+  f.box(b, 'lamp', right - 1.5, 2.05, info.d / 2 + 0.1, 0.18, 0.26, 0.14, 0xffe9b8);
+  for (let i = 0; i < 4; i++) f.geo(b, 'metal', GEO.cyl8, right - 0.7 + (i - 1.5) * 0.08, 2.05 - (i % 2) * 0.12, info.d / 2 + 2.0, 0.025, 0.4, 0.025, 0xc9d3dd);
   // knitting basket + yarn balls
   const kx = left + 0.9;
   f.geo(b, 'wood', GEO.cyl, kx + 0.4, 0.2, pz + 0.6, 0.55, 0.4, 0.55, 0xb08050);
@@ -972,8 +961,7 @@ function grandmasPorch(game: Game, world: World, mats: MatSet, b: Batch, info: H
     f.geo(b, 'plain', GEO.cyl, x, 0.2, info.d / 2 + info.porch.d - 0.75, 0.45, 0.4, 0.45, 0xb8643c);
     f.geo(b, 'leaves', GEO.ico, x, 0.6, info.d / 2 + info.porch.d - 0.75, 0.6, 0.5, 0.6, 0xe0568f);
   }
-  const gp = f.p(px - 0.2, 0.3, pz);
-  poi(world, 'grandmaPorch', gp.x, gp.y, gp.z);
+  void pz;
 }
 
 // ------------------------------------------------------------------ signs
@@ -997,12 +985,10 @@ function streetSign(world: World, b: Batch, x: number, z: number, a: string, c: 
       fitText(ctx, text, w / 2, h / 2 + 3, w - 40, 70, "'Lilita One', sans-serif");
     });
   const ta = mk(a);
-  signPanel(world, ta, x, y + 3.05, z, 1.6, 0.35, Math.PI / 2, { back: 0x1f6b3a, depth: 0.04, collide: false });
-  signPanel(world, ta, x, y + 3.05, z, 1.6, 0.35, -Math.PI / 2, { back: 0x1f6b3a, depth: 0.04, collide: false });
+  signPanel(world, ta, x, y + 3.05, z, 1.6, 0.35, Math.PI / 2, { back: 0x1f6b3a, depth: 0.04, collide: false, batch: b, doubleSided: true });
   if (c) {
     const tc = mk(c);
-    signPanel(world, tc, x, y + 2.68, z, 1.6, 0.35, 0, { back: 0x1f6b3a, depth: 0.04, collide: false });
-    signPanel(world, tc, x, y + 2.68, z, 1.6, 0.35, Math.PI, { back: 0x1f6b3a, depth: 0.04, collide: false });
+    signPanel(world, tc, x, y + 2.68, z, 1.6, 0.35, 0, { back: 0x1f6b3a, depth: 0.04, collide: false, batch: b, doubleSided: true });
   }
 }
 
@@ -1054,7 +1040,7 @@ function warningSign(world: World, b: Batch, x: number, z: number, ry: number) {
     ctx.textAlign = 'center';
     fitText(ctx, '21% GRADE', w / 2, h / 2 + 96, 230, 48, "'Lilita One', sans-serif");
   });
-  signPanel(world, tex, x, y + 2.35, z, 1.2, 1.2, Math.PI + ry, { back: 0x6d767a, depth: 0.03, collide: false });
+  signPanel(world, tex, x, y + 2.35, z, 1.2, 1.2, Math.PI + ry, { back: 0x6d767a, depth: 0.03, collide: false, batch: b });
 }
 
 function slowSign(world: World, b: Batch, x: number, z: number, ry: number) {
@@ -1075,7 +1061,7 @@ function slowSign(world: World, b: Batch, x: number, z: number, ry: number) {
     fitText(ctx, 'ROUND BOYS', w / 2, h * 0.52, w - 70, 70, "'Lilita One', sans-serif");
     fitText(ctx, 'AT PLAY', w / 2, h * 0.76, w - 90, 70, "'Lilita One', sans-serif");
   });
-  signPanel(world, tex, x, y + 2.3, z, 1.05, 0.82, ry, { back: 0x6d767a, depth: 0.03, collide: false });
+  signPanel(world, tex, x, y + 2.3, z, 1.05, 0.82, ry, { back: 0x6d767a, depth: 0.03, collide: false, batch: b });
 }
 
 /** Radar speed sign: shows Jimothy's speed as he rolls down Tumble St (faces uphill). */
@@ -1111,8 +1097,8 @@ function radarSign(game: Game, world: World, b: Batch, x: number, z: number) {
     tex.needsUpdate = true;
   };
   draw(0);
-  const mesh = signPanel(world, tex, x, y + 2.6, z, 0.9, 1.12, Math.PI, { back: 0x333333, depth: 0.1, collide: false });
-  const front = (mesh.material as THREE.MeshStandardMaterial[])[4];
+  const mesh = signPanel(world, tex, x, y + 2.6, z, 0.9, 1.12, Math.PI, { back: 0x333333, depth: 0.1, collide: false, batch: b });
+  const front = mesh.material as THREE.MeshStandardMaterial;
   front.emissive = new THREE.Color(0xffffff);
   front.emissiveMap = tex;
   front.emissiveIntensity = 0.35;
@@ -1158,7 +1144,7 @@ function littleLibrary(world: World, b: Batch, x: number, z: number) {
     fitText(ctx, 'LITTLE FREE LIBRARY', w / 2, h * 0.36, w - 16, 30, "'Lilita One', sans-serif");
     fitText(ctx, 'take a book • wash a book', w / 2, h * 0.74, w - 20, 22, "'Nunito', sans-serif", '800');
   });
-  signPanel(world, tex, x + 0.02, y + 1.82, z, 0.62, 0.23, Math.PI / 2, { collide: false, depth: 0.02 });
+  signPanel(world, tex, x + 0.02, y + 1.82, z, 0.62, 0.23, Math.PI / 2, { collide: false, depth: 0.02, batch: b });
 }
 
 /** Road paint ("ROLL", "SLOW"), readable by someone heading downhill (south). */
@@ -1206,6 +1192,7 @@ function sittingCat(game: Game, world: World, topY: number, x: number, z: number
   g.position.set(x, topY + 0.05, z);
   g.rotation.y = ry;
   g.traverse((o) => ((o as THREE.Mesh).castShadow = true));
+  g.traverse((o) => (o.userData.noMerge = true));
   world.staticRoot.add(g);
   const phase = r() * 10;
   addAnimator(game, (_dt, t) => {

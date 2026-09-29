@@ -21,6 +21,8 @@ export class NoodleSummit extends Landmark {
   private top = new THREE.Vector3(140, 55, -10);
   private summitY = 50;
   private onTop = false;
+  /** Last height Jimothy stood at on the deck (a leap is measured from here). */
+  private deckY = 0;
   private leap: { peak: number; startY: number } | null = null;
   private wasGrounded = true;
   private elevator: Elevator | null = null;
@@ -70,12 +72,14 @@ export class NoodleSummit extends Landmark {
     if (up && !this.onTop && p.mode !== 'ragdoll') {
       this.onTop = true;
       this.leap = null;
+      this.deckY = pos.y;
       this.summit();
     }
     if (this.onTop) {
+      if (up && p.grounded) this.deckY = pos.y;
       // leaving the deck by falling = a leap
       if (!p.grounded && p.mode !== 'climb' && pos.y < this.summitY - 2 && !this.leap) {
-        this.leap = { peak: pos.y, startY: pos.y };
+        this.leap = { peak: Math.max(pos.y, this.deckY), startY: this.deckY };
         this.onTop = false;
       } else if (dTop > 30 || pos.y < this.summitY - 25) {
         this.onTop = false;

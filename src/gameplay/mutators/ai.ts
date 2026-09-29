@@ -36,8 +36,8 @@ void main() {
   float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.2);
   float hue = fract(f * 0.9 + uTime * 0.18 + vW.y * 1.6 + vW.x * 0.7 + vW.z * 0.4);
   vec3 col = hsv2rgb(vec3(hue, 0.7, 1.0));
-  float scan = step(0.9, fract(vW.y * 16.0 - uTime * 2.2)) * 0.22;
-  float a = (0.07 + f * 0.85 + scan) * uIntensity;
+  float scan = step(0.9, fract(vW.y * 16.0 - uTime * 2.2)) * 0.16;
+  float a = (0.05 + f * 0.62 + scan) * uIntensity;
   gl_FragColor = vec4(col * a, 1.0);
 }`;
 

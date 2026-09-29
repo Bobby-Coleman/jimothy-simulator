@@ -363,6 +363,10 @@ export class Mom extends RaccoonAnimal {
 
   protected handleBonk(impulse: THREE.Vector3) {
     if (this.airborne || this.isBusy) return;
+    if (!this.isPlayerBonk()) {
+      this.dodge(impulse);
+      return;
+    }
     const h = _v.set(impulse.x, 0, impulse.z);
     if (h.lengthSq() < 1e-4) h.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     h.normalize().multiplyScalar(1.6);

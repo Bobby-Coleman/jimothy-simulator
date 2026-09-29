@@ -4,6 +4,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import type { Look } from './Looks';
 import type { Expression } from './types';
 import { faceMaterial, printMaterial, FACE_PHI, FACE_T0, FACE_TL, type FaceStyle } from './Face';
+import { safeColor } from './color';
 
 /**
  * Chunky toy-like humans built from primitives.
@@ -67,45 +68,45 @@ export function computeDims(L: Look): Dims {
   const s = L.height;
   const b = L.build;
   const sb = Math.sqrt(b);
-  const footH = 0.085 * s;
+  const footH = 0.095 * s;
   const shinLen = 0.39 * s;
   const thighLen = 0.39 * s;
   const hipY = footH + shinLen + thighLen;
-  const chestW = 0.42 * s * b;
+  const chestW = 0.45 * s * b;
   const chestH = 0.44 * s;
   const waistY = hipY + 0.09 * s;
   const neckY = waistY + chestH;
-  const headR = 0.172 * s * L.headScale;
+  const headR = 0.185 * s * L.headScale;
   const headOff = 0.035 * s + headR * 1.03;
-  const armR = 0.062 * s * sb;
+  const armR = 0.071 * s * sb;
   return {
     s,
     b,
     footH,
-    footL: 0.27 * s * (0.92 + 0.08 * b),
-    footW: 0.125 * s * sb,
-    footZ: 0.04 * s,
+    footL: 0.3 * s * (0.92 + 0.08 * b),
+    footW: 0.145 * s * sb,
+    footZ: 0.045 * s,
     shinLen,
     thighLen,
     hipY,
-    hipX: 0.095 * s * b,
-    pelvisW: 0.35 * s * b,
+    hipX: 0.105 * s * b,
+    pelvisW: 0.38 * s * b,
     pelvisH: 0.22 * s,
-    pelvisD: 0.25 * s * b,
+    pelvisD: 0.27 * s * b,
     waistY,
     chestH,
     chestW,
-    chestD: 0.26 * s * b,
+    chestD: 0.28 * s * b,
     neckY,
     shoulderY: neckY - 0.075 * s,
     shoulderX: chestW / 2 + armR * 0.95,
     uArmLen: 0.27 * s,
     lArmLen: 0.23 * s,
     armR,
-    foreR: 0.055 * s * sb,
-    handR: 0.08 * s,
-    legR: 0.09 * s * b,
-    shinR: 0.074 * s * sb,
+    foreR: 0.063 * s * sb,
+    handR: 0.098 * s,
+    legR: 0.102 * s * b,
+    shinR: 0.086 * s * sb,
     headR,
     headOff,
     height: neckY + headOff + headR * 1.07,
@@ -178,7 +179,7 @@ class PartBuilder {
     const nor = g.getAttribute('normal');
     const n = pos.count;
     const col = new Float32Array(n * 3);
-    _c.setHex(color);
+    safeColor(color, _c);
     for (let i = 0; i < n; i++) {
       // cheap baked "toy AO": undersides a touch darker
       const k = 0.8 + 0.2 * (nor.getY(i) * 0.5 + 0.5);

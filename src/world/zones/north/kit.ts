@@ -91,6 +91,7 @@ export const TILE: Record<string, number> = {
   brick: 1.5,
   stone: 2.8,
   wood: 2.4,
+  cedar: 2.4,
   asphalt: 7,
   asphalt2: 7,
   sidewalk: 2.6,
@@ -646,6 +647,37 @@ async function createMaterials(game: Game): Promise<MatSet> {
     m[k].polygonOffsetUnits = -2;
   }
   m.decal.vertexColors = true;
+  // light cedar boards (fences, decks) — the planks texture is dark walnut, so paint our own
+  const cedarTex = canvasTexture(256, 256, (ctx, w, h) => {
+    const boards = 8;
+    const bw = w / boards;
+    for (let i = 0; i < boards; i++) {
+      const l = 58 + Math.random() * 12;
+      ctx.fillStyle = `hsl(${26 + Math.random() * 8}, ${45 + Math.random() * 12}%, ${l}%)`;
+      ctx.fillRect(i * bw, 0, bw, h);
+      // grain
+      for (let k = 0; k < 14; k++) {
+        ctx.strokeStyle = `hsla(${22 + Math.random() * 8}, 45%, ${l - 12 - Math.random() * 10}%, 0.35)`;
+        ctx.lineWidth = 1 + Math.random() * 1.5;
+        const x = i * bw + 3 + Math.random() * (bw - 6);
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.bezierCurveTo(x + (Math.random() - 0.5) * 6, h * 0.33, x + (Math.random() - 0.5) * 6, h * 0.66, x + (Math.random() - 0.5) * 4, h);
+        ctx.stroke();
+      }
+      // knots
+      for (let k = 0; k < 2; k++) {
+        ctx.fillStyle = `hsla(20, 45%, ${l - 25}%, 0.5)`;
+        ctx.beginPath();
+        ctx.ellipse(i * bw + bw / 2 + (Math.random() - 0.5) * bw * 0.4, Math.random() * h, 2.5, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(60,35,20,0.55)';
+      ctx.fillRect(i * bw, 0, 2, h);
+    }
+  });
+  cedarTex.wrapS = cedarTex.wrapT = THREE.RepeatWrapping;
+  m.cedar = std({ map: cedarTex, roughness: 0.85 });
   // a second asphalt that always wins over the first where roads overlap (junctions)
   m.asphalt2 = m.asphalt.clone();
   m.asphalt2.polygonOffsetFactor = -2;
@@ -749,8 +781,10 @@ export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w
 }
 
 /**
- * A flat sign panel (canvas texture on the front face). Returns the mesh (added to world.staticRoot).
- * The panel faces local +Z of the given yaw. `emissive` makes it glow at night (billboards, neon).
+ * A flat sign panel (canvas texture on the front). The panel faces local +Z of the given yaw.
+ * Default: a single-material front plane (1 draw call) + a backing slab merged into `opts.batch` (or its own mesh).
+ * `asBox`: one BoxGeometry with 6 materials (front = index 4) — used where other systems look for a box face.
+ * `emissive` makes it glow; `lit` brightens it at night. Returns the front mesh.
  */
 export function signPanel(
   world: World,
@@ -761,33 +795,65 @@ export function signPanel(
   w: number,
   h: number,
   rotY: number,
-  opts: { emissive?: number; back?: THREE.ColorRepresentation; depth?: number; collide?: boolean; tilt?: number; lit?: boolean; game?: Game } = {},
-) {
+  opts: {
+    emissive?: number;
+    back?: THREE.ColorRepresentation;
+    depth?: number;
+    collide?: boolean;
+    tilt?: number;
+    lit?: boolean;
+    game?: Game;
+    batch?: Batch;
+    asBox?: boolean;
+    name?: string;
+    doubleSided?: boolean;
+  } = {},
+): THREE.Mesh {
   const depth = opts.depth ?? 0.08;
   const front = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 });
-  if (opts.emissive) {
+  if (opts.emissive || opts.lit) {
     front.emissive = new THREE.Color(0xffffff);
     front.emissiveMap = tex;
-    front.emissiveIntensity = opts.emissive;
+    front.emissiveIntensity = opts.emissive ?? 0;
   }
-  const side = world.material(opts.back ?? 0x55585e, { roughness: 0.7 });
-  const mats = [side, side, side, side, front, side];
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, depth), mats);
-  mesh.position.set(x, y, z);
-  mesh.rotation.set(opts.tilt ?? 0, rotY, 0, 'YXZ');
-  mesh.castShadow = true;
+  const rot = new THREE.Euler(opts.tilt ?? 0, rotY, 0, 'YXZ');
+  const quat = new THREE.Quaternion().setFromEuler(rot);
+  const center = new THREE.Vector3(x, y, z);
+  let mesh: THREE.Mesh;
+  if (opts.asBox) {
+    const side = world.material(opts.back ?? 0x55585e, { roughness: 0.7 });
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, depth), [side, side, side, side, front, side]);
+    mesh.position.copy(center);
+    mesh.quaternion.copy(quat);
+  } else {
+    mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), front);
+    mesh.position.copy(center).add(new THREE.Vector3(0, 0, depth / 2 + 0.004).applyQuaternion(quat));
+    mesh.quaternion.copy(quat);
+    const backM = new THREE.Matrix4().compose(center, quat, new THREE.Vector3(w + 0.02, h + 0.02, depth));
+    if (opts.batch) opts.batch.add('plain', GEO.box, backM, opts.back ?? 0x55585e, { uvTile: 0 });
+    else {
+      const back = new THREE.Mesh(GEO.box, world.material(opts.back ?? 0x55585e, { roughness: 0.7 }));
+      back.matrixAutoUpdate = false;
+      back.matrix.copy(backM);
+      back.castShadow = true;
+      back.receiveShadow = true;
+      world.staticRoot.add(back);
+    }
+    if (opts.doubleSided) {
+      const m2 = new THREE.Mesh(mesh.geometry, front);
+      m2.position.copy(center).add(new THREE.Vector3(0, 0, -depth / 2 - 0.004).applyQuaternion(quat));
+      m2.quaternion.copy(quat).multiply(new THREE.Quaternion().setFromAxisAngle(UP, Math.PI));
+      m2.receiveShadow = true;
+      world.staticRoot.add(m2);
+    }
+  }
+  if (opts.name) mesh.name = opts.name;
+  mesh.castShadow = !!opts.asBox;
   mesh.receiveShadow = true;
   world.staticRoot.add(mesh);
-  if (opts.collide !== false) {
-    mesh.updateMatrixWorld(true);
-    const q = mesh.quaternion.clone();
-    world.game.physics.staticBox(mesh.position.clone(), new THREE.Vector3(w / 2, h / 2, Math.max(0.05, depth / 2)), q);
-  }
+  if (opts.collide !== false) world.game.physics.staticBox(center.clone(), new THREE.Vector3(w / 2, h / 2, Math.max(0.05, depth / 2)), quat);
   if (opts.lit && opts.game) {
-    // brighten at night
     const base = opts.emissive ?? 0;
-    front.emissive = new THREE.Color(0xffffff);
-    front.emissiveMap = tex;
     addAnimator(opts.game, (_dt, _t, night) => {
       front.emissiveIntensity = base + night * 0.9;
     });
@@ -844,6 +910,20 @@ export function rng(seed: number) {
 
 export function pick<T>(r: () => number, arr: readonly T[]): T {
   return arr[Math.floor(r() * arr.length) % arr.length];
+}
+
+/**
+ * Rapier only rebuilds its scene-query structure during a step, so raycasts/overlaps that other systems make in
+ * their init() (before the first frame — e.g. snapping quest props onto my porches, finding a clear spot for the
+ * slop dragon pad) can't see the colliders created while building the world. A tiny empty step refreshes it:
+ * no events are collected, sleeping bodies stay asleep, nothing visibly moves.
+ */
+export function refreshQueries(game: Game) {
+  const w = game.physics.world;
+  const dt = w.timestep;
+  w.timestep = 1e-6;
+  w.step();
+  w.timestep = dt;
 }
 
 /** Put a POI (clone) into the world registry. */

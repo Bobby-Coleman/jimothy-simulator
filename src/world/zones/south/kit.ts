@@ -344,12 +344,17 @@ export interface BoxOpts extends PieceOpts {
 
 export class Kit {
   readonly mats = new Map<MatKey, THREE.MeshStandardMaterial>();
-  private textures = new Map<string, THREE.Texture | null>();
   private models = new Map<string, Promise<THREE.Object3D | null>>();
+  private atlasItems: { canvas: HTMLCanvasElement; geos: THREE.BufferGeometry[] }[] = [];
+  /** Everything static the west/south zones build lives under this group (child of world.staticRoot). */
+  readonly root = new THREE.Group();
   constructor(
     readonly game: Game,
     readonly world: World,
-  ) {}
+  ) {
+    this.root.name = 'south';
+    world.staticRoot.add(this.root);
+  }
 
   get state() {
     return southState(this.game);
@@ -498,7 +503,7 @@ export class Kit {
     const m = new THREE.Mesh(geo, mat);
     m.receiveShadow = true;
     m.castShadow = true;
-    this.world.staticRoot.add(m);
+    this.root.add(m);
     return m;
   }
 
@@ -628,7 +633,7 @@ export class Kit {
       im.computeBoundingSphere();
       group.add(im);
     });
-    this.world.staticRoot.add(group);
+    this.root.add(group);
     return group;
   }
 
@@ -658,7 +663,7 @@ export class Kit {
         m.receiveShadow = true;
       }
     });
-    this.world.staticRoot.add(inner);
+    this.root.add(inner);
     inner.updateMatrixWorld(true);
     return { obj: inner, size: size.multiplyScalar(s), scale: s };
   }
@@ -690,6 +695,16 @@ export class Kit {
     const border = o.border ?? 0.08;
     if (o.frame != null) b.box(o.pos, [o.w + border * 2, o.h + border * 2, d], o.frame, { rotY, collide: o.collide ?? true });
     else if (o.collide) this.collider(o.pos, [o.w, o.h, d], rotY);
+    // Plain painted signs go into a per-zone texture atlas → one draw call for all of them.
+    const cv = (o.tex as THREE.CanvasTexture).image as HTMLCanvasElement | undefined;
+    if (!o.emissive && !o.transparent && typeof HTMLCanvasElement !== 'undefined' && cv instanceof HTMLCanvasElement && cv.width <= 2048 && cv.height <= 1024) {
+      const m4 = new THREE.Matrix4().compose(new THREE.Vector3(o.pos[0], o.pos[1], o.pos[2]), new THREE.Quaternion().setFromAxisAngle(Y, rotY), new THREE.Vector3(1, 1, 1));
+      const geos = [new THREE.PlaneGeometry(o.w, o.h).translate(0, 0, d / 2 + 0.012).applyMatrix4(m4)];
+      if (o.back ?? true) geos.push(new THREE.PlaneGeometry(o.w, o.h).translate(0, 0, d / 2 + 0.012).rotateY(Math.PI).applyMatrix4(m4));
+      this.atlasItems.push({ canvas: cv, geos });
+      o.tex.dispose();
+      return null;
+    }
     const mat = new THREE.MeshStandardMaterial({ map: o.tex, roughness: 0.6, transparent: !!o.transparent, alphaTest: o.transparent ? 0.02 : 0 });
     if (o.emissive) {
       mat.emissive.set(0xffffff);
@@ -697,21 +712,89 @@ export class Kit {
       mat.emissiveIntensity = o.emissive[0];
       this.glow(mat, o.emissive[0], o.emissive[1]);
     }
-    const geo = new THREE.PlaneGeometry(o.w, o.h);
+    // front (and optionally back) face in ONE mesh
+    const front = new THREE.PlaneGeometry(o.w, o.h).translate(0, 0, d / 2 + 0.012);
+    let geo: THREE.BufferGeometry = front;
+    if (o.back ?? true) {
+      const back = new THREE.PlaneGeometry(o.w, o.h).translate(0, 0, d / 2 + 0.012).rotateY(Math.PI);
+      geo = mergeGeometries([front, back], false) ?? front;
+    }
     const face = new THREE.Mesh(geo, mat);
-    const off = new THREE.Vector3(0, 0, d / 2 + 0.012).applyAxisAngle(Y, rotY);
-    face.position.set(o.pos[0] + off.x, o.pos[1] + off.y, o.pos[2] + off.z);
+    face.position.set(o.pos[0], o.pos[1], o.pos[2]);
     face.rotation.y = rotY;
     face.receiveShadow = true;
-    this.world.staticRoot.add(face);
-    if (o.back ?? true) {
-      const back = new THREE.Mesh(geo, mat);
-      back.position.set(o.pos[0] - off.x, o.pos[1] - off.y, o.pos[2] - off.z);
-      back.rotation.y = rotY + Math.PI;
-      back.receiveShadow = true;
-      this.world.staticRoot.add(back);
-    }
+    face.matrixAutoUpdate = false;
+    face.updateMatrix();
+    this.root.add(face);
     return face;
+  }
+
+  /** Pack all pending sign canvases into 2048² atlas page(s) and emit one merged mesh per page. */
+  flushAtlas(name: string) {
+    const items = this.atlasItems;
+    this.atlasItems = [];
+    if (!items.length) return;
+    const S = 2048;
+    const PAD = 8;
+    const order = items.map((_, i) => i).sort((a, c) => items[c].canvas.height - items[a].canvas.height);
+    type Page = { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; x: number; y: number; rowH: number; geos: THREE.BufferGeometry[] };
+    const pages: Page[] = [];
+    const newPage = (): Page => {
+      const c = document.createElement('canvas');
+      c.width = c.height = S;
+      const ctx = c.getContext('2d')!;
+      ctx.fillStyle = '#6b6b6b';
+      ctx.fillRect(0, 0, S, S);
+      const p = { canvas: c, ctx, x: PAD, y: PAD, rowH: 0, geos: [] };
+      pages.push(p);
+      return p;
+    };
+    let page = newPage();
+    for (const i of order) {
+      const it = items[i];
+      const w = it.canvas.width;
+      const h = it.canvas.height;
+      if (page.x + w + PAD > S) {
+        page.x = PAD;
+        page.y += page.rowH + PAD;
+        page.rowH = 0;
+      }
+      if (page.y + h + PAD > S) page = newPage();
+      const x0 = page.x;
+      const y0 = page.y;
+      // edge-extend a few pixels so mip-mapping doesn't bleed the grey background in
+      page.ctx.drawImage(it.canvas, 0, 0, w, 1, x0, y0 - 3, w, 3);
+      page.ctx.drawImage(it.canvas, 0, h - 1, w, 1, x0, y0 + h, w, 3);
+      page.ctx.drawImage(it.canvas, 0, 0, 1, h, x0 - 3, y0, 3, h);
+      page.ctx.drawImage(it.canvas, w - 1, 0, 1, h, x0 + w, y0, 3, h);
+      page.ctx.drawImage(it.canvas, x0, y0);
+      page.x += w + PAD;
+      page.rowH = Math.max(page.rowH, h);
+      for (const g of it.geos) {
+        const uv = g.attributes.uv as THREE.BufferAttribute;
+        for (let k = 0; k < uv.count; k++) {
+          const u = uv.getX(k);
+          const v = uv.getY(k);
+          uv.setXY(k, (x0 + u * w) / S, 1 - (y0 + (1 - v) * h) / S);
+        }
+        page.geos.push(g);
+      }
+    }
+    for (const p of pages) {
+      const tex = new THREE.CanvasTexture(p.canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      const merged = mergeGeometries(p.geos, false);
+      for (const g of p.geos) g.dispose();
+      if (!merged) continue;
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }));
+      mesh.name = `${name}:signs`;
+      mesh.receiveShadow = true;
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      this.root.add(mesh);
+    }
   }
 
   /** Simple painted text sign texture. */
@@ -769,7 +852,7 @@ export class Batch {
   constructor(
     readonly kit: Kit,
     readonly name: string,
-    readonly cell = 40,
+    readonly cell = 64,
   ) {}
 
   /** Add any geometry with a local→world matrix. */
@@ -1030,10 +1113,11 @@ export class Batch {
       mesh.name = `${this.name}:${key}`;
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
-      world.staticRoot.add(mesh);
+      this.kit.root.add(mesh);
       meshes.push(mesh);
     }
     this.buckets.clear();
+    this.kit.flushAtlas(this.name);
     return meshes;
   }
 }

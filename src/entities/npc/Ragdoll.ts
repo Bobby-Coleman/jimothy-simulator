@@ -41,7 +41,9 @@ function specs(d: Dims): Record<BoneName, PartSpec> {
   const cap = (len: number, r: number) => () => RAPIER.ColliderDesc.capsule(Math.max(0.01, len / 2 - r), r);
   const lArmLen = d.lArmLen + d.handR * 1.4;
   const foreR = d.foreR * 1.15;
-  const legR = d.legR * 0.95;
+  // keep left/right leg capsules from touching each other (they are not jointed together)
+  const legR = Math.min(d.legR * 0.95, d.hipX * 0.9);
+  const shinR = Math.min(d.shinR, d.hipX * 0.85);
   const arm = (): PartSpec => ({ offset: V(0, -d.uArmLen / 2), mass: 2.2 * mf, make: cap(d.uArmLen, d.armR) });
   const fore = (): PartSpec => ({ offset: V(0, -lArmLen / 2), mass: 1.8 * mf, make: cap(lArmLen, foreR) });
   const thigh = (): PartSpec => ({ offset: V(0, -d.thighLen / 2), mass: 7.5 * mf, make: cap(d.thighLen, legR) });
@@ -49,10 +51,10 @@ function specs(d: Dims): Record<BoneName, PartSpec> {
   const shin = (): PartSpec => ({
     offset: V(0, -shinLen / 2),
     mass: 4 * mf,
-    make: cap(shinLen, d.shinR),
+    make: cap(shinLen, shinR),
     // shoe box, relative to the shin body center
     extra: () =>
-      RAPIER.ColliderDesc.cuboid(d.footW / 2, d.footH / 2, d.footL / 2).setTranslation(0, -(d.shinLen + d.footH / 2) + shinLen / 2 + d.footH * 0.1, d.footZ),
+      RAPIER.ColliderDesc.cuboid(Math.min(d.footW / 2, d.hipX * 0.85), d.footH / 2, d.footL / 2).setTranslation(0, -(d.shinLen + d.footH / 2) + shinLen / 2 + d.footH * 0.1, d.footZ),
   });
   return {
     pelvis: { offset: V(0, 0.03 * d.s), mass: 11 * mf, make: () => RAPIER.ColliderDesc.cuboid(d.pelvisW * 0.46, d.pelvisH * 0.48, d.pelvisD * 0.46), ccd: true },

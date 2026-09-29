@@ -554,7 +554,7 @@ export function buildDragonGeometry(): DragonModelData {
   return {
     geometry,
     rig,
-    saddle: new THREE.Vector3(0, R.y + 0.3, 0.55),
+    saddle: new THREE.Vector3(0, R.y + 0.22, 1.3),
     headA: headPos[0],
     headB: headPos[1],
     radii: R,

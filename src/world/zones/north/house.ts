@@ -318,8 +318,8 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
   const porchTop = style === 'bungalow' ? 2.55 : 2.7;
   const pz0 = d / 2;
   const pzc = pz0 + pd / 2;
-  const deckCol = pick(r, [0x7d8a96, 0x8b6f5a, 0x6f7d6a, 0x9a8f80]);
-  f.box(b, 'wood', px, -0.1, pzc, pw, 0.2, pd, deckCol);
+  const deckCol = pick(r, [0xb4c0cc, 0xffffff, 0xd8d0c0, 0xc0ccc0]);
+  f.box(b, 'cedar', px, -0.1, pzc, pw, 0.2, pd, deckCol);
   // skirt (lattice) under the porch
   const skirtH = -yb - 0.2;
   if (skirtH > 0.05) {
@@ -417,11 +417,11 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
     }
     const rise = -gl;
     const h = rise / n;
-    const stepCol = pick(r, [0xa8a298, 0x8b6f5a, 0xb9b2a4]);
+    const stepCol = pick(r, [0xe2ddd2, 0xd9c4a6, 0xe8e3d8]);
     const bot = gl - 0.3;
     for (let i = 0; i < n - 1; i++) {
       const top = -(i + 1) * h;
-      f.box(b, i === 0 ? 'wood' : 'concrete', px, (top + bot) / 2, pz0 + pd + run * (i + 0.5), stairW, top - bot, run + 0.02, stepCol);
+      f.box(b, i === 0 ? 'cedar' : 'concrete', px, (top + bot) / 2, pz0 + pd + run * (i + 0.5), stairW, top - bot, run + 0.02, stepCol);
     }
     if (n > 1) {
       const len = (n - 1) * run;

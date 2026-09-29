@@ -458,10 +458,6 @@ export class Hud {
         this.comboTxt = t;
         this.comboCount.textContent = t;
         this.setMult(this.comboMult, s.mult);
-        if (s.mult <= 1) {
-          this.comboMult.style.display = '';
-          this.comboMult.textContent = 'x1';
-        }
       }
       const frac = clamp(s.comboTimer / (s.comboWindow || 3.2), 0, 1);
       this.comboFill.style.transform = `scaleX(${frac.toFixed(3)})`;

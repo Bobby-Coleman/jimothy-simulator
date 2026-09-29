@@ -369,7 +369,12 @@ export class NpcActor implements Actor {
   }
 
   say(text: string, secs = 2.6, big = false) {
-    if (typeof this.npc.say === 'function') this.npc.say(text, secs);
+    const ent = this.npc.entity;
+    if (big && ent && this.kit.hasListeners('speech')) {
+      // chants: the UI's shouty bubble style
+      this.kit.game.events.emit('speech', { entity: ent, text, duration: secs, style: 'shout', key: ent.id });
+      this.npc.setExpression?.('happy');
+    } else if (typeof this.npc.say === 'function') this.npc.say(text, secs);
     else this.kit.overlay.bubble(() => (this.alive ? this.headPos() : null), text, secs, { big });
   }
   expression(e: string) {
@@ -413,11 +418,12 @@ export class NpcActor implements Actor {
     else if (typeof n.emote === 'function') n.emote('cheer', secs);
     else n.setExpression?.('happy');
   }
+  /** (Only gestures the NPC animator actually has: cheer, wave, point, shrug, panic, aww, …) */
   throwAnim() {
-    this.npc.emote?.('throw');
+    this.npc.emote?.('point', 0.8);
   }
   armsUp(v: number) {
-    if (v > 0.5) this.npc.emote?.('cheer', 1.2);
+    if (v > 0.5) this.npc.emote?.('cheer', 3.5);
   }
   handPos(out = new THREE.Vector3()) {
     const n = this.npc;

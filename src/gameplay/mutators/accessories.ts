@@ -27,6 +27,8 @@ export interface HeadAnchors {
   radius: number;
   /** Size relative to the reference jimothy.glb head. */
   scale: number;
+  /** Head's rest position in the model-root space (accessories.glb nodes are authored in model space). */
+  modelOffset: THREE.Vector3;
 }
 
 const REF_EYE_SEP = 0.186;
@@ -135,7 +137,15 @@ export function headAnchors(model: JimothyModel): HeadAnchors | null {
   head.scale.copy(savedS);
   model.root.updateMatrixWorld(true);
 
-  const a: HeadAnchors = { head, crown, eyeMid, eyeSep, eyeR: eyeRad, earMid, center, radius, scale };
+  // Head rest offset from the model root (sum of rest positions up the chain; rest rotations are identity)
+  const modelOffset = new THREE.Vector3();
+  const restPos: Map<THREE.Object3D, THREE.Vector3> | undefined = (model as any).restPos;
+  const modelRoot = model.pivot.children[0];
+  for (let o: THREE.Object3D | null = head; o && o !== modelRoot && o !== model.pivot; o = o.parent) {
+    modelOffset.add(restPos?.get(o) ?? o.position);
+  }
+
+  const a: HeadAnchors = { head, crown, eyeMid, eyeSep, eyeR: eyeRad, earMid, center, radius, scale, modelOffset };
   anchorCache.set(head, a);
   return a;
 }
@@ -182,8 +192,10 @@ export function hasGlbAccessory(names: string[]) {
 export type FitKind = 'hat' | 'face' | 'helmet';
 
 /**
- * Clone a GLB accessory node and place it in head-local space. If the node already sits where it should (authored
- * relative to jimothy.glb's Head) it is kept as-is, otherwise it's scaled/moved onto our anchor.
+ * Clone a GLB accessory node and place it in head-local space. accessories.glb nodes are authored in Jimothy's
+ * model-root space (like jimothy.glb itself), so they're shifted by the Head's rest offset; a node with glTF extras
+ * `{ "space": "head" }` is taken as head-local as-is. Anything that still ends up far from the head is
+ * scaled/moved onto our measured anchor instead.
  */
 export function glbAccessory(names: string[], kind: FitKind, a: HeadAnchors): THREE.Object3D | null {
   const node = findNode(names);
@@ -191,6 +203,7 @@ export function glbAccessory(names: string[], kind: FitKind, a: HeadAnchors): TH
   const clone = node.clone(true);
   node.updateWorldMatrix(true, false);
   node.matrixWorld.decompose(clone.position, clone.quaternion, clone.scale);
+  if (node.userData?.space !== 'head') clone.position.sub(a.modelOffset);
   const g = new THREE.Group();
   g.name = node.name;
   g.add(clone);
@@ -211,8 +224,7 @@ export function glbAccessory(names: string[], kind: FitKind, a: HeadAnchors): TH
     expected = a.center.clone();
     targetW = a.radius * 2.1;
   }
-  const authored = c.distanceTo(expected) < 0.1 * a.scale + Math.max(size.x, size.y, size.z) * 0.25;
-  if (authored) return g;
+  if (c.distanceTo(a.center) < 0.45 * a.scale + Math.max(size.x, size.y, size.z) * 0.5) return g;
   const s = targetW / Math.max(1e-4, Math.max(size.x, size.z));
   clone.scale.multiplyScalar(s);
   clone.position.multiplyScalar(s);
@@ -241,7 +253,7 @@ export class Attachment {
   ensure(model: JimothyModel): THREE.Object3D | null {
     const part = modelParts(model)[this.partName];
     if (!part) return null;
-    const upgrade = !this.fromGlb && this.glbNames.length > 0 && hasGlbAccessory(this.glbNames);
+    const upgrade = !this.fromGlb && !accessoryDebug.forcePrimitive && this.glbNames.length > 0 && hasGlbAccessory(this.glbNames);
     if (this.obj && this.parent === part && !upgrade) return this.obj;
     this.remove();
     const a = headAnchors(model);
@@ -267,9 +279,12 @@ export class Attachment {
   }
 }
 
+/** Dev toggle (exposed as `jimothy.debug.accessories`): force the primitive fallbacks even if the GLB exists. */
+export const accessoryDebug = { forcePrimitive: false };
+
 /** Helper: GLB node if available, else a primitive fallback. */
 export function glbOr(names: string[], kind: FitKind, a: HeadAnchors, fallback: () => THREE.Object3D) {
-  const g = glbAccessory(names, kind, a);
+  const g = accessoryDebug.forcePrimitive ? null : glbAccessory(names, kind, a);
   if (g) return { obj: g, glb: true };
   return { obj: fallback(), glb: false };
 }
@@ -344,14 +359,14 @@ export function buildSunglasses(a: HeadAnchors): THREE.Object3D {
   const frameMat = std(0xff5f7e, { roughness: 0.35, metalness: 0.1 });
   const lensMat = std(0x120d1c, { roughness: 0.06, metalness: 0.55 });
   const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, depthWrite: false });
-  const lensR = Math.max(a.eyeR * 1.3, a.eyeSep * 0.3);
-  const half = a.eyeSep / 2;
+  const lensR = Math.max(a.eyeR * 1.42, a.eyeSep * 0.32);
+  const half = a.eyeSep / 2 + lensR * 0.08;
   for (const sx of [-1, 1]) {
     const lens = mesh(new THREE.CylinderGeometry(lensR, lensR, 0.01 * s, 28), lensMat, sx * half, 0, 0);
     lens.rotation.x = Math.PI / 2;
     lens.scale.set(1.12, 1, 0.92);
     g.add(lens);
-    const rim = mesh(new THREE.TorusGeometry(lensR, 0.011 * s, 8, 30), frameMat, sx * half, 0, 0.002 * s);
+    const rim = mesh(new THREE.TorusGeometry(lensR, 0.015 * s, 8, 30), frameMat, sx * half, 0, 0.002 * s);
     rim.scale.set(1.12, 0.92, 1);
     g.add(rim);
     const glint = mesh(new THREE.PlaneGeometry(lensR * 0.22, lensR * 0.9), glintMat, sx * half - lensR * 0.35, lensR * 0.15, 0.007 * s);
@@ -452,9 +467,9 @@ export function buildBeanie(a: HeadAnchors): THREE.Object3D {
     },
     [4, 1],
   );
-  const r = 0.14 * s;
+  const r = 0.155 * s;
   const dome = mesh(new THREE.SphereGeometry(r, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.5), std(0xffffff, { map: knit, roughness: 1 }));
-  dome.scale.set(1, 1.08, 1.05);
+  dome.scale.set(1, 1.25, 1.05);
   g.add(dome);
   const cuff = mesh(new THREE.CylinderGeometry(r * 1.04, r * 1.07, r * 0.42, 28, 1, true), std(0xffffff, { map: cuffTex, roughness: 1, side: THREE.DoubleSide }), 0, r * 0.1, 0);
   cuff.scale.set(1, 1, 1.05);
@@ -468,10 +483,10 @@ export function buildBeanie(a: HeadAnchors): THREE.Object3D {
     pos.setXYZ(i, _v.x, _v.y, _v.z);
   }
   pomGeo.computeVertexNormals();
-  const pom = mesh(pomGeo, std(0xf6ecd8, { roughness: 1, flatShading: true }), 0, r * 1.12 + r * 0.22, 0);
+  const pom = mesh(pomGeo, std(0xf6ecd8, { roughness: 1, flatShading: true }), 0, r * 1.25 + r * 0.2, 0);
   g.add(pom);
-  g.position.copy(a.crown).add(new THREE.Vector3(0, -0.05 * s, 0));
-  g.rotation.set(-0.06, 0, -0.08);
+  g.position.copy(a.crown).add(new THREE.Vector3(0, -0.06 * s, 0.03 * s));
+  g.rotation.set(0.16, 0, -0.1);
   return g;
 }
 

@@ -67,17 +67,23 @@ export function applyAudio(game: Game, s: Settings) {
   game.events.emit('audioVolume', v);
 }
 
-/** Apply everything that lives in other systems. `baseSens` = the Input's default mouse sensitivity. */
-export function applySettings(game: Game, s: Settings, baseSens: number) {
+/**
+ * Apply settings that live in other systems. `baseSens` = the Input's default mouse sensitivity.
+ * `changed`: only apply that setting (so e.g. a volume change never un-freezes time a mutator froze).
+ * Without it (startup) everything is applied, but "off" states that other systems may own
+ * (frozen time, unlock-all) are left alone.
+ */
+export function applySettings(game: Game, s: Settings, baseSens: number, changed?: keyof Settings) {
+  const all = !changed;
   const inp = game.input;
-  inp.mouseSensitivity = baseSens * s.sensitivity;
-  inp.invertY = s.invertY;
+  if (all || changed === 'sensitivity') inp.mouseSensitivity = baseSens * s.sensitivity;
+  if (all || changed === 'invertY') inp.invertY = s.invertY;
   const env = game.get<any>('environment');
   if (env) {
-    env.dayLengthMinutes = s.dayLength;
-    env.frozen = s.freezeTime;
+    if (all || changed === 'dayLength') env.dayLengthMinutes = s.dayLength;
+    if ((all && s.freezeTime) || changed === 'freezeTime') env.frozen = s.freezeTime;
   }
   const muts = game.get<any>('mutators');
-  if (muts) muts.allUnlocked = s.unlockAll;
-  applyAudio(game, s);
+  if (muts && ((all && s.unlockAll) || changed === 'unlockAll')) muts.allUnlocked = s.unlockAll;
+  if (all || changed === 'master' || changed === 'sfx' || changed === 'music') applyAudio(game, s);
 }

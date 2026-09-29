@@ -23,7 +23,6 @@ export class DialogBox {
   private full = '';
   private openedAt = 0;
   private prevFrozen = false;
-  private clicked = false;
   private lastDevice = '';
 
   constructor(
@@ -34,12 +33,10 @@ export class DialogBox {
     this.portraitEl = h('div', { class: 'dlg-portrait' });
     this.textEl = h('div', { class: 'dlg-text' });
     this.nextEl = h('div', { class: 'dlg-next' });
+    // Input (click / E / Space / Enter / A) is routed here by the UI system via input().
     this.el = h(
       'div',
-      { class: 'dlg', role: 'dialog', 'aria-live': 'polite', onpointerdown: (e: Event) => {
-        e.preventDefault();
-        this.clicked = true;
-      } },
+      { class: 'dlg', role: 'dialog', 'aria-live': 'polite' },
       this.portraitEl,
       h('div', { class: 'dlg-body' }, this.nameEl, this.textEl),
       this.nextEl,
@@ -74,7 +71,6 @@ export class DialogBox {
     this.portraitEl.innerHTML = portraitHtml(item.speaker, item.portrait);
     this.openedAt = performance.now();
     this.el.classList.add('open');
-    replay(this.el);
     this.setLine(0);
     game.events.emit('dialogOpen', { speaker: item.speaker });
     this.ctx.sfx('ui_open', 0.6);
@@ -86,6 +82,12 @@ export class DialogBox {
     this.chars = 0;
     this.textEl.textContent = '';
     this.nextEl.classList.remove('ready');
+  }
+
+  /** Player input (ignored for a moment after opening so the press that opened it doesn't skip line 1). */
+  input() {
+    if (!this.cur || performance.now() - this.openedAt < 250) return;
+    this.advance();
   }
 
   /** Skip typing / advance / close. */
@@ -123,15 +125,7 @@ export class DialogBox {
   }
 
   update(dt: number, paused: boolean) {
-    const cur = this.cur;
-    if (!cur) {
-      this.clicked = false;
-      return;
-    }
-    if (paused) {
-      this.clicked = false;
-      return;
-    }
+    if (!this.cur || paused) return;
     if (this.chars < this.full.length) {
       const before = Math.floor(this.chars);
       this.chars = Math.min(this.full.length, this.chars + dt * CHARS_PER_SEC);
@@ -144,17 +138,7 @@ export class DialogBox {
       this.lastDevice = dev;
       this.nextEl.innerHTML = `${glyph(dev === 'kbm' ? 'grab' : dev === 'pad' ? 'jump' : 'click', dev)}<span class="dlg-arrow">▼</span>`;
     }
-    const inp = this.ctx.game.input;
-    const grace = performance.now() - this.openedAt > 250;
-    if (grace && (this.clicked || inp.pressed('grab') || inp.pressed('jump'))) this.advance();
-    this.clicked = false;
   }
-}
-
-function replay(el: HTMLElement) {
-  el.classList.remove('pop');
-  void el.offsetWidth;
-  el.classList.add('pop');
 }
 
 function portraitHtml(speaker: string, portrait?: string): string {
@@ -162,7 +146,8 @@ function portraitHtml(speaker: string, portrait?: string): string {
   if (who === 'jimothy') return JIMOTHY_FACE;
   if (who === 'slopbot' || who === 'slopbot™') return SLOPBOT_ART;
   if (portrait) {
-    if (portrait in ICONS || /[/.](png|svg|jpe?g|webp|gif)$/i.test(portrait) || portrait.startsWith('data:')) return iconFromSpec(portrait);
+    if (portrait in ICONS) return `<span class="dlg-icon">${iconFromSpec(portrait)}</span>`;
+    if (/[/.](png|svg|jpe?g|webp|gif)$/i.test(portrait) || portrait.startsWith('data:')) return iconFromSpec(portrait);
     return `<span class="dlg-emoji">${esc(portrait.slice(0, 4))}</span>`;
   }
   const initials = (speaker || '?')

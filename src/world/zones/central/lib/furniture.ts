@@ -342,7 +342,7 @@ export function treeGrate(): Part[] {
 }
 
 /** Additive light pool decals under lamps; opacity follows night. */
-export function lightPools(game: Game, world: World, spots: { x: number; y: number; z: number; r: number }[]) {
+export function lightPools(game: Game, world: World, spots: { x: number; y: number; z: number; r: number }[], batch?: import('./batch').Batch) {
   if (!spots.length) return;
   const mat = cached('mat:lightPool', () => {
     const m = new THREE.MeshBasicMaterial({
@@ -364,9 +364,33 @@ export function lightPools(game: Game, world: World, spots: { x: number; y: numb
   });
   const geo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
   const xfs: Xf[] = spots.map((s) => ({ x: s.x, y: s.y + 0.03, z: s.z, ry: 0, s: s.r }));
+  if (batch) {
+    batch.addInstances([{ geo, mat, castShadow: false }], xfs, { castShadow: false });
+    return;
+  }
   const [im] = placeInstances(world, [{ geo, mat, castShadow: false }], xfs, { name: 'lightPools' });
   if (im) {
     im.receiveShadow = false;
     im.renderOrder = 3;
+  }
+}
+
+/**
+ * Preferred placement: merge the template copies into the zone's Batch (no extra draw calls) + box colliders.
+ */
+export function placeBatched(
+  world: World,
+  batch: import('./batch').Batch,
+  parts: Part[],
+  xfs: Xf[],
+  opts: { collider?: THREE.Vector3; colliderYOffset?: number; castShadow?: boolean; name?: string } = {},
+) {
+  if (!xfs.length) return;
+  batch.addInstances(parts, xfs, { castShadow: opts.castShadow });
+  if (opts.collider) {
+    for (const x of xfs) {
+      const sz = opts.collider.clone().multiplyScalar(x.s ?? 1);
+      world.collider(new THREE.Vector3(x.x, x.y + (opts.colliderYOffset ?? 0) + sz.y / 2, x.z), sz, x.ry);
+    }
   }
 }

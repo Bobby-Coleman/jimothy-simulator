@@ -271,7 +271,7 @@ export class SlopBillboard {
     this.completing = false;
     const pos = this.catwalkPoint.clone();
     game.score(800, 'Human Made', pos);
-    toast(game, 'HUMAN MADE', 'The slop melted away. Underneath: a real painting of a real, round raccoon.', 'brush');
+    toast(game, 'HUMAN MADE', 'The slop melted away. Underneath: a real painting of a real, round raccoon.', '🖌️');
     game.sfx('jingle_win');
     game.sfx('crowd_cheer', pos, 0.6);
     for (let i = 0; i < 6; i++) {

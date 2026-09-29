@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Game } from '../../../../core/Game';
 import type { Entity } from '../../../../core/Entities';
 import { spawnProp, destroyProp } from '../../../../entities/Props';
-import { mergeColored, T, TR } from './batch';
+import { mergeColored, normalise, T, TR } from './batch';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { cached } from './textures';
 import type { AtlasRect, SignAtlas } from './signs';
 import { Rng } from './util';
@@ -91,7 +92,7 @@ function cottonCandyGeo(seed: number) {
 
 /** Cotton candy: pink fluffy sphere on a stick. Washing it makes it dissolve (sad trombone). */
 export function spawnCottonCandy(game: Game, pos: THREE.Vector3, seed = 0): Entity {
-  return spawnProp(
+  return noShadow(spawnProp(
     game,
     {
       name: 'Cotton Candy',
@@ -112,7 +113,7 @@ export function spawnCottonCandy(game: Game, pos: THREE.Vector3, seed = 0): Enti
       },
     },
     pos,
-  );
+  ));
 }
 
 // ------------------------------------------------------------------------------------------- food & small stuff
@@ -126,7 +127,7 @@ export function spawnHotDog(game: Game, pos: THREE.Vector3, rotY = 0): Entity {
       { geo: bx(0.22, 0.012, 0.015), color: 0xffd21f, matrix: T(0, 0.118, 0) },
     ]),
   );
-  return spawnProp(game, { name: 'Hot Dog', object: mesh(geo, propMatSoft()), mass: 0.25, tags: ['grabbable', 'food', 'hotdog', 'washable'] }, pos, rotY);
+  return noShadow(spawnProp(game, { name: 'Hot Dog', object: mesh(geo, propMatSoft()), mass: 0.25, tags: ['grabbable', 'food', 'hotdog', 'washable'] }, pos, rotY));
 }
 
 export function spawnCoffeeCup(game: Game, pos: THREE.Vector3, brand: 'starbrews' | 'beanmeup' = 'starbrews'): Entity {
@@ -137,7 +138,7 @@ export function spawnCoffeeCup(game: Game, pos: THREE.Vector3, brand: 'starbrews
       { geo: cyl(0.043, 0.049, 0.025, 12), color: 0xffffff, matrix: T(0, 0.152, 0) },
     ]),
   );
-  return spawnProp(game, { name: 'Coffee', object: mesh(geo, propMat()), shape: 'cylinder', mass: 0.3, tags: ['grabbable', 'food', 'coffee', 'washable'] }, pos);
+  return noShadow(spawnProp(game, { name: 'Coffee', object: mesh(geo, propMat()), shape: 'cylinder', mass: 0.3, tags: ['grabbable', 'food', 'coffee', 'washable'] }, pos));
 }
 
 // ------------------------------------------------------------------------------------------- alley junk
@@ -186,7 +187,7 @@ export function spawnCardboardBox(game: Game, pos: THREE.Vector3, rotY = 0, s = 
       { geo: bx(s * 0.18, s * 0.805, s * 1.005), color: 0xd8c39a, matrix: T(0, s * 0.4, 0) },
     ]),
   );
-  return spawnProp(game, { name: 'Cardboard Box', object: mesh(geo, propMatSoft()), mass: 2, tags: ['grabbable', 'washable'] }, pos, rotY);
+  return noShadow(spawnProp(game, { name: 'Cardboard Box', object: mesh(geo, propMatSoft()), mass: 2, tags: ['grabbable', 'washable'] }, pos, rotY));
 }
 
 export function spawnTrashBag(game: Game, pos: THREE.Vector3, seed = 0): Entity {
@@ -204,7 +205,7 @@ export function spawnTrashBag(game: Game, pos: THREE.Vector3, seed = 0): Entity 
       { geo: new THREE.ConeGeometry(0.08, 0.14, 6), color: seed % 3 === 2 ? 0x3a5f8a : 0x202124, matrix: T(0, 0.58, 0) },
     ]);
   });
-  return spawnProp(game, { name: 'Trash Bag', object: mesh(geo, propMatShiny()), shape: 'ball', mass: 3, tags: ['grabbable', 'washable', 'trash'] }, pos);
+  return noShadow(spawnProp(game, { name: 'Trash Bag', object: mesh(geo, propMatShiny()), shape: 'ball', mass: 3, tags: ['grabbable', 'washable', 'trash'] }, pos));
 }
 
 export function spawnCrate(game: Game, pos: THREE.Vector3, rotY = 0): Entity {
@@ -235,7 +236,7 @@ export function spawnCafeChair(game: Game, pos: THREE.Vector3, rotY = 0, color =
     parts.push({ geo: cyl(0.015, 0.015, 0.3, 5), color: 0x222222, matrix: T(0.17, 0.62, -0.19) });
     return mergeColored(parts);
   });
-  return spawnProp(game, { name: 'Chair', object: mesh(geo, propMat()), mass: 4, tags: ['grabbable', 'washable'] }, pos, rotY);
+  return noShadow(spawnProp(game, { name: 'Chair', object: mesh(geo, propMat()), mass: 4, tags: ['grabbable', 'washable'] }, pos, rotY));
 }
 
 export function spawnCafeTable(game: Game, pos: THREE.Vector3, rotY = 0): Entity {
@@ -261,31 +262,40 @@ export function spawnFoldingChair(game: Game, pos: THREE.Vector3, rotY = 0): Ent
       { geo: bx(0.03, 0.62, 0.03), color: 0x9aa0a6, matrix: TR(0.19, 0.3, 0, -0.45, 0, 0) },
     ]),
   );
-  return spawnProp(game, { name: 'Folding Chair', object: mesh(geo, propMat()), mass: 3.5, tags: ['grabbable', 'washable'] }, pos, rotY);
+  return noShadow(spawnProp(game, { name: 'Folding Chair', object: mesh(geo, propMat()), mass: 3.5, tags: ['grabbable', 'washable'] }, pos, rotY));
 }
 
 // ------------------------------------------------------------------------------------------- signs
 
-/** A-frame sandwich board showing an atlas region on both faces. */
+/** A-frame sandwich board showing an atlas region on both faces (single mesh, atlas material). */
 export function spawnSandwichBoard(game: Game, atlas: SignAtlas, rect: AtlasRect, pos: THREE.Vector3, rotY = 0): Entity {
-  const frame = cached('geo:sbFrame', () =>
-    mergeColored([
-      { geo: bx(0.66, 0.04, 0.04), color: 0x6b4a2e, matrix: T(0, 0.96, 0) },
-      { geo: bx(0.04, 1.0, 0.04), color: 0x6b4a2e, matrix: TR(-0.31, 0.49, 0.14, 0.28, 0, 0) },
-      { geo: bx(0.04, 1.0, 0.04), color: 0x6b4a2e, matrix: TR(0.31, 0.49, 0.14, 0.28, 0, 0) },
-      { geo: bx(0.04, 1.0, 0.04), color: 0x6b4a2e, matrix: TR(-0.31, 0.49, -0.14, -0.28, 0, 0) },
-      { geo: bx(0.04, 1.0, 0.04), color: 0x6b4a2e, matrix: TR(0.31, 0.49, -0.14, -0.28, 0, 0) },
-    ]),
-  );
-  const g = new THREE.Group();
-  g.add(mesh(frame, propMatSoft()));
-  const face = atlas.quad(rect, 0.58, 0.82);
-  const f1 = mesh(face, rect.page.mat);
-  f1.position.set(0, 0.5, 0.155);
-  f1.rotation.x = -0.28;
-  const f2 = mesh(face, rect.page.mat);
-  f2.position.set(0, 0.5, -0.155);
-  f2.rotation.set(0.28, Math.PI, 0);
-  g.add(f1, f2);
-  return spawnProp(game, { name: 'Sandwich Board', object: g, mass: 6, tags: ['grabbable', 'washable'], size: new THREE.Vector3(0.66, 1.0, 0.5) }, pos, rotY);
+  const geo = cached(`geo:sb:${rect.u0.toFixed(4)}:${rect.v0.toFixed(4)}`, () => {
+    // frame boxes sample the board's wooden border colour inside the atlas rect
+    const fu = rect.u0 + (rect.u1 - rect.u0) * 0.02;
+    const fv = rect.v0 + (rect.v1 - rect.v0) * 0.5;
+    const frameParts = [
+      T(0, 0.96, 0).multiply(new THREE.Matrix4().makeScale(0.66, 0.04, 0.04)),
+      TR(-0.31, 0.49, 0.14, 0.28, 0, 0).multiply(new THREE.Matrix4().makeScale(0.04, 1.0, 0.04)),
+      TR(0.31, 0.49, 0.14, 0.28, 0, 0).multiply(new THREE.Matrix4().makeScale(0.04, 1.0, 0.04)),
+      TR(-0.31, 0.49, -0.14, -0.28, 0, 0).multiply(new THREE.Matrix4().makeScale(0.04, 1.0, 0.04)),
+      TR(0.31, 0.49, -0.14, -0.28, 0, 0).multiply(new THREE.Matrix4().makeScale(0.04, 1.0, 0.04)),
+    ].map((m) => {
+      const g = new THREE.BoxGeometry(1, 1, 1).applyMatrix4(m);
+      const uv = g.getAttribute('uv') as THREE.BufferAttribute;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, fu, fv);
+      return g;
+    });
+    const f1 = atlas.quad(rect, 0.58, 0.82).applyMatrix4(TR(0, 0.5, 0.155, -0.28, 0, 0));
+    const f2 = atlas.quad(rect, 0.58, 0.82).applyMatrix4(TR(0, 0.5, -0.155, 0.28, Math.PI, 0));
+    return mergeGeometries([...frameParts, f1, f2].map((g) => normalise(g)), false)!;
+  });
+  return noShadow(spawnProp(game, { name: 'Sandwich Board', object: mesh(geo, rect.page.mat), mass: 6, tags: ['grabbable', 'washable'], size: new THREE.Vector3(0.66, 1.0, 0.5) }, pos, rotY));
+}
+
+/** Small props skip the shadow pass (they are many; the lead asked for cheap frames). */
+function noShadow(e: Entity): Entity {
+  e.object?.traverse((o) => {
+    (o as THREE.Mesh).castShadow = false;
+  });
+  return e;
 }

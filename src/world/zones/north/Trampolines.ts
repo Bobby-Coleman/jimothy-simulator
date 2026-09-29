@@ -33,6 +33,10 @@ const SUPER_V = 17;
 
 export class TrampolineSystem implements System {
   name = 'trampolines';
+  /** All registered trampolines (debug: jimothy.get('trampolines').list). */
+  get list(): readonly TrampolineDef[] {
+    return registry;
+  }
   private preY = 0;
   private preVy = 0;
   private chain = 0;
@@ -132,6 +136,7 @@ export function buildTrampoline(game: Game, world: World, mats: MatSet, batch: B
   matMesh.position.set(x, matY, z);
   matMesh.receiveShadow = true;
   matMesh.castShadow = true;
+  matMesh.userData.noMerge = true;
   world.staticRoot.add(matMesh);
 
   // colliders: rim ring (solid for everybody), bouncy mat for props/ragdolls only

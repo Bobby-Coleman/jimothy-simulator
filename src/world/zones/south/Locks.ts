@@ -105,8 +105,8 @@ function levee(kit: Kit, b: Batch, water: WaterSystem) {
       [LARGE[0], 1],
       [LARGE[1], -1],
     ] as [number, 1 | -1][]) {
-      for (const s of [-0.25, 0.25]) b.box([x + f * 0.12, (BAY_Y - 1 + TOP) / 2, z + s], [0.06, TOP - BAY_Y + 1, 0.06], 0x6d767c, { collide: false, mat: 'metal' });
-      for (let y = BAY_Y - 0.8; y < TOP; y += 0.4) b.box([x + f * 0.12, y, z], [0.05, 0.05, 0.5], 0x6d767c, { collide: false, mat: 'metal' });
+      for (const s of [-0.25, 0.25]) b.box([x + f * 0.12, (BAY_Y - 1 + TOP) / 2, z + s], [0.06, TOP - BAY_Y + 1, 0.06], 0x6d767c, { collide: false, mat: 'metal', shadow: false });
+      for (let y = BAY_Y - 0.8; y < TOP; y += 0.4) b.box([x + f * 0.12, y, z], [0.05, 0.05, 0.5], 0x6d767c, { collide: false, mat: 'metal', shadow: false });
     }
   }
   // bollards on the wall tops
@@ -194,13 +194,13 @@ function miterGate(kit: Kit, b: Batch, x0: number, x1: number, z: number, yBotto
     for (const side of [-0.62, 0.62]) {
       const ox = -Math.sin(rotY) * side;
       const oz = -Math.cos(rotY) * side;
-      b.box([cx + ox, TOP + 1.02, z + oz], [L, 0.07, 0.07], 0xffc629, { rotY, collide: false, mat: 'glossy' });
-      b.box([cx + ox, TOP + 0.55, z + oz], [L, 0.05, 0.05], 0xffc629, { rotY, collide: false, mat: 'glossy' });
+      b.box([cx + ox, TOP + 1.02, z + oz], [L, 0.07, 0.07], 0xffc629, { rotY, collide: false, mat: 'glossy', shadow: false });
+      b.box([cx + ox, TOP + 0.55, z + oz], [L, 0.05, 0.05], 0xffc629, { rotY, collide: false, mat: 'glossy', shadow: false });
       kit.collider([cx + ox, TOP + 0.55, z + oz], [L, 1.05, 0.08], rotY);
       for (let k = -1; k <= 1; k++) {
         const px = cx + ox + Math.cos(rotY) * k * (L / 2 - 0.1);
         const pz = z + oz - Math.sin(rotY) * k * (L / 2 - 0.1);
-        b.box([px, TOP + 0.52, pz], [0.07, 1.0, 0.07], 0xffc629, { collide: false, mat: 'glossy' });
+        b.box([px, TOP + 0.52, pz], [0.07, 1.0, 0.07], 0xffc629, { collide: false, mat: 'glossy', shadow: false });
       }
     }
   }
@@ -243,9 +243,9 @@ function railings(b: Batch) {
       if (c - a < 0.5) continue;
       const len = c - a;
       const mz = (a + c) / 2;
-      b.box([x, TOP + 1.0, mz], [0.08, 0.08, len], RAIL, { collide: false });
-      b.box([x, TOP + 0.55, mz], [0.06, 0.06, len], RAIL, { collide: false });
-      for (let pz = a + 0.05; pz <= c; pz += 2) b.box([x, TOP + 0.5, pz], [0.08, 1.0, 0.08], RAIL, { collide: false });
+      b.box([x, TOP + 1.0, mz], [0.08, 0.08, len], RAIL, { collide: false, shadow: false });
+      b.box([x, TOP + 0.55, mz], [0.06, 0.06, len], RAIL, { collide: false, shadow: false });
+      for (let pz = a + 0.05; pz <= c; pz += 2) b.box([x, TOP + 0.5, pz], [0.08, 1.0, 0.08], RAIL, { collide: false, shadow: false });
       kit.collider([x, TOP + 0.55, mz], [0.1, 1.1, len]);
     }
   };
@@ -294,7 +294,7 @@ function lockmaster(kit: Kit, b: Batch) {
   const lm = kit.glowMat(0xfff0c0, 0.2, 3);
   const lampHead = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.35, 0.5), lm);
   lampHead.position.set(mx, TOP + 11.75, mz + 0.4);
-  kit.world.staticRoot.add(lampHead);
+  kit.root.add(lampHead);
   kit.world.poi.set('bobblehead:s6', V(mx, TOP + 12.4, mz));
 }
 
@@ -352,13 +352,13 @@ function fishLadder(kit: Kit, b: Batch, water: WaterSystem) {
       b.box([LAD.x0 - 0.25, wallTop - 0.08, z], [0.5, 0.16, segLen], CONCRETE, { mat: 'concrete' });
       const g = new THREE.Mesh(new THREE.PlaneGeometry(LAD.len - 0.1, wallTop - 0.16 - F).rotateY(Math.PI / 2), glassMat);
       g.position.set(LAD.x0 - 0.25, (F + wallTop - 0.16) / 2, z);
-      kit.world.staticRoot.add(g);
+      kit.root.add(g);
       kit.collider([LAD.x0 - 0.25, (F + wallTop) / 2, z], [0.5, wallTop - F, LAD.len]);
       // translucent water body visible through the glass
       const body = new THREE.Mesh(new THREE.BoxGeometry(W - 0.06, L - F - 0.03, LAD.len - 0.06), bodyMat);
       body.position.set(cx, (F + L) / 2 - 0.015, z);
       body.renderOrder = 1;
-      kit.world.staticRoot.add(body);
+      kit.root.add(body);
     } else {
       b.box([LAD.x0 - 0.25, wallTop / 2, z], [0.5, wallTop, segLen], CONCRETE, { mat: 'concrete' });
     }
@@ -376,7 +376,7 @@ function fishLadder(kit: Kit, b: Batch, water: WaterSystem) {
     kit.waterUV(vol, 2.5);
     st.ladder.pools.push({ center: V(cx, L, z), halfX: W / 2, halfZ: LAD.len / 2, floorY: F });
   }
-  kit.world.staticRoot.add(sheets);
+  kit.root.add(sheets);
   // end walls
   const zS = poolZ(0) + LAD.len / 2;
   const zN = poolZ(LAD.n - 1) - LAD.len / 2;
@@ -396,7 +396,7 @@ function fishLadder(kit: Kit, b: Batch, water: WaterSystem) {
   const chute = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.1, Math.hypot(c1[2] - c0[2], c1[1] - c0[1])), sheetMat);
   chute.rotation.x = -Math.PI / 2 + Math.atan2(c0[1] - c1[1], c1[2] - c0[2]);
   chute.position.set(cx, (c0[1] + c1[1]) / 2 + 0.03, (c0[2] + c1[2]) / 2);
-  kit.world.staticRoot.add(chute);
+  kit.root.add(chute);
 
   // Viewing walk: a gentle ramp alongside the pools (east side) so people (and raccoons) can peek in
   const wx0 = LAD.x1 + 0.5;
@@ -432,7 +432,7 @@ function fishLadder(kit: Kit, b: Batch, water: WaterSystem) {
       const F = poolL(i) - LAD.depth;
       m.position.set(cx - 0.9 + k * 0.9, F + 0.25 + k * 0.15, poolZ(i) + (k ? 0.8 : -0.6));
       m.rotation.y = Math.PI + (k ? 0.3 : -0.2);
-      kit.world.staticRoot.add(m);
+      kit.root.add(m);
       st.swayers.push({ obj: m, axis: 'y', amp: 0.25, speed: 2.2 + k, phase: i * 1.3 + k, base: m.rotation.y });
     }
   }
@@ -488,7 +488,7 @@ function viewingRoom(kit: Kit, b: Batch) {
   const lm = kit.glowMat(0xbff4ff, 0.3, 1.8);
   const strip = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, z1 - z0 - 1), lm);
   strip.position.set(-171.5, H - 0.05, (z0 + z1) / 2);
-  kit.world.staticRoot.add(strip);
+  kit.root.add(strip);
 }
 
 // ------------------------------------------------------------------ botanical garden
@@ -539,12 +539,12 @@ function garden(kit: Kit, b: Batch) {
     b.box([x, 0.41, z], [w - 0.3, 0.04, d - 0.3], 0x4a3524, { collide: false, shadow: false });
     const c1 = cols[bi % cols.length];
     const c2 = cols[(bi * 3 + 2) % cols.length];
-    for (let i = 0; i < 26; i++) {
-      const fx = x + (r() - 0.5) * (w - 0.8);
-      const fz = z + (r() - 0.5) * (d - 0.8);
-      blooms.push([fx, 0.55 + r() * 0.35, fz, r() < 0.6 ? c1 : c2, 0.8 + r() * 0.5]);
+    for (let i = 0; i < 44; i++) {
+      const fx = x + (r() - 0.5) * (w - 0.7);
+      const fz = z + (r() - 0.5) * (d - 0.7);
+      blooms.push([fx, 0.55 + r() * 0.3, fz, r() < 0.6 ? c1 : c2, 0.6 + r() * 0.4]);
     }
-    for (let i = 0; i < 5; i++) b.blob([x + (r() - 0.5) * (w - 1), 0.5, z + (r() - 0.5) * (d - 1)], [0.7, 0.3, 0.7], 0x3f8f3a, { detail: 0 });
+    for (let i = 0; i < 9; i++) b.blob([x + (r() - 0.5) * (w - 0.9), 0.5, z + (r() - 0.5) * (d - 0.9)], [0.45, 0.2, 0.45], [0x3f8f3a, 0x4a9a3f, 0x357a34][i % 3], { detail: 0, shadow: false });
   });
   for (let i = 0; i < 40; i++) {
     const a = (i / 40) * Math.PI * 2;
@@ -621,7 +621,7 @@ function flowers(kit: Kit, list: [number, number, number, number, number][]) {
     im.computeBoundingSphere();
     im.castShadow = true;
     im.receiveShadow = true;
-    kit.world.staticRoot.add(im);
+    kit.root.add(im);
   }
   if (bi.instanceColor) bi.instanceColor.needsUpdate = true;
 }
@@ -691,7 +691,7 @@ function greenhouse(kit: Kit, b: Batch, cx: number, cz: number) {
   kit.world.poi.set('bobblehead:s5', V(cx, R + 0.4, cz));
   const gm = new THREE.Mesh(mergeGlass(glassGeo), glass);
   gm.renderOrder = 3;
-  kit.world.staticRoot.add(gm);
+  kit.root.add(gm);
   // inside: palms, pots, a bench and a little pond
   const r = rng(3);
   for (let i = 0; i < 8; i++) {

@@ -132,15 +132,13 @@ export function poolFloat(mats: MatSet, color: number): PropSpec {
   return { name: 'Pool Floatie', object: obj, mass: 0.6, tags: ['grabbable', 'washable', 'float'], restitution: 0.5, data: { buoyancy: 6, floatRadius: 0.15 } };
 }
 
+const BALL_SEGMENTS = [0xff4d4d, 0xffffff, 0xffd23f, 0xffffff, 0x3fa7ff, 0xffffff].map((c, i) => [new THREE.SphereGeometry(0.35, 12, 10, (i / 6) * Math.PI * 2, Math.PI / 3), c] as const);
+
 export function beachBall(mats: MatSet): PropSpec {
-  const obj = new THREE.Group();
-  const cols = [0xff4d4d, 0xffffff, 0xffd23f, 0xffffff, 0x3fa7ff, 0xffffff];
-  cols.forEach((c, i) => {
-    const g = new THREE.SphereGeometry(0.35, 12, 10, (i / 6) * Math.PI * 2, Math.PI / 3);
-    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: c, roughness: 0.4 }));
-    m.position.y = 0.35;
-    obj.add(m);
-  });
+  const obj = mesh(
+    BALL_SEGMENTS.map(([g, c]) => [g, trs(0, 0.35, 0), c] as Part),
+    mats.gloss,
+  );
   return { name: 'Beach Ball', object: obj, shape: 'ball', mass: 0.4, restitution: 0.8, tags: ['grabbable', 'washable'], data: { buoyancy: 5 } };
 }
 

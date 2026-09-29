@@ -64,7 +64,7 @@ export class SlopProps {
 
   // ---------------------------------------------------------------- posters
   /** Put AI posters on bus stops (if the level has any), else on sidewalk A-frames around town. */
-  placePosters(townSpots: THREE.Vector3[], max = 4) {
+  placePosters(townSpots: THREE.Vector3[], max = 4, rnd: () => number = Math.random) {
     const game = this.game;
     const world = worldOf(game);
     if (!world) return 0;
@@ -77,13 +77,13 @@ export class SlopProps {
     const spots = stops.length ? stops : townSpots;
     const used: THREE.Vector3[] = [];
     let made = 0;
-    for (const s of spots.sort(() => Math.random() - 0.5)) {
+    for (const s of spots.map((v) => ({ v, k: rnd() })).sort((a, b) => a.k - b.k).map((o) => o.v)) {
       if (made >= max) break;
-      const g = findClearSpot(game, s, stops.length ? 1.5 : 2, stops.length ? 4 : 12, 0.8, 0.4, 2.4, 20, used, 25);
+      const g = findClearSpot(game, s, stops.length ? 1.5 : 2, stops.length ? 4 : 12, 0.8, 0.4, 2.4, 20, used, 25, rnd);
       if (!g) continue;
       used.push(g);
       // face the map centre-ish so people walking by see it
-      const yaw = Math.atan2(-g.x, -g.z) + rand(-0.5, 0.5);
+      const yaw = Math.atan2(-g.x, -g.z) + (rnd() - 0.5);
       this.makePoster(g, yaw, made);
       made++;
     }
@@ -271,7 +271,7 @@ export class SlopProps {
     game.sfx('coins', at, 0.7);
     game.sfx('cha_ching', at, 0.4, 1.3);
     this.fx.burst(at, 16, 0xffd23a, 3, 2, 0.7, 9, 0.1);
-    say(game, kiosk, pick(KIOSK_LINES), 3);
+    say(game, kiosk, pick(KIOSK_LINES), 3, 'slop', 'NFT Kiosk');
     game.score(20, 'Minted A Worthless NFT', at.clone());
     game.events.emit('nftMinted', { entity: e });
   }
@@ -291,8 +291,8 @@ export class SlopProps {
     }
   }
 
-  kioskSpot(center: THREE.Vector3, rMin: number, rMax: number, avoid: THREE.Vector3[] = []) {
-    const g = findClearSpot(this.game, center, rMin, rMax, 1.2, 1.0, 2.6, 30, avoid, 8);
+  kioskSpot(center: THREE.Vector3, rMin: number, rMax: number, avoid: THREE.Vector3[] = [], rnd: () => number = Math.random) {
+    const g = findClearSpot(this.game, center, rMin, rMax, 1.2, 1.0, 2.6, 30, avoid, 8, rnd);
     if (!g) return null;
     return { ground: g, yaw: Math.atan2(center.x - g.x, center.z - g.z) };
   }

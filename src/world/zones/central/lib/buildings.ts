@@ -3,8 +3,9 @@ import type { Game } from '../../../../core/Game';
 import type { World } from '../../../World';
 import { Batch, mergeColored, T, TR } from './batch';
 import type { AtlasRect, SignAtlas } from './signs';
-import { cached, loadPBR, recoloredBrick, stripeTexture, windowTexture } from './textures';
+import { applyStripeRow, cached, loadPBR, recoloredBrick, stripeMaterial, stripeTexture, windowTexture } from './textures';
 import { boxColliderEuler, glowAtNight, Rng } from './util';
+import { warmGlowMat } from './furniture';
 import { RAPIER } from '../../../../core/Physics';
 
 /**
@@ -92,12 +93,18 @@ export function windowMats(game: Game) {
   });
 }
 
+/**
+ * Shared brick materials (one for raw brick, one for painted brick). The texture is a neutral (near-white)
+ * brick pattern; each building's colour comes from vertex colours, so every wall in town is one draw call.
+ * (`color` is only used as the fallback base colour when the texture is missing.)
+ */
 export async function brickMat(game: Game, color: string, painted = false): Promise<THREE.MeshStandardMaterial> {
-  return cached(`mat:brick:${color}:${painted}`, async () => {
+  return cached(`mat:brick:${painted}`, async () => {
     const pbr = await loadPBR(game, 'brick');
-    const map = await recoloredBrick(color, painted ? shade(color, 0.92) : '#bdb5a8', painted);
+    const map = await recoloredBrick('#f7f3ee', painted ? '#dcd8d2' : '#a9a39a', painted);
     return new THREE.MeshStandardMaterial({
-      color: map ? 0xffffff : color,
+      color: 0xffffff,
+      vertexColors: true,
       map: map ?? null,
       normalMap: pbr.normalMap,
       normalScale: new THREE.Vector2(painted ? 0.45 : 0.9, painted ? 0.45 : 0.9),
@@ -144,7 +151,7 @@ export async function buildStore(kit: BuildingKit, s: StoreSpec): Promise<BuiltS
   const lp = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z).applyMatrix4(M);
 
   // body (brick, world-space UVs)
-  batch.add(bx(W, H, D), wallMat, { matrix: M.clone().multiply(T(0, H / 2, -D / 2)), uv: 2.3 });
+  batch.add(bx(W, H, D), wallMat, { matrix: M.clone().multiply(T(0, H / 2, -D / 2)), uv: 2.3, color: s.wall });
   world.collider(lp(0, H / 2, -D / 2), new THREE.Vector3(W, H, D), yaw);
   // roof cap
   addBox(W - 0.1, 0.06, D - 0.1, 0, H + 0.03, -D / 2, '#55565c', trim, false);
@@ -190,8 +197,9 @@ export async function buildStore(kit: BuildingKit, s: StoreSpec): Promise<BuiltS
     addBox(doorW + 0.4, 0.2, 0.35, doorX, 0.1, 0.18, '#b9b3a8');
     // sign band
     if (s.sign) {
-      const sw = Math.min(s.signW ?? Ws - 0.6, Ws - 0.2);
-      const sh = Math.min(0.9, sw / (s.sign.w / s.sign.h));
+      const aspect = s.sign.w / s.sign.h;
+      const sw = Math.min(s.signW ?? Ws - 0.6, Ws - 0.2, 1.0 * aspect);
+      const sh = sw / aspect;
       const sy = gy1 + 0.55 + (gH - 0.2 - (gy1 + 0.55)) / 2;
       addBox(sw + 0.16, sh + 0.16, 0.08, 0, sy, 0.05, shade(accent, 0.8));
       add(atlas.quad(s.sign, sw, sh), s.signGlow ? s.sign.page.glowMat : s.sign.page.mat, T(0, sy, 0.095), undefined, false);
@@ -204,13 +212,11 @@ export async function buildStore(kit: BuildingKit, s: StoreSpec): Promise<BuiltS
         top = gy1 + 0.18;
       const len = Math.hypot(depth, drop);
       const ang = Math.atan2(drop, depth);
-      const g = bx(aw, 0.035, len);
-      scaleUV(g, aw / 2.4, 1);
-      const mat = awningMat(s.awning[0], s.awning[1]);
-      add(g, mat, TR(0, top - drop / 2, depth / 2 + 0.02, ang, 0, 0));
-      const val = bx(aw, 0.3, 0.03);
-      scaleUV(val, aw / 2.4, 1);
-      add(val, mat, T(0, top - drop - 0.15, depth + 0.02));
+      const g = applyStripeRow(bx(aw, 0.035, len), s.awning[0], s.awning[1], aw / 2.4);
+      const mat = stripeMaterial();
+      add(g, mat, TR(0, top - drop / 2, depth / 2 + 0.02, ang, 0, 0), '#ffffff');
+      const val = applyStripeRow(bx(aw, 0.3, 0.03), s.awning[0], s.awning[1], aw / 2.4);
+      add(val, mat, T(0, top - drop - 0.15, depth + 0.02), '#e6e6e6');
       // bouncy collider on the outer half only, so climbing the facade isn't blocked
       const outer = lp(0, top - drop * 0.78, depth * 0.78);
       const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(ang, yaw, 0, 'YXZ'));
@@ -253,10 +259,10 @@ export async function buildStore(kit: BuildingKit, s: StoreSpec): Promise<BuiltS
   for (let k = 0; k <= nb; k++) addBox(0.16, 0.34, 0.4, -W / 2 + (W * k) / nb, H - 0.42, 0.16, shade(trimC, 0.85));
   const pH = 0.95;
   // parapet: front (brick), sides/back
-  batch.add(bx(W, pH, 0.34), wallMat, { matrix: M.clone().multiply(T(0, H + pH / 2, -0.17)), uv: 2.3 });
-  batch.add(bx(0.3, 0.7, D - 0.34), wallMat, { matrix: M.clone().multiply(T(-W / 2 + 0.15, H + 0.35, -D / 2 - 0.17)), uv: 2.3 });
-  batch.add(bx(0.3, 0.7, D - 0.34), wallMat, { matrix: M.clone().multiply(T(W / 2 - 0.15, H + 0.35, -D / 2 - 0.17)), uv: 2.3 });
-  batch.add(bx(W, 0.7, 0.3), wallMat, { matrix: M.clone().multiply(T(0, H + 0.35, -D + 0.15)), uv: 2.3 });
+  batch.add(bx(W, pH, 0.34), wallMat, { matrix: M.clone().multiply(T(0, H + pH / 2, -0.17)), uv: 2.3, color: s.wall });
+  batch.add(bx(0.3, 0.7, D - 0.34), wallMat, { matrix: M.clone().multiply(T(-W / 2 + 0.15, H + 0.35, -D / 2 - 0.17)), uv: 2.3, color: s.wall });
+  batch.add(bx(0.3, 0.7, D - 0.34), wallMat, { matrix: M.clone().multiply(T(W / 2 - 0.15, H + 0.35, -D / 2 - 0.17)), uv: 2.3, color: s.wall });
+  batch.add(bx(W, 0.7, 0.3), wallMat, { matrix: M.clone().multiply(T(0, H + 0.35, -D + 0.15)), uv: 2.3, color: s.wall });
   addBox(W + 0.08, 0.1, 0.44, 0, H + pH + 0.05, -0.17, shade(trimC, 0.95));
   world.collider(lp(0, H + pH / 2, -0.17), new THREE.Vector3(W, pH, 0.34), yaw);
   world.collider(lp(-W / 2 + 0.15, H + 0.35, -D / 2 - 0.17), new THREE.Vector3(0.3, 0.7, D - 0.34), yaw);
@@ -264,7 +270,7 @@ export async function buildStore(kit: BuildingKit, s: StoreSpec): Promise<BuiltS
   world.collider(lp(0, H + 0.35, -D + 0.15), new THREE.Vector3(W, 0.7, 0.3), yaw);
   if (s.parapet === 'stepped') {
     const sw = Math.min(W * 0.45, 5);
-    batch.add(bx(sw, 0.8, 0.34), wallMat, { matrix: M.clone().multiply(T(0, H + pH + 0.4, -0.17)), uv: 2.3 });
+    batch.add(bx(sw, 0.8, 0.34), wallMat, { matrix: M.clone().multiply(T(0, H + pH + 0.4, -0.17)), uv: 2.3, color: s.wall });
     addBox(sw + 0.1, 0.1, 0.44, 0, H + pH + 0.85, -0.17, shade(trimC, 0.95));
     world.collider(lp(0, H + pH + 0.4, -0.17), new THREE.Vector3(sw, 0.8, 0.34), yaw);
     if (s.yearRect) add(atlas.quad(s.yearRect, sw * 0.8, 0.5), s.yearRect.page.mat, T(0, H + pH + 0.22, 0.005), undefined, false);
@@ -297,7 +303,7 @@ export async function buildStore(kit: BuildingKit, s: StoreSpec): Promise<BuiltS
     const bdx = s.backDoorX ?? rng.range(-W / 2 + 1.5, W / 2 - 1.5);
     addBox(1.1, 2.2, 0.08, bdx, 1.1, bz - 0.04, '#5d6d73');
     addBox(0.3, 0.15, 0.2, bdx, 2.55, bz - 0.1, '#333');
-    add(new THREE.SphereGeometry(0.1, 8, 6), glowMat(game), T(bdx, 2.45, bz - 0.14), undefined, false);
+    add(new THREE.SphereGeometry(0.1, 8, 6), warmGlowMat(game), T(bdx, 2.45, bz - 0.14), undefined, false);
     // a few back windows
     for (let f = 1; f < s.floors; f++) {
       const y = gH + (f - 1) * fH + fH * 0.5;

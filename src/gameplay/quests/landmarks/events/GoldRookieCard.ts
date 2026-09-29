@@ -85,7 +85,8 @@ export class GoldRookieCard extends Landmark {
 
   private spawnCard() {
     this.goneAt = -1;
-    const at = this.spot.clone();
+    // drop it from a few cm up: a thin collider spawned touching the heightfield can tunnel through it
+    const at = this.spot.clone().add(new THREE.Vector3(0, 0.08, 0));
     this.card = null;
     this.spawning = true;
     this.kit.spawnItem('rookiecard', at, () => this.fallbackCard(at), (e) => {

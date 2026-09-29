@@ -79,7 +79,7 @@ export function perched(kit: Kit, geo: THREE.BufferGeometry, xforms: [number, nu
   im.instanceMatrix.needsUpdate = true;
   im.castShadow = true;
   im.computeBoundingSphere();
-  kit.world.staticRoot.add(im);
+  kit.root.add(im);
   return im;
 }
 
@@ -161,7 +161,7 @@ export function lamps(kit: Kit, b: Batch, list: V3[], o: { style?: 'park' | 'har
   bulbs.forEach(([x, y, z], i) => im.setMatrixAt(i, _m.makeTranslation(x, y, z)));
   im.instanceMatrix.needsUpdate = true;
   im.computeBoundingSphere();
-  kit.world.staticRoot.add(im);
+  kit.root.add(im);
   // fake light pools on the ground
   const poolMat = new THREE.MeshBasicMaterial({ map: lightPoolTexture(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: true, polygonOffset: true, polygonOffsetFactor: -4 });
   kit.glow(poolMat, 0, 0.55, 'opacity');
@@ -174,7 +174,7 @@ export function lamps(kit: Kit, b: Batch, list: V3[], o: { style?: 'park' | 'har
   pools.instanceMatrix.needsUpdate = true;
   pools.computeBoundingSphere();
   pools.renderOrder = 1;
-  kit.world.staticRoot.add(pools);
+  kit.root.add(pools);
   return im;
 }
 

@@ -247,8 +247,8 @@ export class Figure {
       this.torso.add(mesh(geo('fishEye', () => new THREE.SphereGeometry(0.08, 12, 8)), eyeW, x, 1.02, 0.28));
       this.torso.add(mesh(geo('fishPupil', () => new THREE.SphereGeometry(0.04, 8, 6)), eyeB, x * 1.1, 1.03, 0.35));
     }
-    // push the human head forward into the face hole
-    this.head.position.set(0, 0.7, 0.2);
+    // the wearer's face pokes out of the costume's face hole
+    this.head.position.set(0, 0.68, 0.3);
     this.head.scale.setScalar(0.8);
   }
 

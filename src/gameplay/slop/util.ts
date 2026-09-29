@@ -29,16 +29,38 @@ export class Timeline {
 }
 
 export const rand = (a: number, b: number) => a + Math.random() * (b - a);
+
+/** Small deterministic PRNG (so fallback layouts are the same every session). */
+export function seeded(seed: number) {
+  let s = seed >>> 0 || 1;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
 export const randInt = (a: number, b: number) => Math.floor(rand(a, b + 1));
 export function pick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 export const clamp = THREE.MathUtils.clamp;
 
-/** Speech bubble over an entity (rendered by the UI if it listens to 'speech'). */
-export function say(game: Game, entity: Entity | undefined, text: string, duration = 3.2) {
+/**
+ * Speech bubble over an entity ('speech' event, rendered by the UI). NPCs speak through their own `say()` so their
+ * system can animate / bubble them too. style: 'slop' | 'shout' | 'whisper' (UI bubble styles).
+ */
+export function say(game: Game, entity: Entity | undefined, text: string, duration = 3.2, style?: string, speaker?: string) {
   if (!entity || !entity.alive) return;
-  game.events.emit('speech', { entity, text, duration });
+  const npc = entity.data?.npc;
+  if (npc && typeof npc.say === 'function' && !style) {
+    npc.say(text, duration);
+    return;
+  }
+  game.events.emit('speech', { entity, text, duration, style, speaker });
+}
+
+/** Speech bubble at a fixed world position (for things that are about to vanish). */
+export function sayAt(game: Game, position: THREE.Vector3, text: string, duration = 2.6, style = 'slop') {
+  game.events.emit('speech', { position: position.clone(), text, duration, style });
 }
 
 /** Big announcement banner. */
@@ -114,10 +136,11 @@ export function findClearSpot(
   tries = 40,
   avoid: THREE.Vector3[] = [],
   avoidR = 0,
+  rnd: () => number = Math.random,
 ): THREE.Vector3 | null {
   for (let i = 0; i < tries; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const r = rand(rMin, rMax);
+    const a = rnd() * Math.PI * 2;
+    const r = rMin + rnd() * (rMax - rMin);
     const x = center.x + Math.cos(a) * r;
     const z = center.z + Math.sin(a) * r;
     if (Math.abs(x) > 172 || z < -172 || z > 150) continue;

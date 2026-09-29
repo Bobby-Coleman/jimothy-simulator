@@ -50,21 +50,22 @@ void main() {
   c.y = -c.y;
   float a = 1.0;
   if (vShape < 0.5) {
-    a = smoothstep(1.0, 0.45, length(c));
+    a = 1.0 - smoothstep(0.45, 1.0, length(c));
   } else if (vShape < 1.5) {
     a = 1.0;
   } else if (vShape < 2.5) {
     // four-point sparkle
     float d = abs(c.x) * abs(c.y);
     a = clamp(1.0 - (d * 18.0 + length(c) * 0.9), 0.0, 1.0);
-    a += smoothstep(0.35, 0.0, length(c)) * 0.8;
+    a += (1.0 - smoothstep(0.0, 0.35, length(c))) * 0.8;
   } else {
     // heart: (x^2 + y^2 - 1)^3 - x^2 y^3 < 0
     vec2 h = c * 1.25;
     h.y += 0.25;
     float x2 = h.x * h.x;
-    float v = pow(x2 + h.y * h.y - 1.0, 3.0) - x2 * h.y * h.y * h.y;
-    a = smoothstep(0.02, -0.08, v);
+    float q = x2 + h.y * h.y - 1.0;
+    float v = q * q * q - x2 * h.y * h.y * h.y;
+    a = 1.0 - smoothstep(-0.08, 0.02, v);
   }
   a *= vAlpha;
   if (a < 0.01) discard;

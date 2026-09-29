@@ -164,7 +164,7 @@ export function jimothySummer(): MutatorImpl {
       const sat = game.renderer?.saturation;
       if (sat) {
         savedSat = sat.saturation;
-        sat.saturation = Math.min(1, savedSat + 0.22);
+        sat.saturation = Math.min(0.9, savedSat + 0.15);
       }
       flowers = new FlowerField(game);
       travel = 0;

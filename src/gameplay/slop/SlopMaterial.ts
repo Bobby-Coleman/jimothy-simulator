@@ -155,9 +155,11 @@ const FRAG_COLOR = /* glsl */ `
   vec3 q = floor(vSlopObj * 22.0) / 22.0;
   float band = fres * 1.8 + dot(q, vec3(1.9, 2.7, 1.3)) + uTime * 0.25 + uSeed * 0.37;
   vec3 rainbow = 0.5 + 0.5 * cos(6.2831853 * (band + vec3(0.0, 0.33, 0.67)));
-  float iri = uIri * (0.28 + 0.72 * fres);
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.45 + rainbow * 0.62, iri);
-  totalEmissiveRadiance += rainbow * uIri * fres * 0.5;
+  // oil-slick: faint in the middle, strong at grazing angles; a slow shimmer band sweeps across now and then
+  float sweep = smoothstep(0.85, 1.0, sin(vSlopObj.y * 6.0 - uTime * 2.3 + uSeed) * 0.5 + 0.5);
+  float iri = uIri * clamp(0.1 + 0.62 * fres + 0.35 * sweep, 0.0, 0.9);
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.5 + rainbow * 0.6, iri);
+  totalEmissiveRadiance += rainbow * uIri * (fres * 0.35 + sweep * 0.12);
   // "compression artifacts": 8x8 screen-space macroblocks
   vec2 blk = floor(gl_FragCoord.xy / 8.0);
   float hb = slopH2(blk + floor(uTime * 7.0) * 0.731 + uSeed);

@@ -14,7 +14,7 @@ import { SlopProps } from './SlopProps';
 import { SlopFx } from './SlopFx';
 import { drawPadDecal, loadSlopFonts } from './SlopArt';
 import { TECHBRO_PIVOT, TECHBRO_UNPLUGGED } from './lines';
-import { canvasTexture, findClearSpot, findNpcs, markOwned, pick, poi, rand, randInt, say, surfaceY, terrainY, Timeline, toast, worldOf } from './util';
+import { canvasTexture, findClearSpot, findNpcs, markOwned, pick, poi, rand, randInt, say, seeded, surfaceY, terrainY, Timeline, toast, worldOf } from './util';
 
 /** Objective ids the objectives agent is expected to use (we add them ourselves if they're missing). */
 const OBJECTIVES: ObjectiveDef[] = [
@@ -48,6 +48,13 @@ const OBJECTIVES: ObjectiveDef[] = [
     points: 600,
   },
 ];
+
+const ALIASES: Record<string, { ids: string[]; re: RegExp }> = {
+  wash_away_the_slop: { ids: ['wash_away_the_slop', 'washSlop', 'washAwayTheSlop'], re: /slopoth|wash away the slop/i },
+  touch_grass: { ids: ['touch_grass', 'touchGrass'], re: /unplug|touch grass/i },
+  hallucination: { ids: ['hallucination', 'dragonRider', 'rideSlopDragon'], re: /dragon/i },
+  human_made: { ids: ['human_made', 'countToFive', 'washBillboard'], re: /billboard/i },
+};
 
 /**
  * All the AI-slop content: Slopothys (fake Jimothys), the Slop Dragon, the washable AI billboard, the giant
@@ -131,8 +138,10 @@ export class SlopSystem implements System {
     this.dataCenter.copy(dc.pos);
     this.dataCenterFound = dc.found;
     const avoid: THREE.Vector3[] = [];
+    // deterministic fallback layout (same campus every session)
+    const rnd = seeded(0x51095);
     const clear = (p: { pos: THREE.Vector3; found: boolean }, hx: number, hz: number, h: number, r = 18) =>
-      p.found ? p.pos.clone() : (findClearSpot(game, p.pos, 0, r, hx, hz, h, 50, avoid, 10) ?? p.pos.clone());
+      p.found ? p.pos.clone() : (findClearSpot(game, p.pos, 0, r, hx, hz, h, 50, avoid, 10, rnd) ?? p.pos.clone());
 
     // Prompt Portal
     try {
@@ -167,7 +176,7 @@ export class SlopSystem implements System {
     }
     // Dragon pad + dragon
     try {
-      const pad = findClearSpot(game, this.campus, 10, 48, 5.5, 5.5, 9, 80, avoid, 14) ?? findClearSpot(game, this.campus, 30, 70, 5, 5, 8, 60) ?? this.campus.clone().add(new THREE.Vector3(22, 0, 22));
+      const pad = findClearSpot(game, this.campus, 10, 48, 5.5, 5.5, 9, 80, avoid, 14, rnd) ?? findClearSpot(game, this.campus, 30, 70, 5, 5, 8, 60, [], 0, rnd) ?? this.campus.clone().add(new THREE.Vector3(22, 0, 22));
       pad.y = terrainY(game, pad.x, pad.z);
       this.buildPad(pad);
       avoid.push(pad);
@@ -183,16 +192,16 @@ export class SlopSystem implements System {
     // Flavor props
     try {
       this.props = new SlopProps(game, this.fx);
-      const k1 = this.props.kioskSpot(this.portal ? this.portal.center.clone().setY(this.campus.y) : this.campus, 6, 16, avoid);
+      const k1 = this.props.kioskSpot(this.portal ? this.portal.center.clone().setY(this.campus.y) : this.campus, 6, 16, avoid, rnd);
       if (k1) {
         this.props.makeKiosk(k1.ground, k1.yaw);
         avoid.push(k1.ground);
       }
       const town = this.slopothys.townSpots().filter((p) => p.distanceTo(this.campus) > 60);
       const central = town.sort((a, b) => a.length() - b.length())[0] ?? new THREE.Vector3(6, 0, -10);
-      const k2 = this.props.kioskSpot(central, 3, 20);
+      const k2 = this.props.kioskSpot(central, 3, 20, [], rnd);
       if (k2) this.props.makeKiosk(k2.ground, k2.yaw);
-      this.props.placePosters(town, 4);
+      this.props.placePosters(town, 4, rnd);
     } catch (err) {
       console.error('[slop] props failed', err);
     }
@@ -260,14 +269,14 @@ export class SlopSystem implements System {
     });
     tl.later(0.8, () => {
       game.hint('⚠ SLOP GENERATION HALTED ⚠', 4);
-      toast(game, 'SLOP GENERATION HALTED', 'SlopCorp servers offline. All generated raccoons are being… un-generated.', 'warning');
+      toast(game, 'SLOP GENERATION HALTED', 'SlopCorp servers offline. All generated raccoons are being… un-generated.', '⚠️');
       game.sfx('jingle_fail');
     });
     for (let i = 0; i < 30; i++) tl.later(1 + i * 0.22 + rand(0, 0.1), () => this.serverSpark());
     tl.later(1.5, () => this.slopothys.dissolveAll('unplug', 0.3));
     tl.later(2.2, () => this.portal?.setOpen(false));
     tl.later(3.2, () => this.techbrosSay(TECHBRO_UNPLUGGED, true));
-    tl.later(5.5, () => toast(game, 'Touch Grass', 'SlopCorp unplugged. The internet is 4% less weird.', 'grass'));
+    tl.later(5.5, () => toast(game, 'Touch Grass', 'SlopCorp unplugged. The internet is 4% less weird.', '🌱'));
     tl.later(10, () => this.plug?.setAlarm(false));
     this.replugAt = game.time + this.pivotDelay;
   }
@@ -370,7 +379,11 @@ export class SlopSystem implements System {
     const obj = this.game.get<ObjectivesSystem>('objectives');
     if (!obj || typeof obj.add !== 'function') return;
     for (const d of OBJECTIVES) {
-      if (!obj.get(d.id)) {
+      // the objectives agent may already cover it under its own id / wording
+      const alias = ALIASES[d.id];
+      const covered =
+        alias.ids.some((id) => obj.get(id)) || obj.list.some((o) => o.category === 'slop' && alias.re.test(`${o.title} ${o.desc}`));
+      if (!covered) {
         obj.add(d);
         this.ownObjectives.add(d.id);
       }

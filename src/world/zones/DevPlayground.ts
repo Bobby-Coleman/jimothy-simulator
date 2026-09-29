@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import type { World, ZoneBuilder } from '../World';
 import type { WaterSystem } from '../Water';
-import { spawnProp, destroyProp, mat, box, cylinder, sphere } from '../../entities/Props';
+import { spawnProp, mat, box, cylinder, sphere } from '../../entities/Props';
+import { spawnItem, spawnTrashCan, spawnDumpster, type ItemKind } from '../../gameplay/items';
 
 /** Temporary test area around the spawn, used while the real zones are being built. */
 export const DevPlayground: ZoneBuilder = {
@@ -52,32 +53,28 @@ export const DevPlayground: ZoneBuilder = {
     // beach ball
     spawnProp(game, { name: 'Beach Ball', object: sphere(0.4, mat(0xff5a5a, { roughness: 0.4 })), shape: 'ball', mass: 0.5, restitution: 0.8, tags: ['grabbable', 'washable'], data: { buoyancy: 4 } }, new THREE.Vector3(ox + 2, y, oz - 4));
 
-    // cotton candy
-    const cc = new THREE.Group();
-    const stick = cylinder(0.015, 0.015, 0.35, mat(0xf2e3c6));
-    stick.position.y = 0.17;
-    cc.add(stick);
-    const fluff = sphere(0.16, mat(0xff9fd2, { roughness: 1 }), 16);
-    fluff.scale.set(1, 1.2, 1);
-    fluff.position.y = 0.4;
-    cc.add(fluff);
-    spawnProp(game, {
-      name: 'Cotton Candy',
-      object: cc,
-      mass: 0.2,
-      tags: ['grabbable', 'food', 'cottoncandy'],
-      onWash(g) {
-        g.score(250, "Where'd It Go?");
-        g.hint('Jimothy washed the cotton candy. It is gone. He stares at his empty hands.', 4);
-        g.sfx('sad_trombone');
-        g.events.emit('cottonCandyGone', {});
-        const p = g.get<any>('player');
-        const e = p?.held?.entity;
-        if (e) {
-          p.release(false);
-          destroyProp(g, e);
-        }
-      },
-    }, new THREE.Vector3(ox - 3, y, oz - 6));
+    // cotton candy (items system: washes away, Jimothy stares at his empty paws)
+    spawnItem(game, 'cottonCandy', new THREE.Vector3(ox - 3, y, oz - 6));
+
+    // --- items / bins test area (see src/gameplay/items)
+    const row: ItemKind[] = ['cash', 'phone', 'teddy', 'fish', 'soap', 'rubberDuck', 'pizza', 'sandwich', 'coffee', 'iceCream', 'diploma', 'rookieCard', 'grapes'];
+    row.forEach((k, i) => spawnItem(game, k, new THREE.Vector3(ox - 9.5 + i * 1.2, world.heightAt(ox - 9.5 + i * 1.2, oz - 6.8), oz - 6.8), i * 0.7));
+    const row2: ItemKind[] = ['spoon', 'bottleCap', 'key', 'ring', 'marble', 'sodaCan', 'appleCore', 'fishBones', 'takeout', 'newspaper', 'goldenTrophy', 'glassBottle'];
+    row2.forEach((k, i) => spawnItem(game, k, new THREE.Vector3(ox - 8 + i * 1.2, world.heightAt(ox - 8 + i * 1.2, oz - 14.8), oz - 14.8), i * 0.9));
+    spawnItem(game, 'bananaPeel', new THREE.Vector3(ox - 8, world.heightAt(ox - 8, oz + 6), oz + 6));
+    spawnDumpster(game, new THREE.Vector3(ox - 12, world.heightAt(ox - 12, oz + 2), oz + 2), Math.PI / 2);
+    spawnTrashCan(game, new THREE.Vector3(ox - 10, world.heightAt(ox - 10, oz + 8), oz + 8));
+    spawnTrashCan(game, new THREE.Vector3(ox - 8.8, world.heightAt(ox - 8.8, oz + 8), oz + 8));
+    // fragile & explosive corner (east, past the climb wall)
+    const hot: [ItemKind, number, number][] = [
+      ['vase', 10, 6],
+      ['glassBottle', 11, 6],
+      ['tv', 12.5, 6],
+      ['glassPane', 10.5, 8.5],
+      ['propaneTank', 14, 4],
+      ['gasCan', 15, 4],
+      ['fireworksCrate', 16.2, 4.5],
+    ];
+    for (const [k, dx, dz] of hot) spawnItem(game, k, new THREE.Vector3(ox + dx, world.heightAt(ox + dx, oz + dz), oz + dz));
   },
 };

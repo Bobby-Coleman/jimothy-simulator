@@ -139,8 +139,10 @@ export function crowRider(): MutatorImpl {
       const k = 1 - Math.exp(-dt * 2.2);
       const vx = v.x + (f.x * speed - v.x) * k;
       const vz = v.z + (f.z * speed - v.z) * k;
-      const sink = -1.3;
-      const vy = v.y < sink ? v.y + (sink - v.y) * (1 - Math.exp(-dt * 9)) : Math.min(v.y, 2);
+      // The crows hold him up: cancel gravity for this step and ease into a gentle sink.
+      const sink = -1.2;
+      const vy = v.y + (sink - v.y) * (1 - Math.exp(-dt * 6));
+      p.body.setGravityScale(0, true); // the controller restores its own gravity scale next frame
       p.body.setLinvel({ x: vx, y: vy, z: vz }, true);
     },
     post(game, dt) {

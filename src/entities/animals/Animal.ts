@@ -189,6 +189,31 @@ export abstract class Animal {
     return this.game.get<any>('player');
   }
 
+  /** Is Jimothy the one bonking us right now? (Cars and other systems call onBonk too.) */
+  isPlayerBonk(): boolean {
+    const pl = this.player;
+    if (!pl) return false;
+    const size = pl.sizeMul ?? 1;
+    const d = Math.hypot(pl.position.x - this.pos.x, pl.position.z - this.pos.z);
+    if (d > 2.4 * Math.max(1, size)) return false;
+    const since = this.game.time - ((pl as any).bonkTime ?? -10);
+    return since < 0.5 || pl.mode === 'roll' || pl.mode === 'ragdoll' || size > 1.4;
+  }
+
+  /** Startled hop out of the way (something that isn't Jimothy bumped us — usually a car). */
+  dodge(impulse: THREE.Vector3) {
+    if (this.airborne) return;
+    const h = _v2.set(impulse.x, 0, impulse.z);
+    if (h.lengthSq() < 1e-4) h.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+    h.normalize();
+    // leap sideways, out of the car's path
+    const side = Math.random() < 0.5 ? 1 : -1;
+    const v = new THREE.Vector3(-h.z * side * 3.2 + h.x * 1.2, 4.8, h.x * side * 3.2 + h.z * 1.2);
+    this.launch(v, 0);
+    this.say('exclaim', 0.9);
+    this.game.sfx('squeak', this.pos, 0.5, 1.3);
+  }
+
   distToPlayer() {
     const p = this.player?.position as THREE.Vector3 | undefined;
     return p ? Math.hypot(p.x - this.pos.x, p.z - this.pos.z) : Infinity;
@@ -204,10 +229,19 @@ export abstract class Animal {
     return wrapAngle(this.yawTo(p) - this.yaw);
   }
 
-  /** Ground (or water surface) height under (x, z), raycasting static world from `fromY` down. */
-  groundAt(x: number, z: number, fromY = this.pos.y + 1.1): number {
+  /**
+   * Ground (or water surface) height under (x, z), raycasting static world from `fromY` down.
+   * The default origin (0.6 m above our feet) is the max step-up, so we never pop onto low decks or
+   * roofs we happen to be under (Mom lives under a porch!).
+   */
+  groundAt(x: number, z: number, fromY = this.pos.y + 0.6): number {
     const hit = this.game.physics.raycast(_v.set(x, fromY, z), DOWN, 12, WORLD_ONLY);
-    let y = hit ? hit.point.y : (this.game.get<any>('world')?.heightAt?.(x, z) ?? 0);
+    let y: number;
+    if (hit && hit.distance < 0.004) {
+      // the ray started inside a solid collider (a building's box, a tree canopy…): can't see the floor from
+      // in here, so keep our height instead of "climbing" out through the roof.
+      y = Math.min(this.pos.y, fromY);
+    } else y = hit ? hit.point.y : (this.game.get<any>('world')?.heightAt?.(x, z) ?? 0);
     // Water: paddle at the surface instead of walking on the bottom
     this.waterCheck -= 1;
     if (this.waterCheck <= 0) {

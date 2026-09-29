@@ -3,4 +3,6 @@
  * Tee-Hee Park stadium (SE). Runtime behaviour lives in SouthSystem (registered in src/systems.ts).
  */
 export { ParkZone } from './Park';
+export { LocksZone } from './Locks';
+export { WaterfrontZone } from './Waterfront';
 export { SouthSystem } from './SouthSystem';

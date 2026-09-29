@@ -50,6 +50,7 @@ export class Kit extends RaccoonAnimal {
   private playT = Math.random() * 10;
   private washCd = 0;
   private stuckT = 0;
+  private dodging = false;
   climbing = false;
 
   constructor(game: Game, index: number, pos: THREE.Vector3, yaw = Math.random() * Math.PI * 2) {
@@ -345,6 +346,14 @@ export class Kit extends RaccoonAnimal {
   }
 
   protected handleBonk(impulse: THREE.Vector3) {
+    if (!this.isPlayerBonk()) {
+      // a car (or some other chaos): hop out of the way, never "found" by it
+      if (!this.entity.data.heldByPlayer && this.state !== 'toMom') {
+        this.dodging = true;
+        this.dodge(impulse);
+      }
+      return;
+    }
     if (this.airborne || this.state === 'home' || this.state === 'toMom') {
       if (this.state === 'home') {
         this.say('heart', 1.2);
@@ -375,6 +384,11 @@ export class Kit extends RaccoonAnimal {
   }
 
   protected onLanded() {
+    if (this.dodging) {
+      this.dodging = false;
+      if (this.state === 'lost') this.lostSpot.copy(this.pos);
+      return;
+    }
     this.recover = 1;
     this.say(this.thrown ? 'heart' : 'dizzy', 0.9);
   }

@@ -215,9 +215,13 @@ export function buildBowl(): THREE.Group {
 
 export interface GiftDef {
   kind: string;
+  /** Matching kind in the items system (src/gameplay/items), if it has one. */
+  item?: string;
   name: string;
   tags: string[];
   mass: number;
+  /** Tint applied to the items-system model (e.g. make the bottle cap golden). */
+  tint?: number;
   build: () => THREE.Object3D;
 }
 
@@ -305,12 +309,12 @@ function pennyModel() {
 }
 
 export const GIFTS: GiftDef[] = [
-  { kind: 'bottlecap', name: 'Golden Bottle Cap', tags: ['grabbable', 'washable', 'shiny'], mass: 0.05, build: bottleCap },
-  { kind: 'key', name: 'Mystery Key', tags: ['grabbable', 'washable', 'shiny'], mass: 0.05, build: keyModel },
-  { kind: 'cash', name: 'Crumpled Dollar', tags: ['grabbable', 'washable', 'cash'], mass: 0.02, build: cashModel },
+  { kind: 'bottlecap', item: 'bottleCap', tint: 0xffd24a, name: 'Golden Bottle Cap', tags: ['grabbable', 'washable', 'shiny'], mass: 0.05, build: bottleCap },
+  { kind: 'key', item: 'key', name: 'Mystery Key', tags: ['grabbable', 'washable', 'shiny'], mass: 0.05, build: keyModel },
+  { kind: 'cash', item: 'cash', name: 'Crumpled Dollar', tags: ['grabbable', 'washable', 'cash'], mass: 0.02, build: cashModel },
   { kind: 'fries', name: 'Single French Fry', tags: ['grabbable', 'food'], mass: 0.02, build: fryModel },
-  { kind: 'marble', name: 'Shiny Marble', tags: ['grabbable', 'washable', 'shiny'], mass: 0.05, build: marbleModel },
-  { kind: 'earring', name: 'Lost Earring', tags: ['grabbable', 'washable', 'shiny'], mass: 0.02, build: earringModel },
+  { kind: 'marble', item: 'marble', name: 'Shiny Marble', tags: ['grabbable', 'washable', 'shiny'], mass: 0.05, build: marbleModel },
+  { kind: 'earring', item: 'ring', name: 'Lost Ring', tags: ['grabbable', 'washable', 'shiny'], mass: 0.02, build: earringModel },
   { kind: 'penny', name: 'Lucky Penny', tags: ['grabbable', 'washable', 'shiny'], mass: 0.02, build: pennyModel },
 ];
 
@@ -347,7 +351,8 @@ export interface RockingChair {
   seat: THREE.Object3D;
 }
 
-export function buildRockingChair(): RockingChair {
+/** Wooden rocking chair; `seatH` = height of the seat board top. Rocks about its root (ground contact). */
+export function buildRockingChair(seatH = 0.42): RockingChair {
   const root = new THREE.Group();
   root.name = 'RockingChair';
   const rocker = new THREE.Group();
@@ -361,29 +366,30 @@ export function buildRockingChair(): RockingChair {
     arcPts.push(new THREE.Vector3(0, 0.025 + 1.1 - Math.cos(a) * 1.1, Math.sin(a) * 1.1));
   }
   const arcGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(arcPts), 16, 0.025, 6, false);
+  const legH = seatH - 0.07;
   for (const sx of [-1, 1]) {
     const arc = mesh(arcGeo, woodDark, sx * 0.24, 0, 0);
     rocker.add(arc);
-    for (const z of [-0.2, 0.22]) rocker.add(mesh(new THREE.BoxGeometry(0.05, 0.4, 0.05), wood, sx * 0.24, 0.24, z));
+    for (const z of [-0.2, 0.22]) rocker.add(mesh(new THREE.BoxGeometry(0.05, legH, 0.05), wood, sx * 0.24, 0.04 + legH / 2, z));
     // arm rests
-    rocker.add(mesh(new THREE.BoxGeometry(0.07, 0.04, 0.5), wood, sx * 0.26, 0.66, 0.02));
-    rocker.add(mesh(new THREE.BoxGeometry(0.04, 0.24, 0.04), wood, sx * 0.26, 0.54, 0.22));
+    rocker.add(mesh(new THREE.BoxGeometry(0.07, 0.04, 0.5), wood, sx * 0.27, seatH + 0.22, 0.02));
+    rocker.add(mesh(new THREE.BoxGeometry(0.04, 0.22, 0.04), wood, sx * 0.27, seatH + 0.1, 0.22));
   }
-  rocker.add(mesh(new THREE.BoxGeometry(0.56, 0.06, 0.5), wood, 0, 0.45, 0));
+  rocker.add(mesh(new THREE.BoxGeometry(0.56, 0.06, 0.5), wood, 0, seatH - 0.03, 0));
   // back
   const back = new THREE.Group();
-  back.position.set(0, 0.45, -0.24);
+  back.position.set(0, seatH - 0.03, -0.24);
   back.rotation.x = -0.22;
   rocker.add(back);
-  for (const sx of [-1, 1]) back.add(mesh(new THREE.BoxGeometry(0.05, 0.75, 0.05), wood, sx * 0.25, 0.38, 0));
-  for (let i = 0; i < 5; i++) back.add(mesh(new THREE.BoxGeometry(0.035, 0.6, 0.02), wood, -0.16 + i * 0.08, 0.36, 0));
-  back.add(mesh(new THREE.BoxGeometry(0.58, 0.07, 0.05), wood, 0, 0.74, 0));
+  for (const sx of [-1, 1]) back.add(mesh(new THREE.BoxGeometry(0.05, 0.8, 0.05), wood, sx * 0.25, 0.4, 0));
+  for (let i = 0; i < 5; i++) back.add(mesh(new THREE.BoxGeometry(0.035, 0.64, 0.02), wood, -0.16 + i * 0.08, 0.38, 0));
+  back.add(mesh(new THREE.BoxGeometry(0.58, 0.07, 0.05), wood, 0, 0.79, 0));
   // cushion + a crocheted blanket over the back
-  rocker.add(mesh(new THREE.BoxGeometry(0.5, 0.05, 0.45), m(0xc94f6d, 0.9), 0, 0.5, 0.01));
-  const blanket = mesh(new THREE.BoxGeometry(0.52, 0.4, 0.03), m(0xf2c14e, 0.95), 0, 0.5, -0.02);
+  rocker.add(mesh(new THREE.BoxGeometry(0.5, 0.05, 0.45), m(0xc94f6d, 0.9), 0, seatH + 0.02, 0.01));
+  const blanket = mesh(new THREE.BoxGeometry(0.52, 0.42, 0.03), m(0xf2c14e, 0.95), 0, 0.52, 0.03);
   back.add(blanket);
   const seat = new THREE.Object3D();
-  seat.position.set(0, 0.5, 0.02);
+  seat.position.set(0, seatH + 0.045, 0.02);
   rocker.add(seat);
   return { root, rocker, seat };
 }

@@ -146,8 +146,8 @@ function pond(kit: Kit, b: Batch, water: WaterSystem) {
       const z = cz + (r() - 0.5) * 3;
       const base = Math.max(world.heightAt(x, z), -1.0);
       const h = WATER_Y - base + 0.7 + r() * 0.9;
-      b.cyl([x, base + h / 2, z], 0.035, h, reedCols[k % 4], { rTop: 0.004, seg: 5, collide: false });
-      if (k % 3 === 0) b.cyl([x, base + h * 0.82, z], 0.055, 0.28, 0x6b4226, { seg: 6, collide: false });
+      b.cyl([x, base + h / 2, z], 0.035, h, reedCols[k % 4], { rTop: 0.004, seg: 5, collide: false, shadow: false });
+      if (k % 3 === 0) b.cyl([x, base + h * 0.82, z], 0.055, 0.28, 0x6b4226, { seg: 6, collide: false, shadow: false });
     }
   }
   // Lily pads
@@ -186,7 +186,7 @@ function pond(kit: Kit, b: Batch, water: WaterSystem) {
     const m = swanBoat(col, head);
     m.position.set(x, WATER_Y, z);
     m.rotation.y = ry;
-    world.staticRoot.add(m);
+    kit.root.add(m);
     kit.state.bobbers.push({ obj: m, baseY: WATER_Y - 0.05, amp: 0.05, speed: 1.3 + r() * 0.5, phase: r() * 6, roll: 0.03, baseRotX: 0, baseRotZ: 0 });
     kit.collider([x, WATER_Y - 0.15, z], [1.6, 0.5, 2.6], ry);
   }
@@ -268,7 +268,7 @@ function gasworks(kit: Kit, b: Batch) {
     const lr = t.r + 0.25;
     for (const s of [-0.28, 0.28]) b.cyl([t.x + lx * lr + tx * s, base + t.h / 2, t.z + lz * lr + tz * s], 0.035, t.h, IRON, { seg: 6, collide: false });
     for (let y = 0.6; y < t.h; y += 0.45)
-      b.pipe([t.x + lx * lr - tx * 0.28, base + y, t.z + lz * lr - tz * 0.28], [t.x + lx * lr + tx * 0.28, base + y, t.z + lz * lr + tz * 0.28], 0.025, IRON, { seg: 5 });
+      b.pipe([t.x + lx * lr - tx * 0.28, base + y, t.z + lz * lr - tz * 0.28], [t.x + lx * lr + tx * 0.28, base + y, t.z + lz * lr + tz * 0.28], 0.025, IRON, { seg: 5, shadow: false });
     // catwalk ring
     if (t.ring) catwalk(kit, b, t.x, base + t.ring, t.z, t.r, 1.5);
   }
@@ -303,7 +303,7 @@ function gasworks(kit: Kit, b: Batch) {
   warningLights.forEach(([x, y, z], i) => im.setMatrixAt(i, new THREE.Matrix4().makeTranslation(x, y, z)));
   im.instanceMatrix.needsUpdate = true;
   im.computeBoundingSphere();
-  kit.world.staticRoot.add(im);
+  kit.root.add(im);
   warningLights.length = 0;
   // Bobblehead #1: top of the tallest tower
   const tb = towers[0];
@@ -324,7 +324,7 @@ function catwalk(kit: Kit, b: Batch, x: number, y: number, z: number, r: number,
     const seg = ((Math.PI * 2 * cr) / n) * 1.12;
     kit.collider([x + Math.cos(a) * cr, y - 0.08, z + Math.sin(a) * cr], [seg, 0.16, w], -a + Math.PI / 2);
     kit.collider([x + Math.cos(a) * (r + w), y + 0.5, z + Math.sin(a) * (r + w)], [((Math.PI * 2 * (r + w)) / n) * 1.1, 1, 0.08], -a + Math.PI / 2);
-    b.cyl([x + Math.cos(a) * (r + w - 0.05), y + 0.48, z + Math.sin(a) * (r + w - 0.05)], 0.035, 0.96, 0x3a3533, { seg: 5, collide: false });
+    b.cyl([x + Math.cos(a) * (r + w - 0.05), y + 0.48, z + Math.sin(a) * (r + w - 0.05)], 0.035, 0.96, 0x3a3533, { seg: 5, collide: false, shadow: false });
     // struts under the catwalk
     if (i % 3 === 0) b.pipe([x + Math.cos(a) * (r + w - 0.1), y - 0.16, z + Math.sin(a) * (r + w - 0.1)], [x + Math.cos(a) * r, y - 1.6, z + Math.sin(a) * r], 0.05, 0x3a3533, { seg: 5 });
   }
@@ -436,7 +436,7 @@ function kiteHill(kit: Kit, b: Batch) {
   const mesh = new THREE.Mesh(geo, terrainMat ?? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, color: 0x8fc35a }));
   mesh.receiveShadow = true;
   mesh.castShadow = true;
-  kit.world.staticRoot.add(mesh);
+  kit.root.add(mesh);
 
   // Sundial mosaic on top
   b.geo(GEO.cyl(1, 32), [cx, H + 0.03, cz], [0, 0, 0], [2.4, 0.08, 2.4], 0xd8cfc0, { mat: 'paving', shadow: false });
@@ -456,7 +456,7 @@ function kiteHill(kit: Kit, b: Batch) {
   for (const [ax, az, off, cols] of kites) {
     const k = kite(cols, off, 1.4);
     k.position.set(ax, kit.world.heightAt(ax, az) + 0.8, az);
-    kit.world.staticRoot.add(k);
+    kit.root.add(k);
     b.cyl([ax, 0.4, az], 0.05, 0.8, 0x7a5a3a, { seg: 5, collide: false });
     kit.state.swayers.push({ obj: k, axis: 'z', amp: 0.05, speed: 0.7 + Math.random() * 0.4, phase: Math.random() * 6, base: 0 });
     kit.state.swayers.push({ obj: k, axis: 'x', amp: 0.04, speed: 0.5 + Math.random() * 0.3, phase: Math.random() * 6, base: 0 });
@@ -521,7 +521,7 @@ function playground(kit: Kit, b: Batch) {
     seat.position.y = -2.47;
     seat.castShadow = true;
     g.add(seat);
-    world.staticRoot.add(g);
+    kit.root.add(g);
     kit.state.swayers.push({ obj: g, axis: 'x', amp: 0.12 + i * 0.1, speed: 1.95, phase: i * 1.7, base: 0 });
   });
 
@@ -720,14 +720,14 @@ function picnic(kit: Kit, b: Batch) {
     m.position.set(x, 0.814, z);
     m.rotation.y = ry;
     m.receiveShadow = true;
-    kit.world.staticRoot.add(m);
+    kit.root.add(m);
   }
   // picnic blanket on the lawn with a basket
   const blanket = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2).rotateX(-Math.PI / 2), clothMat);
   blanket.position.set(-100.5, 0.03, -9);
   blanket.rotation.y = 0.4;
   blanket.receiveShadow = true;
-  kit.world.staticRoot.add(blanket);
+  kit.root.add(blanket);
   b.box([-100.1, 0.2, -9.4], [0.6, 0.36, 0.42], 0xa0692f, { rotY: 0.4, mat: 'planks' });
   b.geo(new THREE.TorusGeometry(0.22, 0.03, 5, 12, Math.PI), [-100.1, 0.38, -9.4], [0, 0.4, 0], 1, 0x7a4f22, {});
   P.sandwich(game, -101.2, 0.04, -8.6, 0.8);
@@ -841,11 +841,11 @@ function fountain(kit: Kit, b: Batch, water: WaterSystem) {
   sprayMat.opacity = 0.55;
   const spray = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.16, 1.5, 10, 1, true), sprayMat);
   spray.position.set(x, 3.25, z);
-  kit.world.staticRoot.add(spray);
+  kit.root.add(spray);
   const cap = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), sprayMat);
   cap.position.set(x, 3.95, z);
   cap.scale.set(1.3, 0.6, 1.3);
-  kit.world.staticRoot.add(cap);
+  kit.root.add(cap);
   kit.state.spinners.push({ obj: spray, axis: 'y', speed: 2 });
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + Math.PI / 4;

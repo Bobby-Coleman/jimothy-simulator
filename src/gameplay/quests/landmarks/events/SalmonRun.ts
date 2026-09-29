@@ -31,6 +31,38 @@ const TRASH_TALK = [
   'Step up to the line if you dare, fuzzball.',
 ];
 const MAX_RACER_SPEED = 8.1; // Jimothy sprints at 8.8 m/s and rolls faster: always winnable
+
+let tailGeo: THREE.BufferGeometry | null = null;
+/** Vertical salmon tail fin (thin in X, spreads in Y, points toward -Z). */
+function salmonTailGeometry() {
+  if (tailGeo) return tailGeo;
+  const s = new THREE.Shape();
+  s.moveTo(0, 0);
+  s.lineTo(-0.2, 0.3);
+  s.quadraticCurveTo(0, 0.2, 0.2, 0.3);
+  s.lineTo(0, 0);
+  const g = new THREE.ExtrudeGeometry(s, { depth: 0.035, bevelEnabled: false });
+  g.translate(0, 0, -0.0175);
+  g.rotateZ(Math.PI / 2);
+  g.rotateY(-Math.PI / 2);
+  tailGeo = g;
+  return g;
+}
+
+/** Give an NPC racer a tail fin on its pelvis bone so it reads as a salmon from behind (the view while chasing). */
+function addTailFin(actor: Actor, color: number) {
+  const rig = (actor as any).npc?.rig;
+  const pelvis: THREE.Object3D | undefined = rig?.bones?.pelvis;
+  const d = rig?.dims;
+  if (!pelvis || !d) return;
+  const c = new THREE.Color(color).multiplyScalar(0.8);
+  const fin = new THREE.Mesh(salmonTailGeometry(), new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 }));
+  fin.castShadow = true;
+  fin.position.set(0, -0.02 * d.s, -(d.pelvisD ?? 0.2) * 0.62);
+  fin.rotation.x = -0.35;
+  fin.scale.setScalar(d.s ?? 1);
+  pelvis.add(fin);
+}
 const FAN_LINES = ['GO JIMOTHY!', 'RUN, ROUND BOY, RUN!', 'SALMON RUN!', 'BARNACLES!', 'Is he rolling?!'];
 
 /**
@@ -160,10 +192,11 @@ export class SalmonRun extends Landmark {
         name: def.name,
         position: spot,
         facing: Math.atan2(this.start.x - spot.x, this.start.z - spot.z),
-        outfit: { salmon: def.color, pants: 0x2d3a55, shoes: 0xffffff },
-        look: { topStyle: 'salmon', hat: 'salmonhood', top: def.color },
-        figureOnly: true,
+        outfit: { salmon: def.color, shirt: def.color, pants: 0x2d3a55, shoes: 0xffffff },
+        look: { topStyle: 'salmon', hat: 'salmonhood', top: def.color, hatColor: def.color },
+        passive: true,
       });
+      addTailFin(actor, def.color);
       return { actor, name: def.name, lane: def.lane, s: 0, v0: def.v0, v1: def.v1, finishedAt: 0, lastSlap: -10, idleSpot: spot };
     });
   }

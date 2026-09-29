@@ -123,8 +123,9 @@ export class HeartCtx {
   poi(name: string, fallback: () => THREE.Vector3): { pos: THREE.Vector3; real: boolean } {
     const p = this.world?.poi?.get(name) as THREE.Vector3 | undefined;
     if (p) {
+      // snap from just above the POI (it may be under a porch / awning; don't land on top of it)
       const out = p.clone();
-      out.y = this.ground(out.x, out.z, out.y + 1.5);
+      out.y = this.ground(out.x, out.z, out.y + 0.45, out.y);
       return { pos: out, real: true };
     }
     const f = fallback();
@@ -133,11 +134,60 @@ export class HeartCtx {
     return { pos: f, real: false };
   }
 
-  /** Static-world ground height under (x, z), raycasting down from `fromY`. */
-  ground(x: number, z: number, fromY = 60): number {
+  /**
+   * Static-world ground height under (x, z), raycasting down from `fromY`. If the ray starts inside a solid
+   * collider, returns `insideY` (default: the terrain height).
+   */
+  ground(x: number, z: number, fromY = 60, insideY?: number): number {
     const hit = this.game.physics.raycast(_v.set(x, fromY, z), DOWN, fromY + 80, WORLD_ONLY);
+    if (hit && hit.distance < 0.004) return insideY ?? this.world?.heightAt?.(x, z) ?? 0;
     if (hit) return hit.point.y;
     return this.world?.heightAt?.(x, z) ?? 0;
+  }
+
+  /**
+   * Nudge a spot out of car lanes (world.lanes) so nobody small sits in traffic. Returns true if it moved.
+   * Re-snaps the height if moved.
+   */
+  clearOfTraffic(p: THREE.Vector3, clearance = 4.6): boolean {
+    const lanes = (this.world?.lanes ?? []) as { points: THREE.Vector3[]; loop: boolean }[];
+    let moved = false;
+    for (let iter = 0; iter < 4; iter++) {
+      let pushed = false;
+      for (const lane of lanes) {
+        const pts = lane.points;
+        const n = pts.length;
+        for (let i = 0; i < n - (lane.loop ? 0 : 1); i++) {
+          const a = pts[i];
+          const b = pts[(i + 1) % n];
+          const abx = b.x - a.x;
+          const abz = b.z - a.z;
+          const len2 = abx * abx + abz * abz;
+          if (len2 < 1e-6) continue;
+          const t = THREE.MathUtils.clamp(((p.x - a.x) * abx + (p.z - a.z) * abz) / len2, 0, 1);
+          const cx = a.x + abx * t;
+          const cz = a.z + abz * t;
+          let dx = p.x - cx;
+          let dz = p.z - cz;
+          const d = Math.hypot(dx, dz);
+          if (d >= clearance) continue;
+          if (d < 1e-3) {
+            const l = Math.sqrt(len2);
+            dx = -abz / l;
+            dz = abx / l;
+          } else {
+            dx /= d;
+            dz /= d;
+          }
+          p.x = cx + dx * (clearance + 0.3);
+          p.z = cz + dz * (clearance + 0.3);
+          pushed = moved = true;
+        }
+      }
+      if (!pushed) break;
+    }
+    if (moved) p.y = this.ground(p.x, p.z, p.y + 3, p.y);
+    return moved;
   }
 
   /** Horizontal distance from the player. */
@@ -330,8 +380,16 @@ export class HeartCtx {
       const d = Math.min(dt, 0.1);
       t += d;
       const want = o.camPos(t);
+      // keep a clear view: pull in front of walls / railings between the subject and the camera
+      const f = o.focus();
+      const dir = _v.copy(want).sub(f);
+      const len = dir.length();
+      if (len > 0.3) {
+        const hit = game.physics.sphereCast(f, dir, 0.18, len, groups(G.ALL, G.WORLD | G.VEHICLE));
+        if (hit) want.copy(f).addScaledVector(dir.normalize(), Math.max(0.6, hit.distance - 0.05));
+      }
       cam.position.lerp(want, 1 - Math.exp(-d * (t < 0.8 ? 3 : 5)));
-      look.lerp(o.focus(), 1 - Math.exp(-d * 6));
+      look.lerp(f, 1 - Math.exp(-d * 6));
       cam.lookAt(look);
       cam.fov += ((o.fov ?? baseFov * 0.82) - cam.fov) * (1 - Math.exp(-d * 3));
       cam.updateProjectionMatrix();

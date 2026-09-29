@@ -6,6 +6,8 @@ export interface BatchAddOpts {
   matrix?: THREE.Matrix4;
   /** Vertex color (materials with vertexColors use it; default white). */
   color?: THREE.ColorRepresentation;
+  /** Multiply the geometry's existing vertex colours by this tint (instead of replacing them). */
+  tint?: THREE.ColorRepresentation;
   /**
    * UV mode: a number = world-space box projection with that many meters per texture repeat,
    * 'keep' = keep the geometry's own UVs (default).
@@ -56,11 +58,16 @@ export class Batch {
     if (opts.color != null || !(g.userData.hadColor as boolean)) {
       for (let i = 0; i < colors.count; i++) colors.setXYZ(i, col.r, col.g, col.b);
     }
+    if (opts.tint != null) {
+      const t = new THREE.Color(opts.tint);
+      for (let i = 0; i < colors.count; i++) colors.setXYZ(i, colors.getX(i) * t.r, colors.getY(i) * t.g, colors.getZ(i) * t.b);
+    }
     let chunk = opts.chunk;
     if (chunk == null) {
       g.computeBoundingBox();
       g.boundingBox!.getCenter(_c);
-      chunk = `${Math.floor(_c.x / this.chunkSize)},${Math.floor(_c.z / this.chunkSize)}`;
+      // offset by half a zone so every 120 m zone (centred on multiples of 120) is exactly one chunk
+      chunk = `${Math.floor((_c.x + 60) / this.chunkSize)},${Math.floor((_c.z + 60) / this.chunkSize)}`;
     }
     const cast = opts.castShadow ?? true;
     const key = `${matId(mat)}|${chunk}|${cast ? 1 : 0}`;
@@ -82,14 +89,37 @@ export class Batch {
     return this.add(geo, mat, { ...opts, matrix: m });
   }
 
+  /**
+   * Merge many copies of a multi-part template (see furniture.ts) into the batch — cheaper than an
+   * InstancedMesh per part because everything collapses into the zone's per-material meshes.
+   */
+  addInstances(
+    parts: { geo: THREE.BufferGeometry; mat: THREE.Material; castShadow?: boolean }[],
+    xfs: { x: number; y: number; z: number; ry: number; s?: number; color?: THREE.ColorRepresentation }[],
+    opts: { castShadow?: boolean; chunk?: string } = {},
+  ) {
+    const q = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    for (const x of xfs) {
+      const m = new THREE.Matrix4().compose(new THREE.Vector3(x.x, x.y, x.z), q.setFromAxisAngle(up, x.ry), new THREE.Vector3().setScalar(x.s ?? 1));
+      for (const p of parts) {
+        this.add(p.geo, p.mat, { matrix: m, tint: x.color, castShadow: opts.castShadow ?? p.castShadow ?? true, chunk: opts.chunk });
+      }
+    }
+  }
+
   get empty() {
     return this.buckets.size === 0;
   }
 
   /** Merge and add everything to `parent`. Returns created meshes. */
-  flush(parent: THREE.Object3D): THREE.Mesh[] {
+  flush(parent: THREE.Object3D, opts: { shadowProxy?: boolean } = {}): THREE.Mesh[] {
+    // With shadowProxy (default), every shadow-casting bucket of a chunk is also merged (positions only) into one
+    // invisible proxy mesh that casts the chunk's shadows in a single draw call; the visible meshes stop casting.
     const out: THREE.Mesh[] = [];
-    for (const b of this.buckets.values()) {
+    const useProxy = opts.shadowProxy !== false;
+    const proxies = new Map<string, THREE.BufferGeometry[]>();
+    for (const [key, b] of this.buckets) {
       if (!b.geos.length) continue;
       const merged = b.geos.length === 1 ? b.geos[0] : mergeGeometries(b.geos, false);
       if (!merged) {
@@ -100,13 +130,35 @@ export class Batch {
       merged.computeBoundingBox();
       const mesh = new THREE.Mesh(merged, b.mat);
       mesh.name = this.name;
-      mesh.castShadow = b.castShadow;
+      const proxyable = useProxy && b.castShadow && !(b.mat as THREE.MeshStandardMaterial).alphaTest && !b.mat.transparent;
+      if (proxyable) {
+        const chunk = key.split('|')[1];
+        let arr = proxies.get(chunk);
+        if (!arr) proxies.set(chunk, (arr = []));
+        const pg = new THREE.BufferGeometry();
+        pg.setAttribute('position', merged.getAttribute('position'));
+        pg.setIndex(merged.getIndex());
+        arr.push(pg);
+      }
+      mesh.castShadow = b.castShadow && !proxyable;
       mesh.receiveShadow = b.receiveShadow;
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
       parent.add(mesh);
       out.push(mesh);
       for (const g of b.geos) if (g !== merged) g.dispose();
+    }
+    for (const [chunk, geos] of proxies) {
+      const merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
+      if (!merged) continue;
+      merged.computeBoundingSphere();
+      const proxy = new THREE.Mesh(merged, shadowProxyMaterial());
+      proxy.name = this.name + ':shadow:' + chunk;
+      proxy.castShadow = true;
+      proxy.receiveShadow = false;
+      proxy.matrixAutoUpdate = false;
+      proxy.renderOrder = -10;
+      parent.add(proxy);
     }
     this.buckets.clear();
     return out;
@@ -213,4 +265,14 @@ export function TR(x: number, y: number, z: number, rx: number, ry: number, rz: 
 export function boundsOf(g: THREE.BufferGeometry) {
   g.computeBoundingBox();
   return _box.copy(g.boundingBox!);
+}
+
+let _proxyMat: THREE.MeshBasicMaterial | null = null;
+/** Draws nothing in the colour pass (early-z rejected, no depth write) but casts shadows. */
+export function shadowProxyMaterial() {
+  if (!_proxyMat) {
+    _proxyMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+    _proxyMat.name = 'shadowProxy';
+  }
+  return _proxyMat;
 }

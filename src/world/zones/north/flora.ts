@@ -147,9 +147,10 @@ export function treeTemplate(kind: TreeKind, variant: number, mats: MatSet): THR
       break;
     }
   }
+  // one mesh per template (bark + leaves share the flat-shaded vertex-colour material) = 1 draw call per variant
+  for (const [k, a] of bark.accs) leaves.accs.set('bark:' + k, a);
   const g = new THREE.Group();
-  if (bark.accs.size) g.add(bark.buildSingle(mats.bark));
-  if (leaves.accs.size) g.add(leaves.buildSingle(mats.leaves));
+  g.add(leaves.buildSingle(mats.leaves));
   templateCache.set(key, g);
   return g;
 }

@@ -366,8 +366,9 @@ export class RaccoonRig {
     for (let i = 1; i <= 5; i++) {
       const sway = Math.sin(t * (2.2 + tailWag * 5) - i * 0.7 + this.seed) * (0.08 + tailWag * 0.35) * (0.6 + i * 0.14);
       const whip = Math.sin(t * 30 - i) * 0.35 * shake;
-      const lift = (i === 1 ? tailUp * 0.5 + 0.12 * gait : tailUp * 0.12) - lie * 0.08 + 0.35 * tuck;
-      const curl = 0.5 * lie + 0.45 * tuck;
+      // lying down: the tail droops onto the floor, then wraps around toward the nose
+      const lift = (i === 1 ? tailUp * 0.5 + 0.12 * gait - lie * 0.5 : tailUp * 0.12 + lie * 0.06) + 0.35 * tuck;
+      const curl = 0.42 * lie + 0.45 * tuck;
       this.pose(`Tail${i}`, lift + (i > 1 ? 0.05 * flail * Math.sin(t * 13 + i) : 0), sway + whip - curl, 0);
     }
   }

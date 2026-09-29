@@ -496,10 +496,10 @@ export function drawLabel(ctx: Ctx, w: number, h: number, lines: string[], opts:
   const n = lines.length;
   lines.forEach((line, i) => {
     let s = Math.round((h / (n + 0.6)) * (i === 0 ? 0.8 : 0.5));
-    ctx.font = `${s}px ${i === 0 ? '"Lilita One", Impact, sans-serif' : '800 Nunito, system-ui, sans-serif'}`;
+    ctx.font = i === 0 ? `${s}px "Lilita One", Impact, sans-serif` : `800 ${s}px Nunito, system-ui, sans-serif`;
     while (ctx.measureText(line).width > w * 0.9 && s > 8) {
       s -= 2;
-      ctx.font = `${s}px ${i === 0 ? '"Lilita One", Impact, sans-serif' : '800 Nunito, system-ui, sans-serif'}`;
+      ctx.font = i === 0 ? `${s}px "Lilita One", Impact, sans-serif` : `800 ${s}px Nunito, system-ui, sans-serif`;
     }
     ctx.fillStyle = i === 0 ? (opts.fg ?? '#ffffff') : (opts.accent ?? '#7df9ff');
     ctx.fillText(line, w / 2, (h * (i + 0.8)) / (n + 0.6));

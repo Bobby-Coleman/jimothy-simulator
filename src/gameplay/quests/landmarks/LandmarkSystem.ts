@@ -76,6 +76,7 @@ export class LandmarkSystem implements System {
 
   /** Every landmark event with its progress, for the objectives / pause UI. */
   status(): LandmarkStatus[] {
+    this.ensureReady();
     return this.list.map((l) => {
       try {
         return l.status();
@@ -134,8 +135,14 @@ export class LandmarkSystem implements System {
     this.save();
   }
 
-  /** Debug: put Jimothy next to an event's trigger. */
+  private pendingTeleport: string | null = null;
+
+  /** Debug: put Jimothy next to an event's trigger (deferred to the first frame if called before it). */
   teleportTo(id: string) {
+    if (!this.ensureReady()) {
+      this.pendingTeleport = id;
+      return true;
+    }
     const l = this.get(id);
     const p = this.game.get<any>('player');
     if (!l || !p) return false;
@@ -155,12 +162,21 @@ export class LandmarkSystem implements System {
     }
   }
 
+  /** Run every landmark's setup once the static world has been through a physics step (scene queries need it). */
+  private ensureReady() {
+    if (this.ready) return true;
+    if (!this.kit || this.game.physics.time <= 0) return false;
+    this.ready = true;
+    for (const l of this.list) this.guard(`${l.id}.setup`, () => l.setup());
+    return true;
+  }
+
   update(dt: number) {
-    if (!this.ready) {
-      // Wait for one physics step so scene queries see the static world.
-      if (this.game.physics.time <= 0) return;
-      this.ready = true;
-      for (const l of this.list) this.guard(`${l.id}.setup`, () => l.setup());
+    if (!this.ensureReady()) return;
+    if (this.pendingTeleport) {
+      const id = this.pendingTeleport;
+      this.pendingTeleport = null;
+      this.teleportTo(id);
     }
     for (const l of this.list) this.guard(`${l.id}.update`, () => l.update(dt));
     this.guard('kit.update', () => this.kit.update(dt));
