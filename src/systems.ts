@@ -1,6 +1,7 @@
 import type { Game } from './core/Game';
 import { Environment } from './world/Environment';
 import { WaterSystem } from './world/Water';
+import { WeatherSystem } from './world/Weather';
 import { World } from './world/World';
 import { Jimothy } from './player/Jimothy';
 import { CameraRig } from './player/CameraRig';
@@ -14,6 +15,8 @@ import { SlowMoSystem } from './gameplay/SlowMo';
 import { DebugStats } from './core/DebugStats';
 import { PhotoModeSystem } from './gameplay/PhotoMode';
 import { MapSystem } from './gameplay/MapSystem';
+import { AudioSystem } from './audio/AudioSystem';
+import { FxSystem } from './fx/FX';
 
 /**
  * Registration order = init order = update order.
@@ -23,6 +26,7 @@ export function registerSystems(game: Game) {
   // --- core world
   game.add(new Environment());
   game.add(new WaterSystem());
+  game.add(new WeatherSystem());
   game.add(new ScoreSystem());
   game.add(new ObjectivesSystem());
   game.add(new MutatorSystem());
@@ -39,6 +43,8 @@ export function registerSystems(game: Game) {
   game.add(new PhotoModeSystem());
 
   // --- presentation (audio, particles, UI) — keep last
+  game.add(new AudioSystem());
+  game.add(new FxSystem());
   game.add(new MiniHud());
   game.add(new MapSystem());
   game.add(new DebugStats());

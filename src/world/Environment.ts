@@ -42,14 +42,20 @@ export class Environment implements System {
   private tameSky(sky: Sky, exposure: number) {
     const mat = sky.material as THREE.ShaderMaterial;
     mat.uniforms.skyExposure = { value: exposure };
+    mat.uniforms.uOvercast = this.overcastU;
+    mat.uniforms.uOvercastColor = this.overcastColorU;
     mat.fragmentShader = mat.fragmentShader
-      .replace('void main() {', 'uniform float skyExposure;\nvoid main() {')
+      .replace('void main() {', 'uniform float skyExposure;\nuniform float uOvercast;\nuniform vec3 uOvercastColor;\nvoid main() {')
       .replace(
         'gl_FragColor = vec4( texColor, 1.0 );',
-        'texColor = max(texColor, vec3(0.0));\n\t\t\tif (any(isnan(texColor)) || any(isinf(texColor))) texColor = vec3(0.0);\n\t\t\tgl_FragColor = vec4( min( texColor * skyExposure, vec3( 12.0 ) ), 1.0 );',
+        'texColor = max(texColor, vec3(0.0));\n\t\t\tif (any(isnan(texColor)) || any(isinf(texColor))) texColor = vec3(0.0);\n\t\t\ttexColor = mix(texColor * skyExposure, uOvercastColor, uOvercast);\n\t\t\tgl_FragColor = vec4( min( texColor, vec3( 12.0 ) ), 1.0 );',
       );
     mat.needsUpdate = true;
   }
+
+  /** 0..1 overcast blend of the sky toward a flat grey (the weather system drives it). */
+  readonly overcastU = { value: 0 };
+  readonly overcastColorU = { value: new THREE.Color(0.55, 0.6, 0.66) };
 
   init(game: Game) {
     this.game = game;

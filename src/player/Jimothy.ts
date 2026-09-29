@@ -846,7 +846,9 @@ export class Jimothy implements System {
     }
     const water = game.get<any>('water');
     const hand = this.handPoint(new THREE.Vector3()).add(_a.set(0, -0.2, 0));
-    const vol = this.mode === 'swim' ? water?.volumeAt?.(this.position) : water?.nearWater?.(hand, 0.95);
+    let vol = this.mode === 'swim' ? water?.volumeAt?.(this.position) : water?.nearWater?.(hand, 0.95);
+    // Seattle rule: when it rains on you, the whole city is a sink
+    if (!vol && game.get<any>('weather')?.rainingOnPlayer) vol = { kind: 'rain', name: 'Rain', surfaceY: this.position.y - 0.3 };
     if (!vol) {
       if (this.washing) game.events.emit('washStop', {});
       this.washing = false;
