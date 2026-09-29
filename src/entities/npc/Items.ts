@@ -122,6 +122,8 @@ function buildModel(kind: HoldingKind): THREE.Mesh {
       break;
   }
   const mesh = B.mesh();
+  // phones read as specks at street distance: twice the real-world size (playtest feedback)
+  if (kind === 'phone') mesh.geometry.scale(2, 2, 2);
   geoCache.set(kind, mesh.geometry);
   return mesh;
 }
