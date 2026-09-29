@@ -38,6 +38,7 @@ import { AnimalSystem, GullSystem } from './entities/animals';
 import { HeartQuestSystem } from './gameplay/quests/heart';
 import { ExtrasSystem } from './gameplay/extras';
 import { ChaosSystem } from './gameplay/chaos';
+import { BigRollSystem } from './gameplay/bigroll';
 
 /**
  * Registration order = init order = update order.
@@ -80,6 +81,7 @@ export function registerSystems(game: Game) {
   game.add(new ImpactSystem());
   game.add(new ExtrasSystem());
   game.add(new ChaosSystem());
+  game.add(new BigRollSystem());
 
   // --- presentation (audio, particles, UI) — keep last
   game.add(new AudioSystem());

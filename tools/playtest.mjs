@@ -688,6 +688,66 @@ const objScenarios = {
       return r;
     });
   },
+  async obj_bigRoll() {
+    // THE BIG ROLL (src/gameplay/bigroll): walk up the Hilltop Lanes stairs, Tuck & Roll on the start pad, then the
+    // scripted "ideal line": sprint-roll, steering the camera toward each waypoint with a little lateral correction
+    // (wish = toward-target * speed - 0.6 * velocity). Traffic is random, so up to 3 tries (H = quick restart).
+    // Needs Bronze (finish); reports the time against the medal times.
+    return ev(() => {
+      const ids = ['bigRoll', 'bigRollSilver', 'bigRollGold', 'bigRollPlatinum'];
+      for (const id of ids) T.resetObj(id);
+      T.release();
+      if (T.p.mode === 'roll') T.press('roll');
+      const br = T.g.get('bigRoll');
+      if (!br) return { pass: false, detail: 'no bigRoll system' };
+      const cam = T.g.get('camera');
+      const vi = T.g.input.virtual;
+      // up the stairs on the west side, onto the roof, onto the pad
+      T.tp(-9.4, -163, Math.PI);
+      const climbed = T.walkPath([[-9.4, -176.5], [-9.4, -178.3], [-6, -178.2], [0, -177.2]], { maxSecs: 25, tol: 0.6 });
+      const roofY = +T.p.position.y.toFixed(1);
+      const route = [[0, -160, 3], [0, -137, 5], [0, -96, 4], [0, -76, 4], [0, -63, 3], [-12, -54, 3], [-26, -41, 3], [-18, -34, 3], [-5, -29, 3], [18, -29, 4], [48, -28, 3], [64, -27, 4], [100, -24, 4], [148, -25, 4], [168, -20, 3], [173, -2, 4], [170, 14, 3], [160, 19.5, 2.5], [130, 21, 4], [104, 21, 3], [96, 21, 2]];
+      const runs = [];
+      let fin = null;
+      const off = T.g.events.on('bigRollFinish', (e) => (fin = e));
+      for (let attempt = 0; attempt < 3 && !fin; attempt++) {
+        if (attempt > 0) { T.idle(); T.press('respawn'); T.step(0.3); } // H during/after a race = back on the roof
+        T.p.teleport(new T.V(0, T.p.position.y, -177.2), 0); // (already on the pad after the stairs / H)
+        T.step(0.3);
+        T.press('roll');
+        T.step(0.1);
+        const counted = br.state === 'countdown';
+        vi.buttons.add('sprint');
+        let w = 0;
+        while (br.state === 'countdown' && w < 200) { T.step(1 / 30); w++; }
+        let i = 0, t = 0, stuck = 0;
+        while (i < route.length && t < 150 && br.state === 'race') {
+          const [x, z, r] = route[i];
+          const P = T.p.position;
+          const dx = x - P.x, dz = z - P.z, d = Math.hypot(dx, dz);
+          if (d < r) { i++; continue; }
+          const v = T.p.body.linvel();
+          const sp = Math.hypot(v.x, v.z);
+          cam.snapBehind(Math.atan2((dx / d) * Math.max(sp, 8) - v.x * 0.6, (dz / d) * Math.max(sp, 8) - v.z * 0.6));
+          vi.move.set(0, 1);
+          T.step(1 / 30);
+          t += 1 / 30;
+          stuck = sp < 1.2 && T.p.grounded ? stuck + 1 / 30 : 0;
+          if (stuck > 0.8) { T.press('jump'); stuck = 0; }
+          if (T.p.mode !== 'roll' && T.p.mode !== 'ragdoll') T.press('roll');
+        }
+        for (let k = 0; k < 60 && br.state === 'race'; k++) { vi.move.set(0, 1); T.step(1 / 30); }
+        T.idle();
+        runs.push(fin ? +fin.time.toFixed(2) : `${br.lastResult?.cancelled ?? br.state} @cp${br.next}${counted ? '' : ' (no countdown)'}`);
+      }
+      off();
+      T.idle();
+      T.step(2.5); // the pins fall, STRIKE check
+      if (T.p.mode === 'roll') T.press('roll');
+      const tiers = Object.fromEntries(ids.map((id) => [id, T.O.isDone(id)]));
+      return T.result('bigRoll', { climbed, roofY, runs, medal: fin?.medal, pins: br.build.pinsDown, tiers, medalTimes: '52 / 40 / 34 s', best: br.save.best });
+    });
+  },
   async obj_marathon() {
     return ev(() => {
       T.resetObj('marathon');

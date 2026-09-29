@@ -38,6 +38,7 @@ const POIS: PoiDef[] = [
   { re: /^fishMarket$/, icon: '🐟', label: "Pike's Plaice", obj: 'catchOfTheDay' },
   { re: /^gumWall$/, icon: '🍬', label: 'Gum Wall', obj: 'stickySituation' },
   { re: /^salmonRunStart$/, icon: '⚾', label: 'Salmon Run', obj: 'salmonRun' },
+  { re: /^bigRollStart$/, icon: '🏁', label: 'The Big Roll', obj: 'bigRoll' },
   { re: /^mural$/, icon: '🎨', label: 'Mural' },
   { re: /^locks$/, icon: '⚓', label: 'The Locks' },
   { re: /^cannon:stadium$/, icon: '💥', label: 'Raccoon Cannon' },

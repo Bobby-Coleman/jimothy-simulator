@@ -335,6 +335,18 @@ const DEFS: Def[] = [
     near: { r: 12, hint: "Psst: someone left cash on the fish counter. {grab} Grab it, then {wash} wash it. Totally legal." },
   },
   { id: 'salmonRun', rank: 16, landmark: 'salmon', poi: 'salmonRunStart', place: 'Salmon Run start', near: { r: 14, hint: 'Step onto the start line, wait for GO, then {sprint} sprint or {roll} roll along the cones. Beat those fish costumes!' } },
+  // THE BIG ROLL (src/gameplay/bigroll): start pad on the Hilltop Lanes roof, top of Tumble St
+  {
+    id: 'bigRoll',
+    rank: 16.5,
+    poi: 'bigRollStart',
+    place: 'Hilltop Lanes roof',
+    how: 'Take the stairs up the west side of Hilltop Lanes (top of Tumble St), stand on the START pad and {roll} Tuck & Roll. Then follow the rings to the pins.',
+    near: { r: 20, hint: 'THE BIG ROLL starts on this roof: stairs on the west side. Stand on the pad, {roll} Tuck & Roll, hold {sprint}. Gates only count while you are a ball.' },
+  },
+  { id: 'bigRollSilver', rank: 26, poi: 'bigRollStart', place: 'Hilltop Lanes roof', how: 'The Big Roll in under 0:52: hold {sprint} the whole way and take the kicker straight.', near: { r: 20, hint: 'Silver Pin: under 0:52. Hold {sprint}, hit the kicker dead centre, cut the corners. H mid-race = back to the roof.' } },
+  { id: 'bigRollGold', rank: 27, poi: 'bigRollStart', place: 'Hilltop Lanes roof', how: 'The Big Roll in under 0:40: sprint-roll everything, dodge the cars, hug the inside of every turn.', near: { r: 20, hint: 'Gold Pin: under 0:40. Sprint the whole way, hug the insides, and mind the avenue traffic. H = instant retry.' } },
+  { id: 'bigRollPlatinum', rank: 28, poi: 'bigRollStart', place: 'Hilltop Lanes roof', how: 'The Big Roll in under 0:34. A perfect line. No bumps, no cars, no tourists. Good luck.', near: { r: 20, hint: 'Platinum Pin: under 0:34. Dead-centre kicker, cut from Tumble St straight to the market, tight past the tent poles, no brakes. H = instant retry.' } },
   { id: 'touchGrass', rank: 17, poi: 'serverPlug', place: 'SlopCorp plug', how: "{grab} Grab SlopCorp's giant plug and drag it out. Everyone go outside.", near: { r: 16, hint: 'That giant plug powers the whole server farm. {grab} Grab it and walk backwards. Heavy, but so worth it.' } },
   { id: 'countToFive', rank: 18, poi: 'slopBillboard', place: 'Six-fingered billboard', how: 'Climb to the billboard catwalk and hold {wash} to wash the slop off. Fingers: fixed.', near: { r: 18, hint: 'Six fingers?! Take the yellow service ladder at the uphill end up to the catwalk, face the billboard and hold {wash}. Gutter provided.' } },
   { id: 'washSlop', rank: 19, poi: 'slopSpawner', place: 'SlopCorp portal', how: 'Slopothys melt in water: hold {wash} next to them, or lure them into puddles.', near: { r: 20 } },
