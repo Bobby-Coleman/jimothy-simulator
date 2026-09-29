@@ -1,0 +1,385 @@
+import * as THREE from 'three';
+import type { Assets } from '../core/Assets';
+import { applyFur } from './Fur';
+
+export interface AnimState {
+  mode: string;
+  speed: number;
+  vy: number;
+  grounded: boolean;
+  carrying: boolean;
+  washing: boolean;
+  flop: boolean;
+  time: number;
+  sinceChitter: number;
+  sinceBonk: number;
+  climbSpeed: number;
+}
+
+type PartName =
+  | 'Body'
+  | 'Head'
+  | 'EarL'
+  | 'EarR'
+  | 'EyeL'
+  | 'EyeR'
+  | 'Nose'
+  | 'ArmL'
+  | 'ArmR'
+  | 'HandL'
+  | 'HandR'
+  | 'LegL'
+  | 'LegR'
+  | 'Tail1'
+  | 'Tail2'
+  | 'Tail3'
+  | 'Tail4'
+  | 'Tail5';
+
+const PART_NAMES: PartName[] = [
+  'Body', 'Head', 'EarL', 'EarR', 'EyeL', 'EyeR', 'Nose', 'ArmL', 'ArmR', 'HandL', 'HandR', 'LegL', 'LegR',
+  'Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5',
+];
+
+const _e = new THREE.Euler();
+const _q = new THREE.Quaternion();
+
+const damp = (a: number, b: number, k: number, dt: number) => a + (b - a) * (1 - Math.exp(-k * dt));
+
+/**
+ * Jimothy's visual model + procedural animation.
+ * Uses `assets/models/jimothy.glb` when available, otherwise a primitive placeholder with the same part names.
+ */
+export class JimothyModel {
+  /** Placed at the physics body center each frame. */
+  readonly root = new THREE.Group();
+  /** Inner pivot that we rotate for facing / climbing / rolling. */
+  readonly pivot = new THREE.Group();
+  parts: Partial<Record<PartName, THREE.Object3D>> = {};
+  private rest = new Map<THREE.Object3D, THREE.Quaternion>();
+  private restPos = new Map<THREE.Object3D, THREE.Vector3>();
+  private cur: Record<string, number> = {};
+  private phase = 0;
+  private blinkT = 2;
+  private earTwitch = 0;
+  private earTwitchSide = 1;
+  /** Extra offset so feet touch the ground. */
+  footOffset = 0.0;
+  headPivot: THREE.Object3D | null = null;
+  usingGlb = false;
+  modelName = 'jimothy';
+
+  constructor() {
+    this.root.name = 'JimothyRoot';
+    this.root.add(this.pivot);
+    this.setModel(buildPlaceholder());
+  }
+
+  async load(assets: Assets, path = 'assets/models/jimothy.glb') {
+    const m = await assets.tryModel(path);
+    if (!m) return false;
+    this.setModel(m);
+    this.usingGlb = true;
+    return true;
+  }
+
+  setModel(model: THREE.Object3D) {
+    this.pivot.clear();
+    this.pivot.add(model);
+    this.parts = {};
+    this.rest.clear();
+    this.restPos.clear();
+    model.traverse((o) => {
+      const n = o.name as PartName;
+      if (PART_NAMES.includes(n) && !this.parts[n]) this.parts[n] = o;
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      }
+    });
+    for (const p of Object.values(this.parts)) {
+      if (!p) continue;
+      this.rest.set(p, p.quaternion.clone());
+      this.restPos.set(p, p.position.clone());
+    }
+    this.headPivot = this.parts.Head ?? null;
+    applyFur(model);
+  }
+
+  /** Rotate a part by an euler offset relative to its rest pose. */
+  private pose(name: PartName, x: number, y = 0, z = 0) {
+    const p = this.parts[name];
+    if (!p) return;
+    const r = this.rest.get(p)!;
+    _e.set(x, y, z, 'XYZ');
+    _q.setFromEuler(_e);
+    p.quaternion.copy(r).multiply(_q);
+  }
+
+  private sm(key: string, target: number, k: number, dt: number) {
+    const v = damp(this.cur[key] ?? target, target, k, dt);
+    this.cur[key] = v;
+    return v;
+  }
+
+  animate(dt: number, s: AnimState) {
+    const t = s.time;
+    const moving = s.speed > 0.3;
+    const amp = Math.min(s.speed / 4.5, 1.25);
+    const gaitRate = s.mode === 'swim' ? 7 : s.mode === 'climb' ? 5 + s.climbSpeed * 2 : 3 + s.speed * 2.1;
+    if (moving || s.mode === 'climb' || s.mode === 'swim') this.phase += dt * gaitRate;
+    const ph = this.phase;
+
+    let armL = 0, armR = 0, legL = 0, legR = 0, armSpread = 0;
+    let bob = 0, bodyPitch = 0, bodyRoll = 0;
+    let tailLift = 0.12, tailSwayAmp = 0.2, tailCurl = 0;
+    let limbScale = 1;
+    let earFlat = 0;
+    let headTilt = 0, headYaw = 0, headPitch = 0;
+
+    switch (s.mode) {
+      case 'walk':
+        if (!s.grounded) {
+          // superhero-ish airborne pose: front arms forward, legs back
+          armL = armR = -1.0;
+          legL = legR = 0.8;
+          armSpread = 0.35;
+          tailLift = -0.35;
+        } else if (moving) {
+          armL = Math.sin(ph) * 0.95 * amp;
+          armR = -armL;
+          legL = -Math.sin(ph) * 0.95 * amp;
+          legR = -legL;
+          bob = Math.abs(Math.sin(ph)) * 0.04 * amp;
+          bodyPitch = 0.06 * amp;
+          bodyRoll = Math.sin(ph) * 0.05 * amp;
+          tailLift = -0.1 - 0.25 * amp;
+          tailSwayAmp = 0.28 + 0.2 * amp;
+        } else {
+          headYaw = Math.sin(t * 0.7) * 0.25 + Math.sin(t * 1.9) * 0.08;
+          headPitch = Math.sin(t * 0.5) * 0.06;
+        }
+        break;
+      case 'swim':
+        armL = Math.sin(ph) * 1.1 - 0.4;
+        armR = Math.sin(ph + Math.PI) * 1.1 - 0.4;
+        legL = Math.sin(ph + Math.PI) * 0.9;
+        legR = Math.sin(ph) * 0.9;
+        tailLift = -0.2;
+        bob = Math.sin(t * 3) * 0.02;
+        break;
+      case 'climb':
+        armL = -2.1 + Math.sin(ph) * 0.55;
+        armR = -2.1 - Math.sin(ph) * 0.55;
+        legL = -1.0 - Math.sin(ph) * 0.5;
+        legR = -1.0 + Math.sin(ph) * 0.5;
+        tailLift = 0.5;
+        break;
+      case 'roll':
+        limbScale = 0.25;
+        tailCurl = 0.85;
+        earFlat = 1;
+        tailSwayAmp = 0.05;
+        break;
+      case 'ragdoll':
+      case 'hang':
+        armL = Math.sin(t * 17) * 1.4 - 0.5;
+        armR = Math.sin(t * 15 + 1.3) * 1.4 - 0.5;
+        legL = Math.sin(t * 14 + 0.7) * 1.2;
+        legR = Math.sin(t * 16 + 2.1) * 1.2;
+        armSpread = 0.6;
+        tailSwayAmp = 0.9;
+        headTilt = Math.sin(t * 9) * 0.3;
+        break;
+    }
+
+    if (s.carrying && s.mode !== 'roll' && s.mode !== 'ragdoll') {
+      armL = armR = -2.75;
+      armSpread = 0.15;
+    }
+    if (s.washing) {
+      const w = Math.sin(t * 24) * 0.4;
+      armL = -1.35 + w;
+      armR = -1.35 - w;
+      armSpread = -0.25;
+      headPitch = 0.25;
+    }
+    if (s.sinceBonk < 0.3) {
+      bodyPitch += 0.35 * (1 - s.sinceBonk / 0.3);
+      armL = armR = -1.4;
+    }
+    if (s.sinceChitter < 0.8) {
+      headTilt += Math.sin(s.sinceChitter * 30) * 0.12 * (1 - s.sinceChitter / 0.8);
+      headPitch -= 0.15;
+    }
+
+    const k = 16;
+    armL = this.sm('armL', armL, k, dt);
+    armR = this.sm('armR', armR, k, dt);
+    legL = this.sm('legL', legL, k, dt);
+    legR = this.sm('legR', legR, k, dt);
+    armSpread = this.sm('armSpread', armSpread, 10, dt);
+    bodyPitch = this.sm('bodyPitch', bodyPitch, 8, dt);
+    bodyRoll = this.sm('bodyRoll', bodyRoll, 8, dt);
+    limbScale = this.sm('limbScale', limbScale, 14, dt);
+    tailLift = this.sm('tailLift', tailLift, 6, dt);
+    tailCurl = this.sm('tailCurl', tailCurl, 10, dt);
+    earFlat = this.sm('earFlat', earFlat, 10, dt);
+    headYaw = this.sm('headYaw', headYaw, 5, dt);
+    headPitch = this.sm('headPitch', headPitch, 6, dt);
+    headTilt = this.sm('headTilt', headTilt, 10, dt);
+
+    this.pose('ArmL', armL, 0, -armSpread);
+    this.pose('ArmR', armR, 0, armSpread);
+    this.pose('LegL', legL, 0, 0);
+    this.pose('LegR', legR, 0, 0);
+    for (const n of ['ArmL', 'ArmR', 'LegL', 'LegR'] as PartName[]) {
+      const p = this.parts[n];
+      if (p) p.scale.setScalar(limbScale);
+    }
+    const hand = s.carrying ? -0.6 : s.washing ? Math.sin(t * 24) * 0.5 : 0;
+    this.pose('HandL', hand, 0, 0);
+    this.pose('HandR', hand, 0, 0);
+
+    // Body breathing + bob
+    const body = this.parts.Body;
+    if (body) {
+      const rp = this.restPos.get(body)!;
+      body.position.set(rp.x, rp.y + bob, rp.z);
+      const breathe = 1 + Math.sin(t * 2.6) * 0.012;
+      body.scale.set(breathe, 1 / breathe, breathe);
+      this.pose('Body', bodyPitch, 0, bodyRoll);
+    }
+
+    // Head
+    this.pose('Head', headPitch, headYaw, headTilt);
+
+    // Ears: occasional twitch
+    this.earTwitch -= dt;
+    if (this.earTwitch < -Math.random() * 6 - 1.5) {
+      this.earTwitch = 0.25;
+      this.earTwitchSide = Math.random() < 0.5 ? 1 : -1;
+    }
+    const tw = this.earTwitch > 0 ? Math.sin(this.earTwitch * 40) * 0.35 : 0;
+    this.pose('EarL', -earFlat * 1.1 + (this.earTwitchSide > 0 ? tw : 0), 0, 0);
+    this.pose('EarR', -earFlat * 1.1 + (this.earTwitchSide < 0 ? tw : 0), 0, 0);
+
+    // Blink
+    this.blinkT -= dt;
+    let eyeY = 1;
+    if (this.blinkT < 0) {
+      eyeY = 0.1;
+      if (this.blinkT < -0.12) this.blinkT = 2 + Math.random() * 4;
+    }
+    if (s.mode === 'ragdoll') eyeY = 0.25 + Math.abs(Math.sin(t * 3)) * 0.3;
+    for (const n of ['EyeL', 'EyeR'] as PartName[]) {
+      const e = this.parts[n];
+      if (e) e.scale.set(1, eyeY, 1);
+    }
+
+    // Tail chain
+    for (let i = 1; i <= 5; i++) {
+      const sway = Math.sin(t * 2.4 - i * 0.65) * tailSwayAmp * (0.6 + i * 0.12);
+      const lift = i === 1 ? tailLift : tailLift * 0.35;
+      this.pose(`Tail${i}` as PartName, lift + tailCurl * 0.55, sway, 0);
+    }
+  }
+}
+
+/** Primitive stand-in used until/unless jimothy.glb exists. Same part names & pivots as the GLB spec. */
+function buildPlaceholder(): THREE.Object3D {
+  const root = new THREE.Group();
+  root.name = 'Jimothy';
+  const fur = new THREE.MeshStandardMaterial({ color: 0x8a8177, roughness: 0.95, name: 'Fur' });
+  const belly = new THREE.MeshStandardMaterial({ color: 0xcfc6b8, roughness: 0.95 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.8 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xf1ede6, roughness: 0.9 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.08, metalness: 0.2 });
+  const ringDark = new THREE.MeshStandardMaterial({ color: 0x2a2522, roughness: 0.95 });
+  const ringLight = new THREE.MeshStandardMaterial({ color: 0xb2a898, roughness: 0.95 });
+
+  const add = (parent: THREE.Object3D, name: string, obj: THREE.Object3D, x: number, y: number, z: number) => {
+    obj.name = name;
+    obj.position.set(x, y, z);
+    parent.add(obj);
+    return obj;
+  };
+  const sphere = (r: number, mat: THREE.Material, sx = 1, sy = 1, sz = 1) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 20), mat);
+    m.scale.set(sx, sy, sz);
+    return m;
+  };
+
+  const body = add(root, 'Body', new THREE.Group(), 0, 0, 0);
+  body.add(sphere(0.35, fur, 1.04, 0.95, 1.08));
+  const bel = sphere(0.3, belly, 0.9, 0.8, 0.95);
+  bel.position.set(0, -0.08, 0.04);
+  body.add(bel);
+
+  const head = add(body, 'Head', new THREE.Group(), 0, 0.08, 0.2);
+  const skull = sphere(0.2, fur, 1.1, 0.95, 1.0);
+  skull.position.set(0, 0.03, 0.06);
+  head.add(skull);
+  // mask band + eyebrows + muzzle
+  const mask = sphere(0.13, dark, 1.75, 0.55, 0.8);
+  mask.position.set(0, 0.05, 0.17);
+  head.add(mask);
+  for (const sx of [-1, 1]) {
+    const brow = sphere(0.05, white, 1.4, 0.6, 0.6);
+    brow.position.set(sx * 0.08, 0.13, 0.2);
+    head.add(brow);
+  }
+  const muzzle = sphere(0.085, white, 1.1, 0.85, 1.1);
+  muzzle.position.set(0, -0.025, 0.22);
+  head.add(muzzle);
+  add(head, 'Nose', sphere(0.03, eyeMat, 1.2, 0.9, 1), 0, 0.0, 0.31);
+  add(head, 'EyeL', sphere(0.034, eyeMat), 0.075, 0.055, 0.265);
+  add(head, 'EyeR', sphere(0.034, eyeMat), -0.075, 0.055, 0.265);
+  for (const [n, sx] of [['EarL', 1], ['EarR', -1]] as [string, number][]) {
+    const ear = add(head, n, new THREE.Group(), sx * 0.12, 0.19, 0.05);
+    const outer = sphere(0.065, fur, 1, 1.1, 0.45);
+    outer.position.y = 0.04;
+    ear.add(outer);
+    const inner = sphere(0.045, white, 1, 1.05, 0.35);
+    inner.position.set(0, 0.04, 0.012);
+    ear.add(inner);
+  }
+
+  const limb = (parent: THREE.Object3D, name: string, handName: string | null, x: number, y: number, z: number, len: number) => {
+    const g = add(parent, name, new THREE.Group(), x, y, z);
+    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, len, 6, 12), fur);
+    leg.position.y = -len / 2;
+    g.add(leg);
+    const handObj = new THREE.Group();
+    handObj.name = handName ?? name + 'Foot';
+    handObj.position.y = -len - 0.03;
+    g.add(handObj);
+    const paw = sphere(0.055, dark, 1.1, 0.6, 1.3);
+    paw.position.z = 0.02;
+    handObj.add(paw);
+    return g;
+  };
+  limb(body, 'ArmL', 'HandL', 0.15, -0.2, 0.17, 0.1);
+  limb(body, 'ArmR', 'HandR', -0.15, -0.2, 0.17, 0.1);
+  limb(body, 'LegL', null, 0.17, -0.22, -0.14, 0.09);
+  limb(body, 'LegR', null, -0.17, -0.22, -0.14, 0.09);
+
+  let parent: THREE.Object3D = body;
+  let z = -0.3;
+  for (let i = 1; i <= 5; i++) {
+    const seg = add(parent, `Tail${i}`, new THREE.Group(), 0, i === 1 ? 0.02 : 0, i === 1 ? z : -0.1);
+    const r = 0.085 - i * 0.008;
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), i % 2 ? ringLight : ringDark);
+    m.scale.set(1, 1, 1.35);
+    m.position.z = -0.05;
+    seg.add(m);
+    if (i === 1) seg.rotation.x = 0.35;
+    parent = seg;
+    z = -0.1;
+  }
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 10), ringDark);
+  tip.position.z = -0.12;
+  parent.add(tip);
+  return root;
+}

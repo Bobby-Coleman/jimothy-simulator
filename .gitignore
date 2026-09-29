@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.vite/
+*.log
+tools/blender/renders/
+tools/shots/
+tools/_downloads/
+.DS_Store
+Thumbs.db
+tools/_catalog_previews/

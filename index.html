@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="description" content="Jimothy Simulator — a physics sandbox starring Jimothy, the round raccoon of Ballard." />
+    <meta name="theme-color" content="#1d2a3a" />
+    <title>Jimothy Simulator</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1520; touch-action: none; }
+      #app { position: fixed; inset: 0; }
+      #app canvas { display: block; width: 100%; height: 100%; outline: none; }
+      #ui { position: fixed; inset: 0; pointer-events: none; }
+      #boot { position: fixed; inset: 0; display: grid; place-items: center; color: #fff; font: 700 20px system-ui, sans-serif; background: #0e1520; z-index: 1000; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="ui"></div>
+    <div id="boot">Loading Jimothy…</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
