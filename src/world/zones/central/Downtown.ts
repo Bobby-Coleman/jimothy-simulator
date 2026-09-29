@@ -268,7 +268,11 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
   for (let k = 0; k < 8; k++) zs.push(-10.5 + k * 3);
   for (const cz2 of zs) {
     batch.add(colGeo, trim, { matrix: T(colX, baseTop, cz2) });
-    cylinderCollider(game, new THREE.Vector3(colX, baseTop + colH / 2, cz2), 0.6, colH);
+    // geometry pass: shaft collider = the shaft (was r 0.6 around a 0.56 shaft), plus the square base plinth and the
+    // capital/abacus block (both stuck out of the old cylinder: he sank into the base, climbed through the capital)
+    cylinderCollider(game, new THREE.Vector3(colX, baseTop + colH / 2, cz2), 0.56, colH);
+    world.collider(new THREE.Vector3(colX, baseTop + 0.175, cz2), new THREE.Vector3(1.4, 0.35, 1.4));
+    world.collider(new THREE.Vector3(colX, baseTop + colH - 0.2, cz2), new THREE.Vector3(1.5, 0.4, 1.5));
   }
   // entablature + frieze banner + pediment
   const entX0 = CH.x0 + 1.2,
@@ -277,6 +281,8 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
   batch.add(new THREE.BoxGeometry(entX1 - entX0, 1.5, 25), stone, { matrix: T((entX0 + entX1) / 2, entY + 0.75, 0), uv: 2.4 });
   world.collider(new THREE.Vector3((entX0 + entX1) / 2, entY + 0.75, 0), new THREE.Vector3(entX1 - entX0, 1.5, 25));
   batch.add(new THREE.BoxGeometry(entX1 - entX0 + 0.4, 0.3, 25.6), trim, { matrix: T((entX0 + entX1) / 2, entY + 1.6, 0), color: 0xefe8da });
+  // the cornice's 0.2–0.3 m overhang had no collider (he sank 0.25 m into its front lip)
+  world.collider(new THREE.Vector3((entX0 + entX1) / 2, entY + 1.6, 0), new THREE.Vector3(entX1 - entX0 + 0.4, 0.3, 25.6));
   const frieze = atlas.draw(1024, 96, (ctx, w, h) => drawFriezeBanner(ctx, w, h));
   batch.add(atlas.quad(frieze, 17, 1.6), frieze.page.glowMat, { matrix: T(entX0 - 0.03, entY + 0.72, 0, -Math.PI / 2), castShadow: false });
   // pediment (triangular prism)
@@ -285,9 +291,15 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
   tri.lineTo(12.8, 0);
   tri.lineTo(0, 3.6);
   tri.closePath();
-  const ped = new THREE.ExtrudeGeometry(tri, { depth: entX1 - entX0, bevelEnabled: false });
-  batch.add(ped, stone, { matrix: T(entX0, entY + 1.75, 0, Math.PI / 2), uv: 2.4 });
-  boxColliderEuler(game, new THREE.Vector3((entX0 + entX1) / 2, entY + 2.6, 0), new THREE.Vector3(entX1 - entX0, 1.6, 18));
+  // geometry pass: the prism used to run 2.5 m into the main block, so its ridge poked a 0.35 m stone wedge up through
+  // the roof behind the front parapet; it now stops inside the parapet (mbX0 + 0.2). Its collider was a flat 1.6 m slab
+  // (z ±9): Jimothy sank up to 1.8 m into the ridge and an invisible shelf stuck out of the slopes near the eaves.
+  // Now it's a convex hull of the prism itself, so the two slopes are walkable exactly where they're drawn.
+  const pedMbX0 = CH.x0 + 6; // = mbX0 (main block front wall)
+  const ped = new THREE.ExtrudeGeometry(tri, { depth: pedMbX0 + 0.2 - entX0, bevelEnabled: false });
+  const pedM = T(entX0, entY + 1.75, 0, Math.PI / 2);
+  batch.add(ped, stone, { matrix: pedM, uv: 2.4 });
+  hullFromGeometry(game, ped, pedM);
   const seal = atlas.draw(256, 256, (ctx, w, h) => drawCitySeal(ctx, w, h));
   batch.add(atlas.quad(seal, 2.2, 2.2), seal.page.mat, { matrix: T(entX0 - 0.02, entY + 3.0, 0, -Math.PI / 2), castShadow: false });
 
@@ -297,7 +309,31 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
   const mbCx = (mbX0 + CH.x1) / 2;
   batch.add(new THREE.BoxGeometry(CH.x1 - mbX0, mbH, CH.z1 - CH.z0), stone, { matrix: T(mbCx, baseTop + mbH / 2, cz), uv: 2.4 });
   world.collider(new THREE.Vector3(mbCx, baseTop + mbH / 2, cz), new THREE.Vector3(CH.x1 - mbX0, mbH, CH.z1 - CH.z0));
-  batch.add(new THREE.BoxGeometry(CH.x1 - mbX0 + 0.8, 0.6, CH.z1 - CH.z0 + 0.8), trim, { matrix: T(mbCx, baseTop + mbH - 0.1, cz), color: 0xefe8da });
+  // main cornice. Geometry pass: this was one solid slab over the whole roof whose top sat 0.2 m ABOVE the roof collider
+  // (Jimothy sank into the roof everywhere, and it hid the grey roof membrane). Now it's a ring of 0.8 m bands (0.4 m
+  // overhang) whose top is flush with the roof, with colliders (the overhang used to be walk-through). The front band
+  // skips the pediment span (it poked out of / hung over the pediment slopes, leaving a wedge-shaped pocket), and the
+  // south band has a notch for the service ladder so the climb doesn't run into its underside.
+  {
+    const cy = baseTop + mbH - 0.3;
+    const ladX = mbX0 + 5; // = facade ladder (buildCityHallRoofAccess)
+    const band = (xa: number, xb: number, za: number, zb: number) => {
+      const c = new THREE.Vector3((xa + xb) / 2, cy, (za + zb) / 2);
+      const s = new THREE.Vector3(xb - xa, 0.6, zb - za);
+      batch.add(new THREE.BoxGeometry(s.x, s.y, s.z), trim, { matrix: T(c.x, c.y, c.z), color: 0xefe8da });
+      world.collider(c, s);
+    };
+    const X0 = mbX0 - 0.4,
+      X1 = CH.x1 + 0.4,
+      Z0 = CH.z0 - 0.4,
+      Z1 = CH.z1 + 0.4;
+    band(X0, ladX - 0.6, Z0, CH.z0 + 0.4); // south, west of the ladder
+    band(ladX + 0.6, X1, Z0, CH.z0 + 0.4); // south, east of the ladder
+    band(X0, X1, CH.z1 - 0.4, Z1); // north
+    band(CH.x1 - 0.4, X1, CH.z0 + 0.4, CH.z1 - 0.4); // east
+    band(X0, mbX0 + 0.4, CH.z0 + 0.4, -12.8); // front (west), either side of the pediment
+    band(X0, mbX0 + 0.4, 12.8, CH.z1 - 0.4);
+  }
   batch.add(new THREE.BoxGeometry(CH.x1 - mbX0, 1.0, 0.4), stone, { matrix: T(mbCx, baseTop + mbH + 0.5, CH.z0 + 0.2), uv: 2.4 });
   batch.add(new THREE.BoxGeometry(CH.x1 - mbX0, 1.0, 0.4), stone, { matrix: T(mbCx, baseTop + mbH + 0.5, CH.z1 - 0.2), uv: 2.4 });
   batch.add(new THREE.BoxGeometry(0.4, 1.0, CH.z1 - CH.z0), stone, { matrix: T(CH.x1 - 0.2, baseTop + mbH + 0.5, cz), uv: 2.4 });
@@ -333,6 +369,7 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
   }
   // bronze doors + fanlight
   batch.add(new THREE.BoxGeometry(0.2, 5.6, 4.4), trim, { matrix: T(mbX0 - 0.05, baseTop + 2.8, 0), color: 0x6b4a1e });
+  world.collider(new THREE.Vector3(mbX0 - 0.05, baseTop + 2.8, 0), new THREE.Vector3(0.2, 5.6, 4.4)); // (stood 15 cm proud, walk-through)
   batch.add(new THREE.BoxGeometry(0.1, 5.2, 0.12), trim, { matrix: T(mbX0 - 0.17, baseTop + 2.6, 0), color: 0x3a2a10 });
   batch.add(new THREE.CircleGeometry(2.1, 20, 0, Math.PI), glass, { matrix: T(mbX0 - 0.03, baseTop + 5.7, 0, -Math.PI / 2), castShadow: false });
   // vertical banners flanking the door
@@ -350,7 +387,8 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
     batch.add(new THREE.PlaneGeometry(0.8, 2.2), glass, { matrix: T(dx + Math.cos(a) * 6.02, drumY + 1.75, dz + Math.sin(a) * 6.02, -a + Math.PI / 2), castShadow: false });
   }
   const gold = cached('mat:domeGold', () => glowAtNight(game, new THREE.MeshStandardMaterial({ color: 0xe0b04a, metalness: 0.75, roughness: 0.3, envMapIntensity: 2, emissive: 0xd99a2b, emissiveIntensity: 0 }), 0, 0.3));
-  batch.add(new THREE.SphereGeometry(6.2, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), gold, { matrix: T(dx, drumY + 3.5, dz) });
+  const domeGeo = new THREE.SphereGeometry(6.2, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2);
+  batch.add(domeGeo, gold, { matrix: T(dx, drumY + 3.5, dz) });
   batch.add(new THREE.TorusGeometry(6.1, 0.18, 8, 48), trim, { matrix: TR(dx, drumY + 3.5, dz, Math.PI / 2, 0, 0), color: 0xefe8da });
   batch.add(
     mergeColored([
@@ -363,8 +401,13 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
     { matrix: T(dx, drumY + 3.5 + 6.0, dz) },
   );
   cylinderCollider(game, new THREE.Vector3(dx, drumY + 1.75, dz), 6, 3.5);
-  sphereCollider(game, new THREE.Vector3(dx, drumY + 3.5, dz), 6.2);
+  // geometry pass: the dome was a FULL ball collider, whose lower half bulged up to 0.2 m out of the drum wall
+  // (invisible) from 1.5 m below the dome's rim. Now a hull of the drawn hemisphere; the lantern's gold cap gets one too
+  // (he used to sink 1.2 m into it standing on the lantern).
+  hullFromGeometry(game, domeGeo, T(dx, drumY + 3.5, dz));
+  cylinderCollider(game, new THREE.Vector3(dx, drumY + 3.5 + 0.04, dz), 6.26, 0.28); // the cream rim ring (torus) round its foot
   cylinderCollider(game, new THREE.Vector3(dx, drumY + 3.5 + 6.0 + 1.0, dz), 1.1, 2.0);
+  hullFromGeometry(game, new THREE.SphereGeometry(1.2, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), T(dx, drumY + 3.5 + 6.0 + 2.0, dz));
   buildCityHallRoofAccess(game, world, batch, { mbX0, mbH, baseTop, dx, dz, drumY });
   world.poi.set('bobblehead:e2', new THREE.Vector3(dx - 2.4, drumY + 3.5 + Math.sqrt(6.2 * 6.2 - 2.4 * 2.4) + 0.3, dz));
 
@@ -403,7 +446,8 @@ const LADDER_SAFETY = 0xffd23f;
  * Climbing nerf: bare walls now tire Jimothy after ~7 m, so City Hall (17 m to the parapet, then drum + dome) gets a
  * real roof-access route: a steel service ladder bolted to the south facade (pavement → parapet, yellow goose-neck
  * over the top), a stone plinth ring under the drum (the drum used to float 1 m above the roof; now it's a step you
- * mantle onto), and a dome maintenance ladder up the west face of the drum and over the gold dome to bobblehead e2.
+ * mantle onto), and a dome maintenance ladder up the west face of the drum, out over the drum's cove moulding and rim
+ * ring, and over the gold dome to bobblehead e2.
  * Visual rails/rungs are thin non-colliding boxes; `world.addLadder` volumes cover where Jimothy's body is while
  * climbing, so both ladders drain stamina at the gentle ladder rate.
  */
@@ -437,17 +481,40 @@ function buildCityHallRoofAccess(game: Game, world: World, batch: Batch, o: { mb
   }
   // ---- drum plinth (a 1 m stone step ring, mantle-able from the roof)
   const roofY = baseTop + mbH;
-  batch.add(new THREE.CylinderGeometry(6.6, 6.8, drumY - roofY, 40), stone, { matrix: T(dx, (roofY + drumY) / 2, dz), uv: 2.4 });
+  const plinthGeo = new THREE.CylinderGeometry(6.6, 6.8, drumY - roofY, 40);
+  batch.add(plinthGeo, stone, { matrix: T(dx, (roofY + drumY) / 2, dz), uv: 2.4 });
   batch.add(new THREE.TorusGeometry(6.62, 0.1, 6, 48), trim, { matrix: TR(dx, drumY - 0.02, dz, Math.PI / 2, 0, 0), color: 0xefe8da });
-  cylinderCollider(game, new THREE.Vector3(dx, (roofY + drumY) / 2, dz), 6.8, drumY - roofY);
+  // geometry pass: hull of the tapered ring (the r 6.8 cylinder left an invisible 0.2 m lip round the r 6.6 top)
+  hullFromGeometry(game, plinthGeo, T(dx, (roofY + drumY) / 2, dz));
   // ---- dome maintenance ladder: straight up the west face of the drum, then arcing over the dome
   {
     const parts: Part[] = [];
-    const xd = dx - 6.0 - 0.1;
+    // geometry pass: with the dome now a true hemisphere (no invisible bulge on the drum), the gold dome + its cream rim
+    // ring overhang the drum wall by 0.2–0.28 m, and a climber would butt against their underside. So the drum gets a
+    // cove moulding (cream flared ring, drawn AND solid) that eases him out over the rim anywhere round the drum; the
+    // ladder rails kink out over it, riding 7–14 cm off the stone.
     const eqY = drumY + 3.5;
-    for (const s of [-0.3, 0.3]) parts.push({ geo: new THREE.BoxGeometry(0.08, 3.5, 0.08), color: LADDER_IRON, matrix: T(xd, drumY + 1.75, dz + s) });
-    for (let y = drumY + 0.3; y < eqY; y += 0.35) parts.push({ geo: new THREE.BoxGeometry(0.05, 0.05, 0.6), color: LADDER_IRON, matrix: T(xd, y, dz) });
-    const Rd = 6.2 + 0.1;
+    const K = eqY - 0.6; // cove bottom (just above the drum windows)
+    const coveTopY = eqY - 0.1;
+    const coveGeo = new THREE.CylinderGeometry(6.26, 6.0, coveTopY - K, 40);
+    batch.add(coveGeo, trim, { matrix: T(dx, (K + coveTopY) / 2, dz), color: 0xefe8da });
+    hullFromGeometry(game, coveGeo, T(dx, (K + coveTopY) / 2, dz));
+    const xd = dx - 6.07;
+    const Rd = 6.2 + 0.2;
+    for (const s of [-0.3, 0.3]) parts.push({ geo: new THREE.BoxGeometry(0.08, K - drumY, 0.08), color: LADDER_IRON, matrix: T(xd, (drumY + K) / 2, dz + s) });
+    for (let y = drumY + 0.3; y < K; y += 0.35) parts.push({ geo: new THREE.BoxGeometry(0.05, 0.05, 0.6), color: LADDER_IRON, matrix: T(xd, y, dz) });
+    {
+      // kink over the cove, then a short upright past the rim ring to where the arc starts
+      const a = new THREE.Vector2(dx - 6.07, K),
+        b = new THREE.Vector2(dx - Rd, coveTopY);
+      const L = a.distanceTo(b);
+      const th = Math.asin((a.x - b.x) / L);
+      for (const s of [-0.3, 0.3]) {
+        parts.push({ geo: new THREE.BoxGeometry(0.08, L + 0.06, 0.08), color: LADDER_IRON, matrix: TR((a.x + b.x) / 2, (a.y + b.y) / 2, dz + s, 0, 0, th) });
+        parts.push({ geo: new THREE.BoxGeometry(0.08, eqY - coveTopY + 0.04, 0.08), color: LADDER_IRON, matrix: T(b.x, (coveTopY + eqY) / 2, dz + s) });
+      }
+      parts.push({ geo: new THREE.BoxGeometry(0.05, 0.05, 0.6), color: LADDER_IRON, matrix: T((a.x + b.x) / 2, (a.y + b.y) / 2, dz) });
+    }
     const PHI = (74 * Math.PI) / 180;
     const P = (phi: number) => new THREE.Vector3(dx - Rd * Math.cos(phi), eqY + Rd * Math.sin(phi), dz);
     const N = 18;
@@ -555,8 +622,20 @@ function buildCityHallNightLights(game: Game, world: World, batch: Batch) {
   addNightRig(game, { pos: new THREE.Vector3(CH.x0 + 1, baseTop + 8.3, 0), color: 0xffc58a, intensity: 1.35, distance: 30, decay: 0, radius: 22, fade: 12 });
 }
 
-function sphereCollider(game: Game, c: THREE.Vector3, r: number) {
-  const cd = RAPIER.ColliderDesc.ball(r).setTranslation(c.x, c.y, c.z).setFriction(0.8).setCollisionGroups(groups(G.WORLD));
+/** Static convex-hull collider from a (local) geometry placed with `matrix` — for prisms, domes, tapered rings. */
+function hullFromGeometry(game: Game, geo: THREE.BufferGeometry, matrix: THREE.Matrix4, friction = 0.8) {
+  const pos = geo.getAttribute('position');
+  const pts = new Float32Array(pos.count * 3);
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(matrix);
+    pts[i * 3] = v.x;
+    pts[i * 3 + 1] = v.y;
+    pts[i * 3 + 2] = v.z;
+  }
+  const cd = RAPIER.ColliderDesc.convexHull(pts);
+  if (!cd) return null;
+  cd.setFriction(friction).setCollisionGroups(groups(G.WORLD));
   return game.physics.staticCollider(cd);
 }
 
