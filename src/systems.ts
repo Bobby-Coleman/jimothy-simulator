@@ -10,6 +10,7 @@ import { ScoreSystem } from './gameplay/Score';
 import { ObjectivesSystem } from './gameplay/Objectives';
 import { MutatorSystem } from './gameplay/Mutators';
 import { UI } from './ui/UI';
+import { NearHints } from './ui/NearHints';
 import { registerZones } from './world/zones';
 import { VehicleSystem } from './entities/vehicles/Vehicles';
 import { SlowMoSystem } from './gameplay/SlowMo';
@@ -83,6 +84,7 @@ export function registerSystems(game: Game) {
   game.add(new AudioSystem());
   game.add(new FxSystem());
   game.add(new UI());
+  game.add(new NearHints());
   game.add(new MapSystem());
   game.add(new NewsTicker());
   game.add(new DebugStats());

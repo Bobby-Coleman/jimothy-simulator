@@ -57,6 +57,44 @@ interface Def {
   target?: (e: Env) => GuideTarget | null;
   howFn?: (e: Env) => string | null;
   bonus?: (e: Env) => number;
+  /**
+   * Proximity hint (ui/NearHints.ts): while Jimothy lingers near one of these spots, the hint shows under the goal
+   * pill. Defs with a `poi` or `quest` get one by default (radius 16 m, hint = `how`); `near: false` opts out.
+   * Defs with neither (trash cans, washing…) only get one while they are the tracked goal (near their live target).
+   */
+  near?: Near | false;
+}
+
+interface Near {
+  /** Flat radius in metres (default 16). */
+  r?: number;
+  /** POI names to anchor on (default: the def's `poi`, plus its heart quest's live position). */
+  at?: string[];
+  /** Live spots (things that move, or come in many copies: hydrants, parked cars, propane tanks…). */
+  spots?: (e: Env) => THREE.Vector3[];
+  /** Height matters (a rooftop spot): only counts within ±`up` m vertically. */
+  up?: number;
+  /** On-site hint ({action} tokens OK). Default: the entry's `how` (quest step / how). Gets the current `how`. */
+  hint?: string | ((e: Env, how: string) => string);
+}
+
+/** A spot where an unfinished Instinct happens (for NearHints). */
+export interface NearSpot {
+  pos: THREE.Vector3;
+  r: number;
+  up?: number;
+  /** The tracked goal's live target (a passing cotton-candy kid, the nearest snack…), not a place of its own. */
+  live?: boolean;
+}
+
+/** An unfinished, non-secret Instinct with somewhere to be near, and what to say there. */
+export interface NearEntry {
+  id: string;
+  title: string;
+  category: string;
+  rank: number;
+  hint: string;
+  spots: NearSpot[];
 }
 
 const STORE = 'jimothy.guide.v1';
@@ -157,6 +195,35 @@ function rainHere(env: Env): GuideTarget | null {
 
 const heldTag = (env: Env, tag: string) => !!env.held?.tags?.has(tag);
 
+/** Positions of every live entity with `tag` within `maxD` m (flat) of the player (proximity spots). */
+function taggedSpots(env: Env, tag: string, maxD = 40, ok?: (e: Entity) => boolean): THREE.Vector3[] {
+  const p = env.player?.position as THREE.Vector3 | undefined;
+  const out: THREE.Vector3[] = [];
+  if (!p) return out;
+  for (const e of env.game.entities.withTag(tag)) {
+    if (e.data?.heldByPlayer || (ok && !ok(e))) continue;
+    const q = entPos(e, _w);
+    if (q && Math.abs(q.x - p.x) < maxD && Math.abs(q.z - p.z) < maxD) out.push(q.clone());
+  }
+  return out;
+}
+
+/** Positions from a list of things (hydrants, parked cars, trampolines) within `maxD` m of the player. */
+function listSpots<T>(env: Env, list: readonly T[] | undefined, pos: (t: T) => THREE.Vector3 | null | undefined, maxD = 40): THREE.Vector3[] {
+  const p = env.player?.position as THREE.Vector3 | undefined;
+  const out: THREE.Vector3[] = [];
+  if (!p || !list) return out;
+  for (const t of list) {
+    const q = pos(t);
+    if (q && Math.abs(q.x - p.x) < maxD && Math.abs(q.z - p.z) < maxD) out.push(q);
+  }
+  return out;
+}
+
+const chaosOf = (env: Env) => env.game.get<any>('chaos');
+const trampolineSpots = (env: Env) => listSpots<any>(env, env.game.get<any>('trampolines')?.list, (t) => t.center);
+const propaneSpots = (env: Env) => taggedSpots(env, 'propane', 40, (e) => !e.data?.exploded);
+
 /** Quest texts carry keyboard hints like "(Q)": turn them into {action} tokens so pads / touch get their own chips. */
 const KEY_TOKENS: Record<string, string> = { Q: 'roll', C: 'chitter', R: 'wash', E: 'grab', F: 'bonk', Z: 'flop', Space: 'jump', Shift: 'sprint', Tab: 'objectives' };
 function chipify(text: string): string {
@@ -181,6 +248,7 @@ const DEFS: Def[] = [
           ? "It's raining, so the whole city is a sink: hold {wash} right here. What could possibly go wrong?"
           : 'Take it to a puddle and hold {wash} to scrub. What could possibly go wrong?'
         : '{grab} Grab cotton candy from the cart, then hold {wash} in a puddle.',
+    near: { r: 14 },
   },
   {
     id: 'mamasBoy',
@@ -196,6 +264,7 @@ const DEFS: Def[] = [
       return poiTarget(env, 'hotDogCart', 'Hot dog cart') ?? (den ? { pos: den, label: 'Mom' } : null);
     },
     howFn: (env) => (heldTag(env, 'food') ? 'Drop the snack next to Mom with {grab}. She is so proud of you.' : 'Mom wants snacks! {grab} Grab food (the hot dog cart is close) and drop it by the den.'),
+    near: { r: 12 },
   },
   {
     id: 'trashTornado',
@@ -214,6 +283,7 @@ const DEFS: Def[] = [
       return n ? { pos: n.pos, label: 'Dumpster' } : null;
     },
     how: '{jump} Jump into a dumpster. Brunch is served.',
+    near: { r: 7, spots: (env) => taggedSpots(env, 'dumpster') },
   },
   {
     id: 'wash10',
@@ -223,22 +293,47 @@ const DEFS: Def[] = [
       env.held ? (rainHere(env) ? "It's raining: hold {wash} right here. Anything. Everything." : 'Take it to water and hold {wash}. Puddles count!') : '{grab} Grab anything, then hold {wash} near water.',
   },
   { id: 'awww', rank: 6, how: '{chitter} Chitter at people. Watch them melt.' },
-  { id: 'teddyRescue', rank: 7, quest: 'teddy', poi: 'sadKid', place: 'Sad kid' },
-  { id: 'familyReunion', rank: 8, quest: 'danny', poi: 'dannyLawn', place: 'Danny' },
-  { id: 'kitCollector', rank: 9, quest: 'kits' },
-  { id: 'crowDeals', rank: 10, quest: 'crows', poi: 'crowTree', place: 'Crow tree' },
-  { id: 'grandmasFavorite', rank: 11, quest: 'grandma', poi: 'grandmaPorch', place: 'Grandma Rosie', bonus: (env) => (env.night ? -7 : 2) },
-  { id: 'jimothySummer', rank: 12, landmark: 'summer', poi: 'cityHallPodium', place: 'City Hall' },
-  { id: 'spaceNoodle', rank: 13, landmark: 'noodle', poi: 'spaceNoodleBase', place: 'Space Noodle' },
-  { id: 'honoraryDegree', rank: 14, landmark: 'degree', poi: 'gradStage', place: 'Graduation stage' },
-  { id: 'catchOfTheDay', rank: 15, landmark: 'catch', poi: 'fishMarket', place: "Pike's Plaice" },
-  { id: 'salmonRun', rank: 16, landmark: 'salmon', poi: 'salmonRunStart', place: 'Salmon Run start' },
-  { id: 'touchGrass', rank: 17, poi: 'serverPlug', place: 'SlopCorp plug', how: "{grab} Grab SlopCorp's giant plug and drag it out. Everyone go outside." },
-  { id: 'countToFive', rank: 18, poi: 'slopBillboard', place: 'Six-fingered billboard', how: 'Climb to the billboard catwalk and hold {wash} to wash the slop off. Fingers: fixed.' },
-  { id: 'washSlop', rank: 19, poi: 'slopSpawner', place: 'SlopCorp portal', how: 'Slopothys melt in water: hold {wash} next to them, or lure them into puddles.' },
-  { id: 'dragonRider', rank: 19.5, poi: 'dragonPad', place: 'Dragon pad', how: 'When the Slop Dragon lands on its pad, {grab} grab it and hold on.' },
-  { id: 'rookieCard', rank: 20, landmark: 'rookieCard', poi: 'rookieCard', place: 'Dugout' },
-  { id: 'stickySituation', rank: 21, poi: 'gumWall', place: 'Gum Wall', how: 'Get stuck to the Gum Wall. Ew. Ewww.' },
+  { id: 'teddyRescue', rank: 7, quest: 'teddy', poi: 'sadKid', place: 'Sad kid', near: { r: 16 } },
+  { id: 'familyReunion', rank: 8, quest: 'danny', poi: 'dannyLawn', place: 'Danny', near: { r: 18 } },
+  {
+    id: 'kitCollector',
+    rank: 9,
+    quest: 'kits',
+    near: {
+      r: 14,
+      // Quest target: the nearest lost kit (or the den while kits follow you, when the quest step says so).
+      hint: (_e, how) => (/following you/.test(how) ? how : "A lost kit is squeaking nearby! Walk up or {chitter} chitter and it'll follow you home to Mom."),
+    },
+  },
+  { id: 'crowDeals', rank: 10, quest: 'crows', poi: 'crowTree', place: 'Crow tree', near: { r: 18, hint: (_e, how) => `${how} Then step back and let them haggle.` } },
+  { id: 'grandmasFavorite', rank: 11, quest: 'grandma', poi: 'grandmaPorch', place: 'Grandma Rosie', bonus: (env) => (env.night ? -7 : 2), near: { r: 16 } },
+  { id: 'jimothySummer', rank: 12, landmark: 'summer', poi: 'cityHallPodium', place: 'City Hall', near: { r: 20, hint: 'Up the steps to the podium! The mayor has a very official proclamation about you.' } },
+  { id: 'spaceNoodle', rank: 13, landmark: 'noodle', poi: 'spaceNoodleBase', place: 'Space Noodle', near: { r: 20, hint: 'Big climb! The maintenance ladder on the east side is kindest. Catch your breath on the landings.' } },
+  { id: 'honoraryDegree', rank: 14, landmark: 'degree', poi: 'gradStage', place: 'Graduation stage', near: { r: 18, hint: 'Hop up onto the graduation stage. The dean has been expecting you. Magna cum raccoon!' } },
+  { id: 'catchOfTheDay', rank: 15, landmark: 'catch', poi: 'fishMarket', place: "Pike's Plaice", near: { r: 12, at: ['fishCatch'], hint: 'Stand in the aisle with empty paws. The fishmonger lobs a fish every few seconds: get under it!' } },
+  {
+    id: 'moneyLaundering',
+    rank: 15.5,
+    poi: 'fishMarket',
+    place: "Pike's Plaice",
+    how: "Someone left cash on the fish counter. {grab} Grab it and {wash} launder it. It's legal when a raccoon does it.",
+    near: { r: 12, hint: "Psst: someone left cash on the fish counter. {grab} Grab it, then {wash} wash it. Totally legal." },
+  },
+  { id: 'salmonRun', rank: 16, landmark: 'salmon', poi: 'salmonRunStart', place: 'Salmon Run start', near: { r: 14, hint: 'Step onto the start line, wait for GO, then {sprint} sprint or {roll} roll along the cones. Beat those fish costumes!' } },
+  { id: 'touchGrass', rank: 17, poi: 'serverPlug', place: 'SlopCorp plug', how: "{grab} Grab SlopCorp's giant plug and drag it out. Everyone go outside.", near: { r: 16, hint: 'That giant plug powers the whole server farm. {grab} Grab it and walk backwards. Heavy, but so worth it.' } },
+  { id: 'countToFive', rank: 18, poi: 'slopBillboard', place: 'Six-fingered billboard', how: 'Climb to the billboard catwalk and hold {wash} to wash the slop off. Fingers: fixed.', near: { r: 18, hint: 'Six fingers?! Climb the posts to the window-washer catwalk and hold {wash} to fix it. Buckets provided.' } },
+  { id: 'washSlop', rank: 19, poi: 'slopSpawner', place: 'SlopCorp portal', how: 'Slopothys melt in water: hold {wash} next to them, or lure them into puddles.', near: { r: 20 } },
+  { id: 'dragonRider', rank: 19.5, poi: 'dragonPad', place: 'Dragon pad', how: 'When the Slop Dragon lands on its pad, {grab} grab it and hold on.', near: { r: 18, hint: 'Wait by the pad for the Slop Dragon to land, then {grab} grab on. Count its legs later.' } },
+  { id: 'rookieCard', rank: 20, landmark: 'rookieCard', poi: 'rookieCard', place: 'Dugout', near: { r: 14, hint: 'Something gold is glinting in the dugout... {grab} Grab it. Mint condition. Mostly.' } },
+  { id: 'stickySituation', rank: 21, poi: 'gumWall', place: 'Gum Wall', how: 'Get stuck to the Gum Wall. Ew. Ewww.', near: { r: 14, hint: 'Ah, the Gum Wall. Just walk right into it. Ew. Ewww. Ewwwww.' } },
+  {
+    id: 'fiveFingerDiscount',
+    rank: 21.5,
+    poi: 'picnic',
+    place: 'Picnic blanket',
+    how: 'A whole pizza sits on a picnic blanket in Gasworks-ish Park. {grab} Tiny hands, big dreams.',
+    near: { r: 12, hint: 'A whole pizza on that picnic blanket. Unattended. {grab} Tiny hands, big dreams.' },
+  },
   {
     id: 'bobbleheadCollector',
     rank: 22,
@@ -248,14 +343,101 @@ const DEFS: Def[] = [
       return n ? { pos: n.position, label: 'Golden bobblehead' } : null;
     },
     how: 'Golden bobbleheads glow and have a light beam. Look up!',
+    near: {
+      r: 16,
+      spots: (env) => {
+        const n = env.game.get<any>('collectibles')?.nearest?.(env.player.position);
+        return n?.position ? [n.position.clone()] : [];
+      },
+      hint: 'A golden bobblehead is hiding around here, probably up high. Follow the light beam and climb!',
+    },
   },
   { id: 'notACat', rank: 23, how: "Wait near people until someone says 'here kitty kitty'. Then turn around." },
+  {
+    id: 'officerScold',
+    rank: 23.5,
+    poi: 'jimothyStatue',
+    place: 'Wildlife Officer',
+    how: 'The Wildlife Officer patrols the City Hall plaza. Stand right next to your fans and let him scold them.',
+    near: { r: 16, hint: 'The Wildlife Officer patrols this plaza. Stand right next to your fans and let him scold them. Awkward!' },
+  },
   { id: 'cryptid', rank: 24, how: 'Let people film you. Tourists love a blurry cryptid.' },
   // chaos toys
-  { id: 'tripleShot', rank: 4.5, poi: 'espressoStand', place: 'Bean Me Up Espresso', how: '{grab} Grab a triple shot at the raccoon-height window. Then another. Then another.' },
-  { id: 'hydrantHydraulics', rank: 6.5, poi: 'hydrant', place: 'Fire hydrant', how: '{bonk} Bonk a fire hydrant. Ride the geyser. Wash stuff in the puddle.' },
-  { id: 'tourStrike', rank: 13.5, poi: 'tourGroup', place: 'Tour group', how: 'Tuck & Roll {roll} into the tour group at the Space Noodle. Sprint for a PERFECT GAME.' },
-  { id: 'carAlarmChoir', rank: 25, poi: 'parkedCars', place: 'Parked cars', how: '{bonk} Set off three car alarms at once on Old Ballard Ave. Nobody will make eye contact.' },
+  { id: 'tripleShot', rank: 4.5, poi: 'espressoStand', place: 'Bean Me Up Espresso', how: '{grab} Grab a triple shot at the raccoon-height window. Then another. Then another.', near: { r: 12 } },
+  {
+    id: 'hydrantHydraulics',
+    rank: 6.5,
+    poi: 'hydrant',
+    place: 'Fire hydrant',
+    how: '{bonk} Bonk a fire hydrant. Ride the geyser. Wash stuff in the puddle.',
+    near: { r: 6, spots: (env) => listSpots<any>(env, chaosOf(env)?.hydrants?.list, (h) => (h.active ? null : h.base)) },
+  },
+  { id: 'tourStrike', rank: 13.5, poi: 'tourGroup', place: 'Tour group', how: 'Tuck & Roll {roll} into the tour group at the Space Noodle. Sprint for a PERFECT GAME.', near: { r: 16, hint: 'A walking tour! {sprint} Sprint, then {roll} Tuck & Roll right into them. All nine down is a PERFECT GAME.' } },
+  {
+    id: 'carAlarmChoir',
+    rank: 25,
+    poi: 'parkedCars',
+    place: 'Parked cars',
+    how: '{bonk} Set off three car alarms at once on Old Ballard Ave. Nobody will make eye contact.',
+    near: { r: 5, spots: (env) => listSpots<any>(env, chaosOf(env)?.carAlarms?.cars, (c) => c.center), hint: '{bonk} Bonk parked cars to set off their alarms. Three at once makes a choir!' },
+  },
+  // chaos with somewhere to be
+  {
+    id: 'kaboom',
+    rank: 17.5,
+    place: 'Propane tank',
+    target: (env) => {
+      const n = nearestTagged(env, 'propane', 260, (e) => !e.data?.exploded);
+      return n ? { pos: n.pos, label: 'Propane tank' } : null;
+    },
+    how: 'Backyard BBQs in the Hills have propane tanks. {bonk} Bonk one twice (or throw it). Cartoon science!',
+    near: { r: 8, spots: propaneSpots, hint: 'Propane tank! {bonk} Bonk it twice, or {grab} grab it and throw it. Then run. Cartoon science!' },
+  },
+  {
+    id: 'chainReaction',
+    rank: 24.5,
+    place: 'Propane tank',
+    target: (env) => {
+      if (heldTag(env, 'propane')) return poiTarget(env, 'cityHallPodium', 'Crowd at City Hall');
+      const n = nearestTagged(env, 'propane', 260, (e) => !e.data?.exploded);
+      return n ? { pos: n.pos, label: 'Propane tank' } : null;
+    },
+    how: 'Carry a propane tank to a crowd (City Hall ceremony, graduation) and {bonk} throw it. Ragdolls: 5 in 5 s.',
+    near: { r: 8, spots: propaneSpots, hint: '{grab} Carry this tank to a crowd (City Hall has one) and {bonk} throw it in. Five ragdolls in five seconds!' },
+  },
+  {
+    id: 'frequentFlyer',
+    rank: 24.8,
+    place: 'Trampoline',
+    target: (env) => {
+      const p = env.player.position as THREE.Vector3;
+      let best: THREE.Vector3 | null = null;
+      for (const q of listSpots<any>(env, env.game.get<any>('trampolines')?.list, (t) => t.center, 400)) if (!best || q.distanceToSquared(p) < best.distanceToSquared(p)) best = q;
+      return best ? { pos: best.clone(), label: 'Trampoline' } : null;
+    },
+    how: 'Bounce on a backyard trampoline holding {jump} for a Mega Boing, or ride a raccoon cannon. Earn miles!',
+    near: {
+      r: 7,
+      spots: (env) => {
+        const out = trampolineSpots(env);
+        for (const n of ['cannon:stadium', 'cannon:noodle']) {
+          const q = env.game.get<any>('world')?.poi?.get?.(n) as THREE.Vector3 | undefined;
+          if (q) out.push(q.clone());
+        }
+        return out;
+      },
+      up: 8,
+      hint: 'Bounce holding {jump} for a Mega Boing, or climb into the cannon. 8 m up earns your wings!',
+    },
+  },
+  {
+    id: 'leapOfFaith',
+    rank: 26,
+    // no `poi`: the big map's Space Noodle top icon stays with "Climb the Space Noodle" (POI_ALIASES)
+    target: (env) => poiTarget(env, 'spaceNoodleTop', 'Space Noodle top'),
+    how: 'Climb something tall (the Space Noodle!), jump off and walk it off. He is round, he bounces.',
+    near: { r: 14, up: 12, at: ['spaceNoodleTop'], hint: "That's a long way down. Jump off and walk it off! He's round. He bounces." },
+  },
 ];
 
 /** Big-map POIs that stand for a guide entry even when it has no poi (click-to-track). */
@@ -392,6 +574,7 @@ export class Guide {
   private announceWait = 0;
   private stepKey = '';
   private nudgedAt = new Map<string, number>();
+  private nearList: NearEntry[] = [];
 
   constructor(
     readonly ctx: UiCtx,
@@ -461,6 +644,24 @@ export class Guide {
 
   get manualId() {
     return this.customPoi ? null : this.manual;
+  }
+
+  /** The goal pill is on screen (NearHints hangs its hint row under it). */
+  get pillVisible() {
+    return this.visible;
+  }
+
+  /** The goal pill element (NearHints attaches its hint row to it). */
+  get pillEl(): HTMLElement {
+    return this.pill;
+  }
+
+  /**
+   * Unfinished, non-secret Instincts with places to be near (refreshed with the suggestions, ~every 0.5 s). The
+   * tracked goal also counts near its live target (nearest trash can, puddle while holding cotton candy…).
+   */
+  nearby(): readonly NearEntry[] {
+    return this.nearList;
   }
 
   /** Pin an Instinct (objective id). */
@@ -588,6 +789,7 @@ export class Guide {
     this.suggestions = out.slice(0, 3);
     const pinned = this.manual ? out.find((s) => s.id === this.manual) ?? null : null;
     this.cur = pinned ?? out[0] ?? null;
+    this.nearList = this.buildNear(out, env, hearts);
     if (this.customPoi) {
       const p = game.get<any>('world')?.poi?.get?.(this.customPoi.name) as THREE.Vector3 | undefined;
       this.customTarget = p ? { pos: p.clone(), label: this.customPoi.label, flat: true } : null;
@@ -612,6 +814,43 @@ export class Guide {
       }
       this.stepKey = sk;
     }
+  }
+
+  /** Proximity spots + on-site hints for every unfinished suggestion (`list` has done / hidden ones filtered out). */
+  private buildNear(list: readonly Suggestion[], env: Env, hearts: any[]): NearEntry[] {
+    const out: NearEntry[] = [];
+    const world = env.game.get<any>('world');
+    const tracked = this.customPoi ? null : this.cur;
+    for (const s of list) {
+      const d = DEFS.find((x) => x.id === s.id);
+      if (!d || s.category === 'secret') continue;
+      const nr = d.near === false ? null : d.near ?? (d.poi || d.quest ? {} : null);
+      const r = (nr && nr.r) || 16;
+      const spots: NearSpot[] = [];
+      try {
+        if (nr) {
+          const names = nr.at ?? (nr.spots || !d.poi ? [] : [d.poi]);
+          for (const n of names) {
+            const p = world?.poi?.get?.(n) as THREE.Vector3 | undefined;
+            if (p) spots.push({ pos: p, r, up: nr.up });
+          }
+          if (d.quest) {
+            const q = hearts.find((x) => x.id === d.quest);
+            if (q?.position) spots.push({ pos: q.position, r, up: nr.up });
+          }
+          for (const p of nr.spots?.(env) ?? []) spots.push({ pos: p, r, up: nr.up });
+        }
+        // The tracked goal also counts near its live target (trash can, puddle, snack…).
+        if (tracked?.id === s.id && s.target) spots.push({ pos: s.target.pos, r: nr ? r : 12, up: nr?.up, live: true });
+      } catch {
+        /* a system hiccup must never break the HUD */
+      }
+      if (!spots.length) continue;
+      let hint = s.how;
+      if (nr && nr.hint) hint = typeof nr.hint === 'string' ? nr.hint : nr.hint(env, s.how);
+      out.push({ id: s.id, title: s.title, category: s.category, rank: d.rank, hint, spots });
+    }
+    return out;
   }
 
   private build(d: Def, o: Objective, env: Env, hearts: any[], marks: any[]): Suggestion | null {
