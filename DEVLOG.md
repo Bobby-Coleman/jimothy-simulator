@@ -139,3 +139,19 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
   62° was neither walkable nor climbable). He now follows the ground: anything up to ~60° is runnable at normal
   speed along the slope (45° sprint: 21 m in 4 s) and anything steeper is climbable.
 * **News-van tripod**: legs were tilted the wrong way (converging at the feet); they now splay out.
+
+## Playtest batch 2 (from the human)
+* **Raccoon cannons** can be aimed: ~4 s with a countdown, move to swing/raise the barrel, jump to fire early. A
+  dotted trajectory preview (drawn over scenery, constant on-screen size, stops at ground/water/anything solid) and
+  a landing marker + range readout; launch power is fixed so the preview is honest (lands within ~1–5 m).
+* **Ferry**: the sun-deck stairs sat in a 0.8 m gap Jimothy (0.76 m) wedged in → 1.6 m promenade, wider stairs, a
+  landing onto the sun deck and an outer handrail. Brushing a railing mid-stairs no longer auto-climbs it (thin
+  rails/poles need jump held; auto-climb needs a head-on push) — he used to vault into the bay.
+* **University grand steps**: the stone cheek walls + urns were visual only (walk-through corner) → colliders.
+* **Ezekiel Lint's statue**: the raised arm now runs from the shoulder to the sock. **NPC hair** shells render their
+  inner side (back hair was invisible from the front). **Fun Fact** sign faces town, clear of the coolant pipe;
+  the power plug's cable enters the junction box from the side so "TO DATA CENTER" is readable.
+* **Climbing ×¼**: bare walls drain stamina 4× faster (~7 m walking, ~11 m sprinting per bar). A new ladder registry
+  (`world.addLadder`) keeps ladders at the old rate: Space Noodle maintenance ladder, SlopCorp billboard ladder,
+  new service ladders on the catwalk-free gasworks towers. Bobblehead perches that relied on long wall climbs got
+  ladders/ledges (see QA_OBJECTIVES.md).
