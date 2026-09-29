@@ -653,7 +653,7 @@ export class Jimothy implements System {
     const onLadder = !!game.get<any>('world')?.onLadder?.(this.position);
     this.stamina -= dt / (onLadder ? 11 : 2.75);
     if (this.stamina <= 0) {
-      this.game.hint('Jimothy’s tiny arms give out. (Ladders are much easier.)', 2.2);
+      this.game.hint('Jimothy’s tiny arms give out. (Rest on a ledge first, or sprint-climb.)', 2.2);
       this.climbCooldown = 1.2;
       this.setMode('walk');
       return;

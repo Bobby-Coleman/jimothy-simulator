@@ -182,3 +182,19 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * **Music player v2**: playlist with checkboxes (unchecked tracks are skipped), draggable seek bar, volume + mute
   (synced with Settings), shuffle, and a pause-menu Music page with an "Auto music" / "My playlist" toggle. Choices
   persist across visits.
+
+## Playtest batch 5 (from the human)
+* **Signs**: a registry + head-on screenshot tour of ~300 sign faces. Shared text fitting measures real ink width
+  with a safe margin, sign textures keep their aspect, posts stand clear of faces; dozens of signs moved out from
+  behind columns, trees, lamps, kiosks and walls (incl. the Jimothy Night bobblehead sign in the plinth).
+* **Walk-through floors**: a whole-map visible-vs-solid probe; sink-in area 5,482 m² → 917 m² (tower setbacks,
+  HQ ledges, seawall cap, greenhouse, sidewalks, roofs, cars/boats via stepped profile colliders).
+* **Espresso freeze**: chittering a stolen coffee both handed it back (release → owner took it) and drank it; the
+  NPC then held a destroyed item and the next grab poisoned the physics world. Give-backs are deferred, dead items
+  are refused everywhere, and a throwing physics step can no longer stall the game loop.
+* **Intro** films Jimothy from 90° to the side, so Mom isn't in the background. **Pond beach** is a gentler eased
+  slope, and wading out of shallow water stands him up cleanly.
+* **Fewer ladders**: City Hall, Noodle roof, grunge shop, UW library, gasworks and Grandma's trellis ladders removed.
+  Routes are stamina puzzles now (rest ledges, stepped piers, a valve pipe, the donut shop roof); careful play
+  succeeds, a naive walking climb fails. Coves/lips fixed so climbers don't snag under cornices and eaves; fire
+  escapes land you on their platforms.

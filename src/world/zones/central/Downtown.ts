@@ -504,6 +504,12 @@ function buildCityHallClimb(game: Game, world: World, batch: Batch, o: { mbX0: n
       const az = s * (12.5 - ad / 2);
       batch.add(new THREE.BoxGeometry(aw, entY - baseTop, ad), stone, { matrix: T(ax, (baseTop + entY) / 2, az), uv: 2.4 });
       world.collider(new THREE.Vector3(ax, (baseTop + entY) / 2, az), new THREE.Vector3(aw, entY - baseTop, ad));
+      // stepped pedestal (bottom 4.6 m, 0.5 m wider all round): climb it, mantle onto its top, catch your breath, then
+      // climb the upper pier. Without it the pier was one 10.75 m climb that only a perfect sprint survived.
+      const ph = 4.6;
+      batch.add(new THREE.BoxGeometry(aw + 1, ph, ad + 1), stone, { matrix: T(ax - 0.5, baseTop + ph / 2, az + s * 0.5), uv: 2.4 });
+      batch.add(new THREE.BoxGeometry(aw + 1.1, 0.14, ad + 1.1), stone, { matrix: T(ax - 0.5, baseTop + ph - 0.07, az + s * 0.5), uv: 2.4 });
+      world.collider(new THREE.Vector3(ax - 0.5, baseTop + ph / 2, az + s * 0.5), new THREE.Vector3(aw + 1, ph, ad + 1));
       // base + capital bands (drawn only: 4 cm proud)
       batch.add(new THREE.BoxGeometry(aw + 0.08, 0.35, ad + 0.08), trim, { matrix: T(ax, baseTop + 0.175, az), color: 0xefe8da });
       batch.add(new THREE.BoxGeometry(aw + 0.08, 0.3, ad + 0.08), trim, { matrix: T(ax, entY - 0.15, az), color: 0xefe8da });
