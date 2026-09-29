@@ -112,7 +112,7 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
   scenarios passing, 5-minute random-input soak 0 errors / no NaNs / bounded entity count.
 
 ## Numbers
-* ~26 helper agents + the lead. ~200 TypeScript source files. 9 zones, ~60 NPCs, 54 Instincts, 12 mutators,
+* 23 helper agents + the lead. ~217 TypeScript source files. 9 zones, ~60 NPCs, 54 Instincts, 12 mutators,
   10 golden bobbleheads, 6 heartwarming quests, 6 landmark events, 4 chaos toys, 2 raccoon cannons, 1 finale.
 * First load ≈ 13.6 MB, boots in ~6 s; ≤ 500 draw calls at street level on 'high'.
 * 05:15 — Lead's last catches: wandering AI-slop creatures were photobombing the finale (a glitchy rainbow blob in
