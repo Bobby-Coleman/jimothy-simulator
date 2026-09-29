@@ -103,7 +103,6 @@ export class World implements System {
         d = 0,
         s = 0;
       if (h < -0.35) d = THREE.MathUtils.clamp((-0.35 - h) / 1.0, 0, 1);
-      d = Math.max(d, THREE.MathUtils.clamp(noise * 1.6 - 1.1, 0, 0.45)); // occasional worn patches
       if (z > MAP.seawallZ - 3) s = THREE.MathUtils.clamp((z - (MAP.seawallZ - 3)) / 3, 0, 1);
       g = Math.max(0, 1 - d - s);
       const sum = g + d + s || 1;

@@ -12,7 +12,7 @@ import type { World } from '../../world/World';
 const CAR_MODELS = [
   'sedan', 'sedan', 'taxi', 'suv', 'hatchback-sports', 'van', 'police', 'delivery', 'garbage-truck', 'suv-luxury', 'truck',
 ];
-const SCALE = 1.45;
+const SCALE = 1.6;
 
 interface Lane {
   points: THREE.Vector3[];

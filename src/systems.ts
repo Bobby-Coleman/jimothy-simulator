@@ -13,6 +13,7 @@ import { VehicleSystem } from './entities/vehicles/Vehicles';
 import { SlowMoSystem } from './gameplay/SlowMo';
 import { DebugStats } from './core/DebugStats';
 import { PhotoModeSystem } from './gameplay/PhotoMode';
+import { MapSystem } from './gameplay/MapSystem';
 
 /**
  * Registration order = init order = update order.
@@ -39,5 +40,6 @@ export function registerSystems(game: Game) {
 
   // --- presentation (audio, particles, UI) — keep last
   game.add(new MiniHud());
+  game.add(new MapSystem());
   game.add(new DebugStats());
 }

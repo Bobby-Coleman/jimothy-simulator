@@ -49,6 +49,7 @@ const KITS = {
   'racing-kit':          { title: 'Racing Kit',            zip: K + 'racing-kit/933b8fd9fd-1677580949/kenney_racing-kit.zip' },
   'blocky-characters':   { title: 'Blocky Characters',     zip: K + 'blocky-characters/8369c0cf30-1749547469/kenney_blocky-characters_20.zip' },
   'mini-characters':     { title: 'Mini Characters',       zip: K + 'mini-characters/bfc7e272b4-1774770718/kenney_mini-characters.zip' },
+  'cube-pets':           { title: 'Cube Pets',             zip: K + 'cube-pets/44e58e945f-1774520254/kenney_cube-pets_1.0.zip' },
   // Medieval kit: we only want the park/market bits (fountains, market stalls, carts, lanterns, hedges, fences, trees, rocks).
   'fantasy-town-kit':    { title: 'Fantasy Town Kit (subset)', zip: K + 'fantasy-town-kit/efe948d309-1754222374/kenney_fantasy-town-kit_2.0.zip',
                            only: /^(fountain|stall|cart|lantern|banner|fence|hedge|rock|tree|pillar|stairs-stone|wheel)/ },
