@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { Game } from '../../../core/Game';
 import type { World } from '../../World';
-import { Batch, Frame, GEO, footprint, rng } from './kit';
+import { Batch, Frame, GEO, footprint, rng, roofCollider, gableCollider } from './kit';
 
 export interface HallOpts {
   x: number;
@@ -128,11 +128,12 @@ export function gothicHall(game: Game, world: World, b: Batch, o: HallOpts): Hal
     const cz = midZ + s * Math.sin(th) * (t / 2) - s * Math.cos(th) * 0.07;
     const cy = (Ey + Ry) / 2 + Math.cos(th) * (t / 2) + Math.sin(th) * 0.07;
     b.add('roof', GEO.box, f.mat(0, cy, cz, w + 0.2, t, L, 0, s * th, 0), SLATE);
-    f.collider(game, 0, cy, cz, w + 0.2, t + 0.1, L, 0, s * th, 0);
+    roofCollider(game, f, 'z', s, d / 2, h, Ry, w);
   }
   f.box(b, 'metal', 0, Ry + t * 1.2, 0, w + 0.3, 0.16, 0.3, 0x6f7b72);
   for (const s of [-1, 1]) {
     f.geo(b, 'brick', GEO.prism, (s * w) / 2, h - 0.05, 0, d + 0.2, (d / 2 + 0.1) * pitch, 0.5, brick, Math.PI / 2);
+    gableCollider(game, f, 'x', s, w / 2, h - 0.05, d, (d / 2) * pitch, 0.5);
     // coping along the gable edges
     for (const k of [-1, 1]) {
       const len = Math.hypot(d / 2, (d / 2) * pitch) + 0.2;

@@ -7,7 +7,7 @@ import type { CameraRig } from '../../player/CameraRig';
 import { makeSlopDepthMaterial, makeSlopMaterial, makeSlopUniforms, type SlopUniforms } from './SlopMaterial';
 import { buildDragonGeometry, DP, ellipsoidSideDecal, type DragonModelData } from './SlopGeometry';
 import { DRAGON_BICKER, DRAGON_DISMOUNT, DRAGON_RIDE } from './lines';
-import { canvasTexture, clamp, pick, rand, say, surfaceY, terrainY, toast, type Timeline } from './util';
+import { canvasTexture, clamp, pick, rand, terrainY, toast, topAt, type Timeline } from './util';
 
 type FlightState = 'circle' | 'swoop' | 'landing' | 'landed' | 'takeoff' | 'ride';
 
@@ -51,6 +51,7 @@ export class SlopDragon {
   private riding = false;
   private rideStart = 0;
   private mounting = false;
+  private riderGroups: number | null = null;
   private savedCamDist = 0;
   private route: THREE.Vector3[] = [];
   private speakerA: Entity;
@@ -196,30 +197,24 @@ export class SlopDragon {
   /** Highest static surface around a ring / along a segment + clearance. */
   private safeAltitudeRing(c: THREE.Vector3, r: number, clearance: number, minAbove: number) {
     let top = terrainY(this.game, c.x, c.z) + minAbove;
-    for (let i = 0; i < 20; i++) {
-      const a = (i / 20) * Math.PI * 2;
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
       for (const rr of [r * 0.6, r, r * 1.3]) {
         const x = c.x + Math.cos(a) * rr;
         const z = c.z + Math.sin(a) * rr;
-        top = Math.max(top, surfaceY(this.game, x, z, 220) + clearance);
+        top = Math.max(top, topAt(this.game, x, z, 7) + clearance);
       }
     }
     return top;
   }
 
+  /** Altitude that clears everything (wingspan-wide) along a straight flight segment. */
   private safeAltitudeSegment(a: THREE.Vector3, b: THREE.Vector3, clearance: number) {
     let top = -Infinity;
-    for (let i = 0; i <= 12; i++) {
-      _v.lerpVectors(a, b, i / 12);
-      for (const [dx, dz] of [
-        [0, 0],
-        [6, 0],
-        [-6, 0],
-        [0, 6],
-        [0, -6],
-      ]) {
-        top = Math.max(top, surfaceY(this.game, _v.x + dx, _v.z + dz, 220) + clearance);
-      }
+    const n = Math.max(2, Math.ceil(a.distanceTo(b) / 4));
+    for (let i = 0; i <= n; i++) {
+      _v.lerpVectors(a, b, i / n);
+      top = Math.max(top, topAt(this.game, _v.x, _v.z, 7) + clearance);
     }
     return top;
   }
@@ -241,7 +236,7 @@ export class SlopDragon {
       const b = route[i];
       const alt = Math.max(this.safeAltitudeSegment(a, b, 13), terrainY(this.game, b.x, b.z) + 24);
       b.y = alt;
-      if (i === 1) a.y = Math.max(a.y, this.safeAltitudeSegment(a, a, 6));
+      if (i === 1) a.y = Math.max(a.y, this.safeAltitudeSegment(a, b, 10));
     }
     this.route = route;
   }
@@ -272,7 +267,11 @@ export class SlopDragon {
     if (this.riding && this.state === 'landing') return;
     const P = this.pad;
     const above = new THREE.Vector3(P.x, Math.max(this.pos.y, P.y + 16), P.z);
-    this.path = [above, new THREE.Vector3(P.x, P.y + this.model.legReach + 0.05, P.z)];
+    // don't clip anything on the way over (important with a rider on board)
+    above.y = Math.max(above.y, this.safeAltitudeSegment(this.pos, above, 8));
+    if (this.pos.y < above.y - 2) this.path = [new THREE.Vector3(this.pos.x, above.y, this.pos.z)];
+    else this.path = [];
+    this.path.push(above, new THREE.Vector3(P.x, P.y + this.model.legReach + 0.05, P.z));
     this.pathSpeed = this.riding ? 20 : 10;
     this.setState('landing');
   }
@@ -290,6 +289,12 @@ export class SlopDragon {
     this.riding = true;
     this.rideStart = this.game.time;
     this.rides++;
+    // The dragon clips through everything (it's AI). While he rides it, so does Jimothy: no surprise
+    // 'impact' ragdolls off a thin sign at 30 m. Restored in endRide().
+    if (this.riderGroups == null) {
+      this.riderGroups = player.collider.collisionGroups();
+      player.collider.setCollisionGroups(groups(G.PLAYER, 0));
+    }
     const cam = this.game.get<CameraRig>('camera');
     if (cam) {
       this.savedCamDist = cam.targetDistance;
@@ -317,6 +322,9 @@ export class SlopDragon {
   private endRide(completed: boolean) {
     if (!this.riding) return;
     this.riding = false;
+    const pl = this.game.get<Jimothy>('player');
+    if (pl && this.riderGroups != null) pl.collider.setCollisionGroups(this.riderGroups);
+    this.riderGroups = null;
     const cam = this.game.get<CameraRig>('camera');
     if (cam && this.savedCamDist) cam.targetDistance = this.savedCamDist;
     const player = this.game.get<Jimothy>('player');

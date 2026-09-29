@@ -116,27 +116,31 @@ export class DannyQuest implements HeartQuest {
     const focus = () => new THREE.Vector3().copy(player.position).lerp(danny.pos, 0.5).setY(Math.max(player.position.y, danny.pos.y + 0.45) + 0.1);
     const dx = danny.pos.x - player.position.x;
     const dz = danny.pos.z - player.position.z;
+    // the camera stays on the two round boys through the little chat; its end hands control back
     ctx.cutscene({
-      duration: 5.2,
+      duration: 60,
       focus,
-      camPos: ctx.orbit(focus, 3.1, 0.7, Math.atan2(dz, -dx), 0.14),
+      camPos: ctx.orbit(focus, 3.1, 0.7, Math.atan2(dz, -dx), 0.1),
       fov: 50,
       onEnd: () => {
-        ctx.dialog(
-          'Danny',
-          [
-            'Chrrr-chrrr! *happy chitter*',
-            '(He rolls exactly like you do. Same wobble. Same little tail flip at the end.)',
-            '(Neither of you knows for sure. Neither of you minds one bit.)',
-          ],
-          () => {
-            this.playing = false;
-            this.visitT = 40;
-            ctx.hint('Danny might drop by the den to visit sometimes.', 3);
-          },
-          { portrait: '🦝', color: '#8b8680' },
-        );
+        this.playing = false;
+        this.visitT = 40;
       },
+    });
+    ctx.after(2.4, () => {
+      ctx.dialog(
+        'Danny',
+        [
+          'Chrrr-chrrr! *happy chitter*',
+          '(He rolls exactly like you do. Same wobble. Same little tail flip at the end.)',
+          '(Neither of you knows for sure. Neither of you minds one bit.)',
+        ],
+        () => {
+          ctx.endCutscene();
+          ctx.hint('Danny might drop by the den to visit sometimes.', 3);
+        },
+        { portrait: '🦝', color: '#8b8680' },
+      );
     });
   }
 
@@ -148,10 +152,12 @@ export class DannyQuest implements HeartQuest {
     player.facing = Math.atan2(this.danny.pos.x - player.position.x, this.danny.pos.z - player.position.z);
   }
 
+  /** On the doorstep beside the den entrance (the den itself is full of kits). */
   private denSpot() {
     const mom = this.mama.mom;
-    const a = mom.homeYaw + 1.95;
-    return new THREE.Vector3(mom.home.x + Math.sin(a) * 2.1, mom.home.y, mom.home.z + Math.cos(a) * 2.1);
+    const e = mom.entrance();
+    const side = new THREE.Vector3(Math.cos(mom.homeYaw), 0, -Math.sin(mom.homeYaw));
+    return e.addScaledVector(side, 1.35);
   }
 
   private updateVisits(dt: number) {

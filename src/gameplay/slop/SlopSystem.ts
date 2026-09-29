@@ -12,9 +12,9 @@ import { PowerDimmer, ServerPlug } from './ServerPlug';
 import { PromptPortal } from './PromptPortal';
 import { SlopProps } from './SlopProps';
 import { SlopFx } from './SlopFx';
-import { drawPadDecal, loadSlopFonts } from './SlopArt';
+import { drawLabel, drawPadDecal, loadSlopFonts } from './SlopArt';
 import { TECHBRO_PIVOT, TECHBRO_UNPLUGGED } from './lines';
-import { canvasTexture, findClearSpot, findNpcs, markOwned, pick, poi, rand, randInt, refreshQueries, say, seeded, surfaceY, terrainY, Timeline, toast, worldOf } from './util';
+import { canvasTexture, findClearSpot, findNpcs, isClear, markOwned, pick, poi, rand, randInt, refreshQueries, say, seeded, surfaceY, terrainY, Timeline, toast, wetAt, worldOf } from './util';
 
 /** Objective ids the objectives agent is expected to use (we add them ourselves if they're missing). */
 const OBJECTIVES: ObjectiveDef[] = [
@@ -148,7 +148,9 @@ export class SlopSystem implements System {
     // Prompt Portal
     try {
       const at = clear(spawner, 2.8, 1.2, 5.5);
-      const face = new THREE.Vector3(this.campus.x - at.x, 0, this.campus.z - at.z);
+      // on the real campus the portal pad sits at the edge of town: face the town (new slop walks toward it);
+      // in the fallback layout face the campus centre
+      const face = spawner.found ? new THREE.Vector3(-at.x, 0, -at.z) : new THREE.Vector3(this.campus.x - at.x, 0, this.campus.z - at.z);
       if (face.lengthSq() < 9) face.set(-at.x, 0, -at.z);
       this.portal = new PromptPortal(game, this.fx, at, face.normalize());
       this.slopothys.portal = this.portal.spawnPoint();
@@ -178,11 +180,14 @@ export class SlopSystem implements System {
     }
     // Dragon pad + dragon
     try {
-      const pad = findClearSpot(game, this.campus, 10, 48, 5.5, 5.5, 9, 80, avoid, 14, rnd) ?? findClearSpot(game, this.campus, 30, 70, 5, 5, 8, 60, [], 0, rnd) ?? this.campus.clone().add(new THREE.Vector3(22, 0, 22));
-      pad.y = terrainY(game, pad.x, pad.z);
+      const keepOut: { p: THREE.Vector3; r: number }[] = avoid.map((p) => ({ p, r: 15 }));
+      if (this.plug) keepOut.push({ p: this.plug.seatPos.clone().addScaledVector(this.plug.axis, 5), r: 11 }); // plug pull-out lane
+      if (this.dataCenterFound) keepOut.push({ p: this.dataCenter, r: 28 });
+      const pad = this.findPadSpot(keepOut) ?? findClearSpot(game, this.campus, 30, 80, 5, 5, 8, 80, avoid, 15, rnd) ?? this.campus.clone().add(new THREE.Vector3(22, 0, 22));
+      pad.y = this.padTop(pad);
       this.buildPad(pad);
       avoid.push(pad);
-      this.dragon = new SlopDragon(game, this.timeline, this.campus, pad.clone().add(new THREE.Vector3(0, 0.12, 0)));
+      this.dragon = new SlopDragon(game, this.timeline, this.campus, pad.clone());
       if (this.billboard) this.dragon.swoopTargets.push(this.billboard.catwalkPoint.clone());
       if (this.dataCenterFound) {
         const roof = surfaceY(game, this.dataCenter.x, this.dataCenter.z, terrainY(game, this.dataCenter.x, this.dataCenter.z) + 120);
@@ -207,7 +212,41 @@ export class SlopSystem implements System {
     } catch (err) {
       console.error('[slop] props failed', err);
     }
+    this.fallbackCampus(found.length > 0);
     this.publishPois();
+  }
+
+  /**
+   * Fallback when the level has no SlopCorp campus yet: register the "SlopCorp Campus" area (HUD name, slop music,
+   * server hum) and put up a small campus sign by the portal.
+   */
+  private fallbackCampus(anyPoiFound: boolean) {
+    const world = worldOf(this.game);
+    if (!world) return;
+    if (!world.areas.some((a) => /slopcorp/i.test(a.name))) {
+      world.areas.push({ name: 'SlopCorp Campus', min: new THREE.Vector2(-178, -178), max: new THREE.Vector2(-66, -66) });
+    }
+    if (anyPoiFound || !this.portal) return;
+    const face = this.portal.facing;
+    const at = this.portal.spawnPoint().addScaledVector(face, 3.5).addScaledVector(new THREE.Vector3(-face.z, 0, face.x), 5);
+    at.y = terrainY(this.game, at.x, at.z);
+    const yaw = Math.atan2(face.x, face.z);
+    const sign = new THREE.Mesh(
+      new THREE.BoxGeometry(4.2, 1.5, 0.5),
+      [0, 0, 0, 0, 1, 0].map((i) =>
+        i
+          ? new THREE.MeshStandardMaterial({
+              map: canvasTexture(768, 274, (c, w, h) => drawLabel(c, w, h, ['SLOPCORP', 'Campus coming soon™ (still generating…)'], { bg: '#120c24', accent: '#ff5fd0' })),
+              roughness: 0.5,
+            })
+          : world.material(0x2b2f36, { roughness: 0.6 }),
+      ),
+    );
+    sign.position.set(at.x, at.y + 0.85, at.z);
+    sign.rotation.y = yaw;
+    sign.castShadow = true;
+    world.staticRoot.add(markOwned(sign));
+    world.collider(sign.position, new THREE.Vector3(4.2, 1.7, 0.5), yaw);
   }
 
   /** Publish where our stuff ended up (only names nobody else registered) so the map / other systems find it. */
@@ -225,27 +264,72 @@ export class SlopSystem implements System {
     if (kiosk?.object) set('nftKiosk', kiosk.object.position);
   }
 
+  /**
+   * Best open spot for the dragon pad: scan a grid over the campus, keep the ones on bare ground (not a roof, not
+   * wet, not too steep, nothing within an 11×11×9 m box) that stay clear of the keep-out circles; nearest to the
+   * campus centre wins. Deterministic.
+   */
+  private findPadSpot(keepOut: { p: THREE.Vector3; r: number }[]): THREE.Vector3 | null {
+    const game = this.game;
+    const c = this.campus;
+    let best: THREE.Vector3 | null = null;
+    let bestD = Infinity;
+    for (let x = c.x - 56; x <= c.x + 56; x += 4) {
+      for (let z = c.z - 56; z <= c.z + 56; z += 4) {
+        if (Math.abs(x) > 170 || z < -170 || z > 150) continue;
+        const d = Math.hypot(x - c.x, z - c.z);
+        if (d >= bestD) continue;
+        if (keepOut.some((k) => Math.hypot(k.p.x - x, k.p.z - z) < k.r)) continue;
+        const ty = terrainY(game, x, z);
+        const sy = surfaceY(game, x, z);
+        if (Math.abs(sy - ty) > 0.35) continue;
+        const hs = [terrainY(game, x + 5, z), terrainY(game, x - 5, z), terrainY(game, x, z + 5), terrainY(game, x, z - 5)];
+        if (Math.max(...hs) - Math.min(...hs) > 1.6) continue;
+        const g = new THREE.Vector3(x, ty, z);
+        if (wetAt(game, g, 7)) continue;
+        if (!isClear(game, g, 5.5, 5.5, 9)) continue;
+        best = g;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  /** Top of the pad plinth: just above the highest ground under it (so it never floats or gets buried on slopes). */
+  private padTop(p: THREE.Vector3) {
+    let top = -Infinity;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      top = Math.max(top, terrainY(this.game, p.x + Math.cos(a) * 5.2, p.z + Math.sin(a) * 5.2));
+    }
+    return Math.max(top, terrainY(this.game, p.x, p.z)) + 0.12;
+  }
+
   private buildPad(p: THREE.Vector3) {
     const world = worldOf(this.game)!;
     const concrete = world.material(0x8d8f93, { roughness: 0.9 });
-    const pad = new THREE.Mesh(new THREE.CylinderGeometry(5.2, 5.4, 0.24, 40), concrete);
-    pad.position.set(p.x, p.y + 0.02, p.z);
+    // p.y = top surface; the plinth reaches down into the slope
+    const lowest = Math.min(...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => terrainY(this.game, p.x + Math.cos(i) * 5.3, p.z + Math.sin(i) * 5.3)));
+    const hgt = Math.max(0.3, p.y - lowest + 0.4);
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(5.2, 5.5, hgt, 40), concrete);
+    pad.position.set(p.x, p.y - hgt / 2, p.z);
     pad.receiveShadow = true;
+    pad.castShadow = true;
     world.staticRoot.add(markOwned(pad));
     const decal = new THREE.Mesh(
       new THREE.PlaneGeometry(9.4, 9.4).rotateX(-Math.PI / 2),
       new THREE.MeshStandardMaterial({ map: canvasTexture(512, 512, drawPadDecal), transparent: true, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2 }),
     );
-    decal.position.set(p.x, p.y + 0.15, p.z);
+    decal.position.set(p.x, p.y + 0.01, p.z);
     decal.receiveShadow = true;
     world.staticRoot.add(markOwned(decal));
-    world.collider(new THREE.Vector3(p.x, p.y + 0.02, p.z), new THREE.Vector3(9.6, 0.24, 9.6));
-    // four little runway lights
+    world.collider(new THREE.Vector3(p.x, p.y - hgt / 2, p.z), new THREE.Vector3(9.8, hgt, 9.8));
+    // little runway lights
     const lamp = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: new THREE.Color(0xffc23a), emissiveIntensity: 2 });
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
       const l = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), lamp);
-      l.position.set(p.x + Math.cos(a) * 5.0, p.y + 0.2, p.z + Math.sin(a) * 5.0);
+      l.position.set(p.x + Math.cos(a) * 5.0, p.y + 0.08, p.z + Math.sin(a) * 5.0);
       world.staticRoot.add(markOwned(l));
     }
   }

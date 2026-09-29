@@ -211,7 +211,7 @@ export class Collectibles implements System {
     const game = this.game;
     const down = new THREE.Vector3(0, -1, 0);
     const out: { id: string; pos: THREE.Vector3 }[] = [];
-    const pois = [...world.poi.entries()].filter(([k]) => /^bobblehead[:_\-]/i.test(k)).sort((a, b) => a[0].localeCompare(b[0]));
+    const pois = [...world.poi.entries()].filter(([k]) => /^bobblehead[:_\-]/i.test(k)).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
     for (const [id, v] of pois) {
       const pos = v.clone();
       const gy = world.heightAt(pos.x, pos.z);

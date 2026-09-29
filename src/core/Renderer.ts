@@ -80,12 +80,12 @@ export class Renderer {
     });
     this.vignette = new VignetteEffect({ offset: 0.28, darkness: 0.45 });
     this.toneMapping = new ToneMappingEffect({ mode: ToneMappingMode.AGX });
-    this.saturation = new HueSaturationEffect({ saturation: 0.18 });
+    this.saturation = new HueSaturationEffect({ saturation: 0.26 });
     // HueSaturationEffect only clamps the top (min(color,1.0)); on bright saturated HDR colours (yellow, orange,
     // gold) it pushes the weak channel negative, which turns those pixels BLACK further down the chain. Clamp at 0.
     const sat = this.saturation as unknown as { getFragmentShader(): string; setFragmentShader(s: string): void };
     sat.setFragmentShader(sat.getFragmentShader().replace('min(color,1.0)', 'clamp(color,0.0,1.0)'));
-    this.contrast = new BrightnessContrastEffect({ contrast: 0.06, brightness: 0.0 });
+    this.contrast = new BrightnessContrastEffect({ contrast: 0.1, brightness: 0.0 });
     this.smaa = new SMAAEffect({ preset: SMAAPreset.MEDIUM });
 
     this.setQuality(this.detectQuality(), false);
@@ -125,12 +125,12 @@ export class Renderer {
       this.composer.removePass(this.effectPass);
       this.effectPass.dispose();
     }
+    // Colour grading (saturation/contrast) happens AFTER tone mapping, in LDR: grading HDR values before AgX
+    // pushed saturated colours negative and they came out black.
     const effects =
       q === 'low'
-        ? [this.saturation, this.toneMapping]
-        : q === 'medium'
-          ? [this.bloom, this.saturation, this.contrast, this.vignette, this.toneMapping, this.smaa]
-          : [this.bloom, this.saturation, this.contrast, this.vignette, this.toneMapping, this.smaa];
+        ? [this.toneMapping, this.saturation]
+        : [this.bloom, this.toneMapping, this.saturation, this.contrast, this.vignette, this.smaa];
     this.effectPass = new EffectPass(this.camera, ...effects);
     this.composer.addPass(this.effectPass);
     this.smaa.applyPreset(q === 'high' ? SMAAPreset.HIGH : SMAAPreset.MEDIUM);

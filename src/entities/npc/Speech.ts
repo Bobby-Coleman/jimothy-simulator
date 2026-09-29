@@ -79,7 +79,7 @@ export class Bubble {
     }
     const pop = Math.min(1, this.life / 0.12);
     const fade = Math.min(1, (this.duration - this.life) / 0.3);
-    const h = THREE.MathUtils.clamp(0.3 + camDist * 0.028, 0.34, 1.1) * (0.6 + 0.4 * pop);
+    const h = THREE.MathUtils.clamp(0.4 + camDist * 0.032, 0.45, 1.3) * (0.6 + 0.4 * pop);
     this.sprite.scale.set(h * this.aspect, h, 1);
     this.sprite.position.copy(pos);
     this.mat.opacity = fade;

@@ -165,11 +165,11 @@ export function plantTrees(
   mats: MatSet,
   kind: TreeKind,
   list: ([number, number] | [number, number, number])[],
-  opts: { seed?: number; scale?: [number, number]; collider?: boolean; variants?: number } = {},
+  opts: { seed?: number; scale?: [number, number]; collider?: boolean; variants?: number; castShadow?: boolean } = {},
 ) {
   if (!list.length) return;
   const r = rng(opts.seed ?? 7);
-  const variants = opts.variants ?? 3;
+  const variants = opts.variants ?? 2;
   const [s0, s1] = opts.scale ?? [0.85, 1.15];
   const buckets: [number, number, number, number, number][][] = [];
   for (let v = 0; v < variants; v++) buckets.push([]);
@@ -187,6 +187,25 @@ export function plantTrees(
     }
   }
   buckets.forEach((b, v) => {
-    if (b.length) instances(world, treeTemplate(kind, v, mats), b);
+    if (b.length) {
+      const g = instances(world, treeTemplate(kind, v, mats), b, { castShadow: opts.castShadow });
+      if (opts.castShadow === false) g.traverse((o) => (o.userData.noMerge = true));
+    }
   });
+}
+
+/**
+ * Forest on the out-of-bounds hillside north of the map (and the NW/NE corner berms) so the rising terrain
+ * reads as wooded hills instead of a bare green wall. No colliders (it's beyond the invisible wall), no shadows.
+ */
+export function plantBackdrop(game: Game, world: World, mats: MatSet) {
+  const r = rng(2026);
+  const firs: [number, number][] = [];
+  const cedars: [number, number][] = [];
+  const add = (x: number, z: number) => (r() < 0.62 ? firs : cedars).push([x + (r() - 0.5) * 5, z + (r() - 0.5) * 5]);
+  for (let z = -201; z > -262; z -= 7.5) for (let x = -262; x <= 262; x += 7.5) add(x, z);
+  for (const s of [-1, 1])
+    for (let z = -60; z > -201; z -= 8) for (let x = 203; x <= 262; x += 8) add(s * x, z);
+  plantTrees(game, world, mats, 'fir', firs, { seed: 301, scale: [1.0, 1.8], collider: false, castShadow: false });
+  plantTrees(game, world, mats, 'cedar', cedars, { seed: 302, scale: [1.0, 1.7], collider: false, castShadow: false });
 }

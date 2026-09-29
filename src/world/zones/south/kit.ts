@@ -33,7 +33,8 @@ export type MatKey =
   | 'gravel'
   | 'siding'
   | 'shingles'
-  | 'grass';
+  | 'grass'
+  | 'window';
 
 const TEX_DIR: Partial<Record<MatKey, string>> = {
   planks: 'planks',
@@ -400,6 +401,10 @@ export class Kit {
     this.mats.set('rust', new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0.15, map: rust, name: 'south:rust' }));
     this.mats.set('concrete', new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, map: concrete, name: 'south:concrete' }));
     this.mats.set('grass', new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, map: grass, name: 'south:grass' }));
+    // windows: vertex colour = glass tint by day, warm emissive glow at night
+    const win = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.2, metalness: 0.1, emissive: 0xffc56e, emissiveIntensity: 0.02, name: 'south:window' });
+    this.mats.set('window', win);
+    this.glow(win, 0.02, 1.25);
   }
 
   private async loadFonts() {

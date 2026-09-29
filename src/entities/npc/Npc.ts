@@ -141,6 +141,14 @@ export class Npc {
   private stuckPos = new THREE.Vector3();
   private cleanUntil = -1;
   private pendingWalk: { goal: THREE.Vector3; speed: number; arrive: number } | null = null;
+  private getupDur = 0.85;
+
+  /** The stand-up blend is over (time-based, so it also completes for NPCs nobody is looking at). */
+  private get getupDone() {
+    if (this.stateTime < this.getupDur) return false;
+    this.anim.finishGetup();
+    return true;
+  }
   private dropped: Entity | null = null;
   private inWaterTime = 0;
   private lastBump = -100;
@@ -169,7 +177,9 @@ export class Npc {
 
     // placement
     const p = opts.position;
-    this.feetY = this.groundAt(p.x, p.z, p.y + 30, 60);
+    // snap to the floor just below the given point (not a roof far above it); terrain if p.y is too low
+    const terrainY = game.get<any>('world')?.heightAt?.(p.x, p.z) ?? p.y;
+    this.feetY = this.groundAt(p.x, p.z, Math.max(p.y, terrainY) + 1.6, 16);
     this.position.set(p.x, this.feetY, p.z);
     this.home = opts.wander
       ? { center: opts.wander.center.clone(), radius: opts.wander.radius }
@@ -285,7 +295,8 @@ export class Npc {
   /** Instantly move to `p` (ground-snapped) and optionally face `yaw`. Gets up first if ragdolled. */
   teleport(p: THREE.Vector3, yaw?: number) {
     if (this.ragdollState) this.standUp(true);
-    const gy = this.groundAt(p.x, p.z, p.y + 1.5, 6);
+    const terrainY = this.game.get<any>('world')?.heightAt?.(p.x, p.z) ?? p.y;
+    const gy = this.groundAt(p.x, p.z, Math.max(p.y, terrainY) + 1.6, 16);
     this.position.set(p.x, gy, p.z);
     this.feetY = gy;
     this.vy = 0;
@@ -472,10 +483,6 @@ export class Npc {
     }
   }
 
-  private busy() {
-    return this.custom != null || this.passive || this.ragdollState != null || (this.state !== 'idle' && this.state !== 'wander');
-  }
-
   /** Can react to ambient stuff (chitter / chaos). */
   canReact() {
     return !this.removed && !this.custom && !this.passive && !this.ragdollState && this.state !== 'getup' && this.state !== 'faint' && this.state !== 'walk';
@@ -511,7 +518,7 @@ export class Npc {
       this.goal = new THREE.Vector3(gx, 0, gz);
     }
     const jog = this.type === 'jogger' || this.type === 'racer';
-    this.goalSpeed = jog ? this.walkSpeed : this.walkSpeed;
+    this.goalSpeed = this.walkSpeed;
     this.arriveRadius = jog ? 1.2 : 0.6;
     this.arrived = false;
     this.stuckTimer = 0;
@@ -541,7 +548,7 @@ export class Npc {
     if (this.gestureOverride && game.time > this.overrideUntil) this.gestureOverride = null;
     if (this.emoteGesture && game.time > this.emoteUntil) this.emoteGesture = null;
     if (this.lookOverride && game.time > this.lookOverrideUntil) this.lookOverride = null;
-    if (this.state === 'getup' && !this.anim.gettingUp && this.pendingWalk && this.sub === 0) this.resumeWalk();
+    if (this.state === 'getup' && this.getupDone && this.pendingWalk && this.sub === 0) this.resumeWalk();
     if (this.custom) {
       try {
         this.custom(this, dt, game);
@@ -549,7 +556,7 @@ export class Npc {
         console.error('[npcs] custom control failed for', this.name, err);
         this.custom = null;
       }
-      if (this.state === 'getup' && !this.anim.gettingUp) {
+      if (this.state === 'getup' && this.getupDone) {
         if (this.pendingWalk) this.resumeWalk();
         else this.state = 'custom';
       }
@@ -850,7 +857,7 @@ export class Npc {
       }
       case 'getup': {
         this.goal = null;
-        if (this.sub === 0 && !this.anim.gettingUp) {
+        if (this.sub === 0 && this.getupDone) {
           this.sub = 1;
           this.timer = 1.3;
           this.act = this.type === 'kid' ? 'cheer' : 'dust';
@@ -943,11 +950,14 @@ export class Npc {
       default:
         next = 'watch';
     }
+    // Grandma's Hat: everyone melts. More awws (and fewer cameras in his face).
+    const friendly = this.sys.friendly;
+    if (friendly && next !== 'selfie' && this.rng() < 0.6) next = 'watch';
     this.nextReaction = next;
     this.setState('notice');
     this.timer = 0.7 + this.rng() * 0.5;
-    this.setExpression(this.type === 'fan' || this.type === 'kid' ? 'happy' : this.rng() < 0.5 ? 'aww' : 'shock');
-    this.sayLine('notice', 2.2);
+    this.setExpression(this.type === 'fan' || this.type === 'kid' ? 'happy' : friendly || this.rng() < 0.5 ? 'aww' : 'shock');
+    this.sayLine(friendly && this.rng() < 0.5 ? 'hat' : 'notice', 2.2);
   }
 
   private canSee(p: THREE.Vector3) {
@@ -960,12 +970,12 @@ export class Npc {
   }
 
   private beginReaction(next: NpcState) {
-    const pl = this.sys.player;
     this.setState(next);
     switch (next) {
       case 'watch':
         this.timer = 2.5 + this.rng() * 3;
-        this.act = this.type === 'kid' || this.type === 'fan' ? 'cheer' : this.type === 'mayor' || this.type === 'dean' || this.type === 'fishmonger' ? 'wave' : 'aww';
+        this.act = this.sys.friendly && this.type !== 'kid' ? 'aww' : this.type === 'kid' || this.type === 'fan' ? 'cheer' : this.type === 'mayor' || this.type === 'dean' || this.type === 'fishmonger' ? 'wave' : 'aww';
+        if (this.sys.friendly) this.game.events.emit('hearts', { position: this.headPosition(new THREE.Vector3()).add(_c.set(0, 0.35, 0)), count: 3, scale: 0.8 });
         this.setExpression(this.type === 'kid' || this.type === 'fan' ? 'happy' : 'aww');
         if (this.act === 'aww' && this.rng() < 0.35) this.game.sfx('crowd_aww', this.position, 0.35);
         break;
@@ -981,7 +991,6 @@ export class Npc {
       default:
         break;
     }
-    void pl;
   }
 
   private finishReaction() {
@@ -1135,6 +1144,16 @@ export class Npc {
   alarm(from: THREE.Vector3, cause: string) {
     if (!this.canReact() || this.state === 'scold') return;
     const r = this.rng();
+    if (this.sys.friendly && cause !== 'explosion' && r < 0.7) {
+      // Grandma's Hat: "oh, he didn't mean it"
+      if (this.state === 'idle' || this.state === 'wander') {
+        this.setState('watch');
+        this.timer = 1.8;
+        this.act = 'shrug';
+        this.setExpression('aww');
+      }
+      return;
+    }
     if (this.type === 'officer') {
       if (this.state !== 'watch') {
         this.setState('watch');
@@ -1181,6 +1200,20 @@ export class Npc {
     this.timer = 4.5 + this.rng() * 2;
     this.setExpression('angry');
     this.sayLine('stolen', 2);
+  }
+
+  /** Something small hit us (a thrown phone...). */
+  ouch() {
+    const game = this.game;
+    if (game.time - this.lastBump < 1.5 || this.removed || this.ragdollState) return;
+    this.lastBump = game.time;
+    this.setExpression('angry');
+    this.sayLine('ouch', 1.8);
+    if (this.canReact() && (this.state === 'idle' || this.state === 'wander' || this.state === 'watch')) {
+      this.setState('watch');
+      this.timer = 1.8;
+      this.act = 'fist';
+    }
   }
 
   bumped() {
@@ -1439,7 +1472,8 @@ export class Npc {
     const inv = _q2.copy(_q).invert();
     this.rig.bones.pelvis.position.copy(pw).sub(root.position).applyQuaternion(inv);
     this.rig.bones.pelvis.quaternion.copy(inv).multiply(pq);
-    this.anim.startGetup(instant ? 0.01 : this.type === 'kid' ? 0.5 : 0.85);
+    this.getupDur = instant ? 0.01 : this.type === 'kid' ? 0.5 : 0.85;
+    this.anim.startGetup(this.getupDur);
     this.walker.setTranslation({ x, y: gy + this.capsuleCenter, z }, true);
     this.walker.setNextKinematicTranslation({ x, y: gy + this.capsuleCenter, z });
     this.walkerCollider.setEnabled(true);
@@ -1467,11 +1501,11 @@ export class Npc {
       this.entity.data.draggedByPlayer = false;
     }
     const c = this.home.center;
-    const a = Math.random() * Math.PI * 2;
-    const r = Math.random() * this.home.radius * 0.5;
-    const x = c.x + Math.cos(a) * r;
-    const z = c.z + Math.sin(a) * r;
-    const gy = this.groundAt(x, z, c.y + 20, 40);
+    // a dry, free spot near home (widening the search if home itself is wet)
+    const spot = this.sys.findSpot(c, Math.max(2, this.home.radius * 0.6)) ?? this.sys.findSpot(c, this.home.radius + 25, 24);
+    const x = spot ? spot.x : c.x;
+    const z = spot ? spot.z : c.z;
+    const gy = spot ? spot.y : this.groundAt(x, z, c.y + 20, 40);
     this.position.set(x, gy, z);
     this.feetY = gy;
     this.walker.setTranslation({ x, y: gy + this.capsuleCenter, z }, true);
@@ -1603,8 +1637,9 @@ export class Npc {
 
     // --- facing
     let want: number | null = null;
-    if (this.yawOverride != null) want = this.yawOverride;
-    else if (this.velocity.lengthSq() > 0.09) want = Math.atan2(this.velocity.x, this.velocity.z);
+    const walking = this.velocity.lengthSq() > 0.09;
+    if (this.yawOverride != null && !walking) want = this.yawOverride;
+    else if (walking) want = Math.atan2(this.velocity.x, this.velocity.z);
     else {
       const t = this.lookTarget(_b);
       if (t && (this.faceTarget || this.state === 'idle')) want = Math.atan2(t.x - this.position.x, t.z - this.position.z);

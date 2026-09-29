@@ -15,6 +15,8 @@ const RANGE: Record<string, number> = {
   slop: 110,
 };
 
+const _wp = new THREE.Vector3();
+
 export class DetailCuller implements System {
   name = 'culler';
   private t = 0;
@@ -37,7 +39,9 @@ export class DetailCuller implements System {
       const r = RANGE[e.kind];
       if (!r) continue;
       if (e.data.heldByPlayer) continue;
-      const d2 = obj.position.distanceToSquared(cam);
+      // World position (objects may be parented under something else)
+      const wp = obj.parent === game.scene ? obj.position : obj.getWorldPosition(_wp);
+      const d2 = wp.distanceToSquared(cam);
       const far = d2 > r * r * this.scale * this.scale;
       if (far) {
         if (obj.visible) {

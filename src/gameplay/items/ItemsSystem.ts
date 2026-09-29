@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Game, System } from '../../core/Game';
 import type { Entity } from '../../core/Entities';
 import { G, groups } from '../../core/Physics';
-import { registry, runTimers, emoteState, playerOf, fxOf, rand } from './shared';
+import { registry, runTimers, emoteState, playerOf, fxOf, rand, markDisturbed } from './shared';
 import { checkTrashCan, updateDumpster, dumpsterDive, spawnTrashCan, spawnDumpster } from './Trash';
 import { spawnItem, resolveItemKind, ITEM_KINDS } from './Items';
 import { explode } from './Impacts';
@@ -30,6 +30,8 @@ export class ItemsSystem implements System {
   init(game: Game) {
     this.game = game;
     this.scan();
+    // Player interactions count as "disturbing" a prop (trash-can tips only score when disturbed).
+    for (const ev of ['bonk', 'grab', 'release', 'steal']) game.events.on(ev, (p) => markDisturbed(game, p?.entity, true));
     // Landing on top of a plain (non-hollow) dumpster prop counts as a dive.
     game.events.on('land', (p) => {
       const pl = playerOf(game);

@@ -67,7 +67,9 @@ export class Batch {
       g.computeBoundingBox();
       g.boundingBox!.getCenter(_c);
       // offset by half a zone so every 120 m zone (centred on multiples of 120) is exactly one chunk
-      chunk = `${Math.floor((_c.x + 60) / this.chunkSize)},${Math.floor((_c.z + 60) / this.chunkSize)}`;
+      chunk = Number.isFinite(this.chunkSize)
+        ? `${Math.floor((_c.x + 60) / this.chunkSize)},${Math.floor((_c.z + 60) / this.chunkSize)}`
+        : 'all';
     }
     const cast = opts.castShadow ?? true;
     const key = `${matId(mat)}|${chunk}|${cast ? 1 : 0}`;

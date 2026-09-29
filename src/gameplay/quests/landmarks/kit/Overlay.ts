@@ -38,6 +38,8 @@ const CSS = `
 .lm-race .r.me{color:#ffd84a}
 .lm-race .bar{height:5px;background:rgba(255,255,255,.15);border-radius:3px;margin-top:5px;overflow:hidden}
 .lm-race .bar i{display:block;height:100%;background:#ffd84a;width:0}
+.lm-gold{position:absolute;inset:0;opacity:0;mix-blend-mode:soft-light;background:linear-gradient(180deg,rgba(255,176,40,.95) 0%,rgba(255,196,90,.7) 45%,rgba(255,214,140,.35) 100%)}
+.lm-gold2{position:absolute;inset:0;opacity:0;background:radial-gradient(ellipse 90% 60% at 50% 0%,rgba(255,200,80,.35),rgba(255,190,90,0) 70%)}
 @media (max-width:640px){.lm-banner .t{font-size:34px}.lm-bubble{font-size:13px}}
 `;
 
@@ -60,6 +62,8 @@ export class Overlay {
   private toasts: HTMLDivElement;
   private toastList: { el: HTMLDivElement; t: number }[] = [];
   private raceEl: HTMLDivElement;
+  private goldEl: HTMLDivElement;
+  private gold2El: HTMLDivElement;
 
   constructor(private game: Game) {
     if (!document.getElementById('lm-style')) {
@@ -72,6 +76,8 @@ export class Overlay {
     this.root = document.createElement('div');
     this.root.className = 'lm-root';
     host.appendChild(this.root);
+    this.goldEl = this.div('lm-gold');
+    this.gold2El = this.div('lm-gold2');
     this.dialogEl = this.div('lm-dialog');
     this.bannerEl = this.div('lm-banner');
     this.toasts = this.div('lm-toasts');
@@ -172,6 +178,13 @@ export class Overlay {
     this.raceEl.innerHTML = `<div class="h"><span>${esc(data.title)}</span><span>${data.time.toFixed(1)}s</span></div>${rows}<div class="bar"><i style="width:${Math.round(
       THREE.MathUtils.clamp(data.progress, 0, 1) * 100,
     )}%"></i></div>`;
+  }
+
+  /** Warm golden-hour wash over the screen (0..1), strongest at the top where the sky is. */
+  setGold(w: number) {
+    const o = w > 0.001 ? w.toFixed(3) : '0';
+    this.goldEl.style.opacity = o;
+    this.gold2El.style.opacity = o;
   }
 
   // ------------------------------------------------------------------ ticking

@@ -299,7 +299,8 @@ export class HeartCtx {
 
   tick() {
     const now = this.game.time;
-    if (this.cut && now >= this.cut.until) this.endCutscene();
+    // never pull the camera away (or unfreeze Jimothy) while a dialog is still on screen
+    if (this.cut && now >= this.cut.until && !this.dialogOpen) this.endCutscene();
     if (!this.timers.length) return;
     const due = this.timers.filter((t) => t.at <= now);
     if (!due.length) return;
@@ -384,7 +385,7 @@ export class HeartCtx {
       const len = dir.length();
       if (len > 0.3) {
         const hit = game.physics.sphereCast(f, dir, 0.18, len, groups(G.ALL, G.WORLD | G.VEHICLE));
-        if (hit) want.copy(f).addScaledVector(dir.normalize(), Math.max(0.6, hit.distance - 0.05));
+        if (hit) want.copy(f).addScaledVector(dir.normalize(), Math.max(1.2, hit.distance - 0.05));
       }
       cam.position.lerp(want, 1 - Math.exp(-d * (t < 0.8 ? 3 : 5)));
       look.lerp(f, 1 - Math.exp(-d * 6));

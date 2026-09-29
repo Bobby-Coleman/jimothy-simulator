@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import type { Entity } from '../../core/Entities';
 import type { FxSystem } from '../../fx/FX';
+import { G, groups } from '../../core/Physics';
 
 /**
  * Module-level state shared by the item helpers and the 'items' / 'impacts' systems.
@@ -76,6 +77,29 @@ export function entityPos(e: Entity, out = new THREE.Vector3()): THREE.Vector3 |
   if (e.object) return e.object.getWorldPosition(out);
   return null;
 }
+
+/**
+ * Something meaningful touched this entity (player bonk/grab/throw/contact, thrown prop, NPC, car,
+ * animal, explosion). Trash-can tips only score when the can was disturbed recently — so cans that
+ * merely settle at startup don't hand out free "Trash Panda!" points.
+ */
+export function markDisturbed(game: Game, e: Entity | undefined, byPlayer: boolean) {
+  if (!e || !e.alive) return;
+  e.data.disturbedAt = game.time;
+  if (byPlayer) e.data.disturbedByPlayer = true;
+}
+
+/** Surface height at (x, z) just below `y + up` (world geometry; flat-ish hits only), else `y`. */
+export function surfaceY(game: Game, x: number, y: number, z: number, radius = 0, up = 1.5): number {
+  const pts = radius > 0 ? [[0, 0], [radius, 0], [-radius, 0], [0, radius], [0, -radius]] : [[0, 0]];
+  let best = -Infinity;
+  for (const [dx, dz] of pts) {
+    const hit = game.physics.raycast(new THREE.Vector3(x + dx, y + up, z + dz), new THREE.Vector3(0, -1, 0), up + 2, WORLD_ONLY);
+    if (hit && hit.distance > 0.02 && hit.normal.y > 0.6) best = Math.max(best, hit.point.y);
+  }
+  return best > -Infinity ? best : y;
+}
+const WORLD_ONLY = groups(G.ALL, G.WORLD);
 
 /** Is the player currently carrying/dragging this entity? */
 export function heldByPlayer(game: Game, e: Entity) {

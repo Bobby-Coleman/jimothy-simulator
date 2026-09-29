@@ -120,7 +120,7 @@ export function drawNoodleSign(ctx: Ctx, w: number, h: number) {
   roundRect(ctx, h * 0.05, h * 0.05, w - h * 0.1, h * 0.3, h * 0.06);
   ctx.fill();
   fitText(ctx, 'SPACE NOODLE', w / 2, h * 0.2, w * 0.9, h * 0.24, FONT_TITLE, { fill: '#274b7a' });
-  textLines(ctx, ['Stairs: closed.', 'Elevator: broken.', 'Climbing: at your own risk.', '(Ledges every 15 m. Ladder on the east side.)'], w / 2, h * 0.68, w * 0.9, h * 0.085, FONT_BODY, '#fff', 1.35, { weight: '800' });
+  textLines(ctx, ['Stairs: closed.', 'Elevator: broken.', 'Climbing: at your own risk.', '(Ledges every 15 m. Ladder + rest landings: east side.)'], w / 2, h * 0.68, w * 0.9, h * 0.085, FONT_BODY, '#fff', 1.35, { weight: '800' });
 }
 
 export function drawCafeSign(ctx: Ctx, w: number, h: number) {

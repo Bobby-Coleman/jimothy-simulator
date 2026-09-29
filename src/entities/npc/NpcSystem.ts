@@ -29,7 +29,10 @@ interface Explosion {
  */
 export class NpcSystem implements System {
   name = 'npcs';
-  /** Draw simple canvas speech bubbles. The UI can render its own from 'speech' events and set this false. */
+  /**
+   * Fallback canvas speech bubbles. They are skipped automatically while any other system listens to 'speech'
+   * (the UI's bubble layer does); set false to never draw them.
+   */
   drawBubbles = true;
   /** Max simultaneous ragdolls; the oldest get up when exceeded. */
   maxRagdolls = 12;
@@ -38,6 +41,8 @@ export class NpcSystem implements System {
   minPopulation = 30;
   /** Chance that someone who sees Jimothy from behind tries the "here kitty kitty" gag (global 22 s cooldown). */
   kittyChance = 0.55;
+  /** Grandma's Hat mutator is on: humans are extra friendly (refreshed every frame). */
+  friendly = false;
   readonly list: Npc[] = [];
   player: Jimothy | null = null;
   game!: Game;
@@ -72,6 +77,7 @@ export class NpcSystem implements System {
     });
     game.events.on('chitter', (e: { position: THREE.Vector3 }) => this.onChitter(e));
     game.events.on('release', (e: { entity: Entity; thrown: boolean }) => this.onRelease(e));
+    game.events.on('homeRun', (e: { entity?: Entity; impulse?: THREE.Vector3 }) => this.onHomeRun(e));
   }
 
   // ================================================================== API
@@ -470,18 +476,26 @@ export class NpcSystem implements System {
     }
     const vehicle = e?.kind === 'vehicle' || e?.tags.has('vehicle');
     const thrownByPlayer = !!e && (e.data.heldByPlayer || (typeof e.data.thrownAt === 'number' && game.time - e.data.thrownAt < 4));
+    // Kinematic walkers make contact impulses unreliable (pushing/crushing a resting prop gives huge J), so judge
+    // by the prop's own motion: a capped speed estimate × mass = how much of a wallop it is.
+    const speed = Math.min(pre, 15);
+    const momentum = m * speed;
     if (thrownByPlayer) {
-      if (J < 6 || pre < 2.5) return;
+      if (J < 4 || speed < 2.5) return;
+      if (momentum < 8) {
+        npc.ouch(); // a phone to the face: rude, but not a knockdown
+        return;
+      }
     } else {
-      // The walker is kinematic: when it walks into a resting prop the contact impulse is large but harmless.
       const t = ob.translation();
       const tx = t.x - npc.position.x;
       const tz = t.z - npc.position.z;
       const tl = Math.hypot(tx, tz) || 1;
       const walkingInto = (npc.velocity.x * tx + npc.velocity.z * tz) / tl > 0.2;
       if (walkingInto && vAfter < 6) return;
-      // otherwise it has to be a real incoming hit: still moving after the contact, or a big impulse
-      if (!((J > 25 && vAfter > 1.5 && pre > 4) || J > 90)) return;
+      const incoming = vAfter > 1 && speed > 4 && momentum > 25 && J > 12;
+      const juggernaut = m > 150 && vAfter > 2;
+      if (!incoming && !juggernaut) return;
     }
     _v.set(lv.x, 0, lv.z);
     if (_v.lengthSq() < 1e-4) {
@@ -538,13 +552,40 @@ export class NpcSystem implements System {
     }
   }
 
+  /**
+   * Rookie mutator: its bat-bonk handler pushes only entity.body (the chest while ragdolled). Launch the whole
+   * person with the velocity it meant to give a full body instead of stretching the torso off.
+   */
+  private onHomeRun(e: { entity?: Entity; impulse?: THREE.Vector3 }) {
+    const npc = this.fromEntity(e?.entity);
+    const pl = this.player;
+    if (!npc || npc.removed || !pl) return;
+    if (!npc.ragdolled) npc.knockDown({ cause: 'bonk', byPlayer: true });
+    const rd = npc.ragdollState;
+    if (!rd) return;
+    const M = Math.min(rd.totalMass, 90);
+    const imp = e.impulse ?? _v.set(0, 0, 0);
+    const f = pl.forwardVec(_w);
+    const k = npc.type === 'kid' ? 0.6 : 1;
+    const dv = new THREE.Vector3((imp.x * 1.6 + f.x * M * 4) / M, (Math.max(0, imp.y) * 1.2 + M * 7.5) / M, (imp.z * 1.6 + f.z * M * 4) / M).multiplyScalar(k);
+    const base = rd.bodies.pelvis.linvel();
+    for (const b of Object.values(rd.bodies)) {
+      b.setLinvel({ x: base.x + dv.x, y: Math.max(base.y, 0) + dv.y, z: base.z + dv.z }, true);
+      b.setAngvel({ x: (Math.random() - 0.5) * 8, y: (Math.random() - 0.5) * 8, z: (Math.random() - 0.5) * 8 }, true);
+    }
+    rd.restTime = 0;
+    rd.flail(1.5);
+  }
+
   private onChitter(e: { position: THREE.Vector3 }) {
     const p = e?.position ?? this.player?.position;
     if (!p) return;
     let count = 0;
     for (const n of this.list) {
-      if (!n.canReact()) continue;
       const d = Math.hypot(n.position.x - p.x, n.position.z - p.z);
+      // quest hook first (works for passive / scripted NPCs too)
+      if (n.onInteract && d < 4 && !n.ragdolled && n.onInteract('chitter') === true) continue;
+      if (!n.canReact()) continue;
       if (d > 10 || Math.random() > 0.85) continue;
       n.hearChitter(count < 2 && Math.random() < 0.7);
       count++;
@@ -620,6 +661,14 @@ export class NpcSystem implements System {
   private officerScan() {
     const pl = this.player;
     if (!pl) return;
+    // Grandma's Hat: officers mostly let it slide
+    if (this.friendly && Math.random() < 0.75) {
+      if (Math.random() < 0.05) {
+        const o = this.list.find((n) => n.type === 'officer' && n.canReact() && Math.hypot(n.position.x - pl.position.x, n.position.z - pl.position.z) < 15);
+        o?.sayLine('charmed', 2.2);
+      }
+      return;
+    }
     const pp = pl.position;
     const t = this.game.time;
     const fans = this.list.filter(
@@ -647,6 +696,7 @@ export class NpcSystem implements System {
   update(dt: number, game: Game) {
     if (!this.populated) return;
     this.player = game.get<Jimothy>('player') ?? null;
+    this.friendly = !!game.get<any>('mutators')?.get?.('grandmaHat')?.enabled;
     this.computeSeparation();
     this.officerTimer -= dt;
     if (this.officerTimer <= 0) {

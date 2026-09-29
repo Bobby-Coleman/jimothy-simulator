@@ -103,6 +103,16 @@ export function surfaceY(game: Game, x: number, z: number, fromY?: number): numb
   return hit ? hit.point.y : ty;
 }
 
+/**
+ * Highest static thing within `radius` of the vertical line at (x, z) — a downward sphere cast, so thin signs,
+ * poles and roof edges near the line are caught (point raycasts miss them). For flight-path clearance.
+ */
+export function topAt(game: Game, x: number, z: number, radius = 4, fromY = 260): number {
+  const hit = game.physics.sphereCast(new THREE.Vector3(x, fromY, z), _down, radius, fromY + 60, groups(G.ALL, G.WORLD));
+  const ty = terrainY(game, x, z);
+  return hit ? Math.max(ty, hit.point.y) : ty;
+}
+
 /** A named POI from the level builders, or a fallback (y snapped to the terrain). */
 export function poi(game: Game, name: string, fx: number, fz: number): { pos: THREE.Vector3; found: boolean } {
   const p = worldOf(game)?.poi.get(name);

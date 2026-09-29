@@ -262,7 +262,8 @@ export class Kit extends RaccoonAnimal {
       this.lookYaw = (Math.random() - 0.5) * 2;
     }
     if (d < 10 && this.player) this.lookYaw = THREE.MathUtils.clamp(this.lookAngleTo(this.player.position), -1.2, 1.2);
-    if (d < 1.15) this.find('touch');
+    // touch (same level — a kit on a roof isn't found from the street below)
+    if (d < 1.15 && this.player && Math.abs(this.player.position.y - 0.38 - this.pos.y) < 1.2) this.find('touch');
   }
 
   private linePoint(out: THREE.Vector3) {

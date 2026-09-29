@@ -211,7 +211,9 @@ export class SlopBillboard {
     const f = this.face;
     const bucketMat = world.material(0x3a7bd5, { roughness: 0.5 });
     const handleMat = world.material(0xb0b4bb, { roughness: 0.4, metalness: 0.7 });
-    for (const t of [-0.34, 0, 0.34]) {
+    const n = Math.max(3, Math.round(f.w / 3.8));
+    for (let i = 0; i < n; i++) {
+      const t = ((i + 0.5) / n - 0.5) * 0.96;
       const p = bottom.clone().addScaledVector(this.right, t * f.w).addScaledVector(this.normal, f.depth / 2 + 0.75);
       p.y = catwalkY;
       const g = new THREE.Group();

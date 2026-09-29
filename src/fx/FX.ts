@@ -429,13 +429,13 @@ export class FxSystem implements System {
   }
 
   // ------------------------------------------------------------------ main API
-  emit(kind: FxKind, position: THREE.Vector3, opts: FxOpts = {}) {
-    if (!this.ready || !position) return;
+  emit(kind: FxKind, position: THREE.Vector3 | { x: number; y: number; z: number }, opts: FxOpts = {}) {
+    if (!this.ready || !position || !Number.isFinite(position.x + position.y + position.z)) return;
+    const pos = new THREE.Vector3(position.x, position.y, position.z);
     const big = kind === 'explosion' || kind === 'fireworks';
-    if (!this.visible(position, big ? 320 : 140)) return;
+    if (!this.visible(pos, big ? 320 : 140)) return;
     const q = this.game.renderer?.quality;
     this.quality = q === 'low' ? 0.45 : q === 'medium' ? 0.75 : 1;
-    const pos = position.clone();
     const sc = opts.scale ?? 1;
     try {
       switch (kind) {
@@ -833,16 +833,16 @@ export class FxSystem implements System {
       const m = this.meshP(this.chunks, randSphere(_v, 0.25).add(p));
       if (!m) break;
       const a = Math.random() * Math.PI * 2;
-      const h = rand(1, 3.8) * sc;
+      const h = rand(0.8, 3) * sc;
       m.vx = Math.cos(a) * h;
       m.vz = Math.sin(a) * h;
-      m.vy = rand(4.5, 9) * sc;
+      m.vy = rand(4, 8) * sc;
       m.grav = 7;
       m.drag = 1.6;
       m.flutter = rand(0.3, 0.8);
-      m.sx = 0.085;
-      m.sy = 0.008;
-      m.sz = rand(0.11, 0.16);
+      m.sx = 0.07;
+      m.sy = 0.007;
+      m.sz = rand(0.09, 0.13);
       m.s0 = m.s1 = sc;
       m.sc = 3;
       m.spin = rand(6, 14);
@@ -943,30 +943,32 @@ export class FxSystem implements System {
       m.s1 = 1;
       m.sc = 1;
       m.life = rand(0.5, 0.9);
-      m.r0 = 1.8;
-      m.g0 = rand(0.7, 0.85);
-      m.b0 = 0.22;
-      m.r1 = 1.35;
-      m.g1 = 0.3;
-      m.b1 = 0.14;
+      m.r0 = 1.9;
+      m.g0 = rand(0.5, 0.68);
+      m.b0 = 0.13;
+      m.r1 = 1.2;
+      m.g1 = 0.16;
+      m.b1 = 0.1;
     }
-    const nc = this.n(5);
+    // hot core: pulled toward the camera so it reads in front of the orange blobs
+    const toCam = new THREE.Vector3().subVectors(this.game.camera.position, p).normalize().multiplyScalar(0.7 * s);
+    const nc = this.n(6);
     for (let i = 0; i < nc; i++) {
-      const m = this.meshP(this.fire, randSphere(_v, 0.35 * s).add(p));
+      const m = this.meshP(this.fire, randSphere(_v, 0.35 * s).add(p).add(toCam));
       if (!m) break;
       m.vy = 1.5 * s;
       m.drag = 3;
-      m.sx = m.sy = m.sz = rand(0.6, 0.95) * s;
+      m.sx = m.sy = m.sz = rand(0.45, 0.75) * s;
       m.s0 = 0.4;
       m.s1 = 1;
       m.sc = 1;
-      m.life = rand(0.25, 0.4);
+      m.life = rand(0.3, 0.5);
       m.r0 = 2.4;
-      m.g0 = 1.5;
-      m.b0 = 0.6;
-      m.r1 = 1.7;
-      m.g1 = 0.7;
-      m.b1 = 0.22;
+      m.g0 = 1.35;
+      m.b0 = 0.45;
+      m.r1 = 1.8;
+      m.g1 = 0.6;
+      m.b1 = 0.16;
     }
     // smoke rises out of the fireball as it fades
     this.later(0.22, () => {

@@ -75,7 +75,7 @@ export const UniversityOfWashing: ZoneBuilder = {
     grandSteps(game, world, b, PX, PZ + PD / 2, 16, top, 1);
 
     const fountainTop = buildFountain(game, world, mats, b, water, PX, top, PZ + 0.5);
-    poi(world, 'bobblehead:n4', PX, fountainTop + 0.35, PZ + 0.5);
+    poi(world, 'bobblehead:n5', PX, fountainTop + 0.35, PZ + 0.5);
     founderStatue(game, world, b, PX, top, PZ - PD / 2 + 3.2);
     // bike racks with bikes
     for (const s of [-1, 1]) {
@@ -121,7 +121,7 @@ export const UniversityOfWashing: ZoneBuilder = {
     const tumble = gothicHall(game, world, b, { x: 154, z: -146, face: -Math.PI / 2, w: 26, d: 13, h: 12, floors: 3, seed: 32, brick: 0xbd6a4e });
     halls.push({ info: tumble, name: 'TUMBLE DRY HALL' });
     for (const hInfo of halls) hallPlaque(world, b, hInfo.info, hInfo.name);
-    if (library.towerTop) poi(world, 'bobblehead:n5', library.towerTop.x, library.towerTop.y + 0.35, library.towerTop.z);
+    if (library.towerTop) poi(world, 'bobblehead:n2', library.towerTop.x, library.towerTop.y + 0.35, library.towerTop.z);
 
     // quad lawn paths
     const libFootZ = library.stepsEnd.z; // ground in front of the library steps
@@ -143,21 +143,21 @@ export const UniversityOfWashing: ZoneBuilder = {
     // ============================================================ graduation stage
     const stageZ = libFootZ + 4.6;
     const stage = gradStage(game, world, mats, b, PX, stageZ);
-    // the photogenic cherry tree beside the banner (canopy platform: bobblehead:n6)
-    const ctx = PX + 8.9,
-      ctz = stageZ - 2.6;
+    // the photogenic cherry tree beside the banner (canopy platform: bobblehead:n8)
+    const ctx = PX + 9.3,
+      ctz = stageZ - 5.0;
     plantTrees(game, world, mats, 'cherry', [[ctx, ctz]], { seed: 99, scale: [1.3, 1.3], variants: 1 });
     {
       const g = H(ctx, ctz);
       const capY = g + TREE_TOP.cherry * 1.3 - 1.2;
       colliderBox(game, ctx, capY, ctz, 3.2, 0.4, 3.2);
-      poi(world, 'bobblehead:n6', ctx, capY + 0.55, ctz);
+      poi(world, 'bobblehead:n8', ctx, capY + 0.55, ctz);
     }
     // chairs for the audience
-    for (let row = 0; row < 5; row++) {
+    for (let row = 0; row < 4; row++) {
       for (let k = 0; k < 6; k++) {
         const side = k < 3 ? -1 : 1;
-        const x = PX + side * (1.4 + (k % 3) * 0.85);
+        const x = PX + side * (1.9 + (k % 3) * 0.85);
         const z = stageZ + 5.2 + row * 1.25;
         P.spawnOnGround(game, P.foldingChair(mats, row === 0 ? 0xe8d9ff : 0xf4f1ea), x, z, Math.PI + (r() - 0.5) * 0.1, 0.3, 0.02);
       }
@@ -618,13 +618,13 @@ function gradStage(game: Game, world: World, mats: MatSet, b: Batch, x: number, 
   const run = 0.4;
   for (let i = 0; i < n - 1; i++) {
     const t = -((i + 1) * -gl) / n;
-    f.box(b, 'cedar', 0, (t + gl - 0.3) / 2, fz + run * (i + 0.5), 4.4, t - gl + 0.3, run + 0.02, 0xd9cbb8);
+    f.box(b, 'cedar', 0, (t + gl - 0.3) / 2, fz + run * (i + 0.5), 2.6, t - gl + 0.3, run + 0.02, 0xd9cbb8);
   }
   {
     const rise = -gl;
     const len = Math.hypot(n * run, rise);
     const ang = Math.atan2(rise, n * run);
-    f.collider(game, 0, -rise / 2 - 0.12, fz + (n * run) / 2, 4.4, 0.24, len, 0, ang, 0);
+    f.collider(game, 0, -rise / 2 - 0.12, fz + (n * run) / 2, 2.6, 0.24, len, 0, ang, 0);
   }
   // podium (front-left of center) — the dean stands behind it
   const podX = 0,

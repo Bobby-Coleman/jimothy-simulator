@@ -5,7 +5,7 @@ import { RAPIER, G, groups } from '../../core/Physics';
 import { spawnProp } from '../../entities/Props';
 import { buildTrashCan, buildTrashLid, buildDumpster, DUMPSTER } from './models';
 import { spawnItemFlying, type ItemKind } from './Items';
-import { registry, after, fxOf, entityPos, playerOf, rand, weighted } from './shared';
+import { registry, after, fxOf, entityPos, playerOf, rand, weighted, surfaceY } from './shared';
 
 /**
  * Trash cans & dumpsters — the preferred way to put bins in a level:
@@ -94,9 +94,13 @@ const CAN_SIZE = new THREE.Vector3(0.62, 1.03, 0.62);
 let canTemplate: THREE.Group | null = null;
 let lidTemplate: THREE.Group | null = null;
 
-/** Spawn a galvanised trash can with its lid. `bottomPos.y` = ground height. */
+/**
+ * Spawn a galvanised trash can with its lid. `bottomPos.y` ≈ ground height; the real surface under the
+ * can's footprint is found with a raycast so it starts upright and never inside a curb.
+ */
 export function spawnTrashCan(game: Game, bottomPos: THREE.Vector3, rotY = 0): Entity {
   if (!canTemplate) canTemplate = buildTrashCan();
+  bottomPos = new THREE.Vector3(bottomPos.x, Math.max(bottomPos.y, surfaceY(game, bottomPos.x, bottomPos.y, bottomPos.z, 0.27)), bottomPos.z);
   const obj = canTemplate.clone(true);
   const e = spawnProp(
     game,
@@ -130,15 +134,30 @@ const _q = new THREE.Quaternion();
 const _up = new THREE.Vector3();
 const _p = new THREE.Vector3();
 
-/** Tilt check for one can; handles the first tip-over. Call every frame (cheap when asleep). */
+/**
+ * Tilt check for one can; handles the first tip-over. Call every frame (cheap when asleep).
+ * A tip only counts if the can was disturbed within the last 10 s (see markDisturbed), and during the
+ * first 5 s of play only player-caused tips count. Cans that fall over on their own are marked
+ * silently and re-arm once they're standing again.
+ */
 export function checkTrashCan(game: Game, e: Entity) {
   const b = e.body;
-  if (!e.alive || !b || e.data.tipped || e.data.heldByPlayer) return;
+  if (!e.alive || !b || e.data.heldByPlayer) return;
   if (b.isSleeping() || !b.isDynamic()) return;
   const r = b.rotation();
   const upY = 1 - 2 * (r.x * r.x + r.z * r.z);
+  if (e.data.tipped) {
+    if (e.data.tipSilent && upY > 0.9) e.data.tipped = e.data.tipSilent = false;
+    return;
+  }
   if (upY > 0.5) return; // < 60° tilt
   e.data.tipped = true;
+  const d = e.data.disturbedAt as number | undefined;
+  const valid = d != null && game.time - d < 10 && (game.time > 5 || !!e.data.disturbedByPlayer);
+  if (!valid) {
+    e.data.tipSilent = true;
+    return;
+  }
   tipTrashCan(game, e);
 }
 
@@ -200,6 +219,7 @@ const LID_G = 18; // 3g/(2L) for the lid plate
 export function spawnDumpster(game: Game, bottomPos: THREE.Vector3, rotY = 0): Entity {
   const { W, H, D, T, wheel } = DUMPSTER;
   const { root, lidPivot } = buildDumpster();
+  bottomPos = new THREE.Vector3(bottomPos.x, Math.max(bottomPos.y, surfaceY(game, bottomPos.x, bottomPos.y, bottomPos.z, 0.55)), bottomPos.z);
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (m.isMesh) {

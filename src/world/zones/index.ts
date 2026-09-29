@@ -3,7 +3,7 @@ import { CentralRoads } from './central/Roads';
 import { OldBallard } from './central/OldBallard';
 import { Downtown } from './central/Downtown';
 import { ParkZone, LocksZone, WaterfrontZone, StadiumZone } from './south';
-import { ResidentialHills, UniversityOfWashing } from './north';
+import { ResidentialHills, UniversityOfWashing, SlopCorpCampus } from './north';
 
 /** Register every zone builder (one line each). */
 export function registerZones(world: World) {
@@ -16,4 +16,5 @@ export function registerZones(world: World) {
   world.addZone(StadiumZone);
   world.addZone(ResidentialHills);
   world.addZone(UniversityOfWashing);
+  world.addZone(SlopCorpCampus);
 }

@@ -33,10 +33,11 @@ import {
   pick,
   poi,
   refreshQueries,
+  groundDecal,
   type MatSet,
 } from './kit';
 import { buildHouse, SIDING, ROOFS, type HouseInfo, type HouseStyle } from './house';
-import { plantTrees } from './flora';
+import { plantTrees, plantBackdrop } from './flora';
 import { buildTrampoline } from './Trampolines';
 import * as P from './props';
 
@@ -345,9 +346,10 @@ export const ResidentialHills: ZoneBuilder = {
     for (const z of [-70, -94, -118, -142]) poles.push(powerPole(world, b, 4.6, z));
     wires(world, poles);
     const tp = poles[poles.length - 1];
-    poi(world, 'bobblehead:n2', tp.x, tp.y + 0.45, tp.z);
+    poi(world, 'bobblehead:n4', tp.x, tp.y + 0.45, tp.z);
 
-    // backdrop conifers on the ridge + yard trees
+    // backdrop forest on the out-of-bounds hillside (whole north edge), conifers on the ridge + yard trees
+    plantBackdrop(game, world, mats);
     const ridgeTrees: [number, number][] = [];
     for (let x = -58; x <= 58; x += 5.5 + r() * 3) ridgeTrees.push([x, -184 - r() * 8]);
     plantTrees(game, world, mats, 'fir', ridgeTrees.filter((_, i) => i % 2 === 0), { seed: 21, scale: [0.9, 1.35] });
@@ -401,7 +403,7 @@ export const ResidentialHills: ZoneBuilder = {
     const gh = houses.find((h) => h.row === special.grandma[0] && h.lot === special.grandma[1])!.info;
     poi(world, 'bobblehead:n1', gh.ridge.x, gh.ridge.y + 0.35, gh.ridge.z);
     const ct = top[2].info.chimneyTop ?? top[2].info.ridge;
-    poi(world, 'bobblehead:n3', ct.x, ct.y + 0.35, ct.z);
+    poi(world, 'bobblehead:n7', ct.x, ct.y + 0.35, ct.z);
 
     const sidewalkPath = (x: number) => {
       const pts: THREE.Vector3[] = [];
@@ -618,6 +620,28 @@ function gardenBeds(game: Game, world: World, mats: MatSet, b: Batch, cx: number
 let _sprayMat: THREE.MeshBasicMaterial | null = null;
 const sprayMat = () =>
   (_sprayMat ??= new THREE.MeshBasicMaterial({ color: 0xcfefff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+let _wetMat: THREE.MeshStandardMaterial | null = null;
+const wetMat = () =>
+  (_wetMat ??= new THREE.MeshStandardMaterial({
+    color: 0x2d5a22,
+    transparent: true,
+    opacity: 0.45,
+    roughness: 0.2,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -4,
+    alphaMap: canvasTexture(64, 64, (ctx, w, h) => {
+      const gr = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+      gr.addColorStop(0, '#ffffff');
+      gr.addColorStop(0.75, '#bbbbbb');
+      gr.addColorStop(1, '#000000');
+      ctx.fillStyle = gr;
+      ctx.fillRect(0, 0, w, h);
+    }),
+  }));
+let _catMat: THREE.MeshStandardMaterial | null = null;
+const catMat = () => (_catMat ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
 
 /** Lawn sprinkler: shallow 'sprinkler' water volume + rotating spray arcs + a wet patch. */
 function sprinkler(game: Game, world: World, mats: MatSet, water: WaterSystem, x: number, z: number) {
@@ -628,11 +652,7 @@ function sprinkler(game: Game, world: World, mats: MatSet, water: WaterSystem, x
   base.scale.set(0.18, 0.12, 0.18);
   base.position.set(x, y + 0.06, z);
   world.staticRoot.add(base);
-  const wet = new THREE.Mesh(
-    new THREE.CircleGeometry(radius * 0.95, 28).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0x2d5a22, transparent: true, opacity: 0.35, roughness: 0.25, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
-  );
-  wet.position.set(x, y + 0.04, z);
+  const wet = new THREE.Mesh(groundDecal(world, x, z, radius, 0.05, 6), wetMat());
   wet.receiveShadow = true;
   world.staticRoot.add(wet);
   const sb = new Batch(1e9);
@@ -1200,14 +1220,16 @@ function sittingCat(game: Game, world: World, topY: number, x: number, z: number
   }
   cb.add('p', GEO.sphere, trs(0, 0.4, 0.31, 0.03, 0.025, 0.02), 0xe79a88);
   const g = new THREE.Group();
-  g.add(cb.buildSingle(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 })));
-  const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.45, 6).translate(0, -0.22, 0), new THREE.MeshStandardMaterial({ color: col, roughness: 0.8 }));
+  g.add(cb.buildSingle(catMat()));
+  const tb = new Batch(1e9);
+  tb.add('t', new THREE.CylinderGeometry(0.03, 0.04, 0.45, 6).translate(0, -0.22, 0), null, col, { uvTile: 0 });
+  const tail = tb.buildSingle(catMat());
   tail.position.set(0, 0.2, -0.22);
   g.add(tail);
   g.position.set(x, topY + 0.05, z);
   g.rotation.y = ry;
   g.traverse((o) => ((o as THREE.Mesh).castShadow = true));
-  g.traverse((o) => (o.userData.noMerge = true));
+  tail.userData.noMerge = true;
   world.staticRoot.add(g);
   const phase = r() * 10;
   addAnimator(game, (_dt, t) => {

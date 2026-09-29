@@ -21,7 +21,8 @@ export type Gesture =
   | 'aww'
   | 'point'
   | 'shock'
-  | 'dust';
+  | 'dust'
+  | 'throw';
 
 export interface AnimInput {
   /** Horizontal speed (m/s). */
@@ -203,6 +204,18 @@ const GESTURES: Record<Exclude<Gesture, 'none'>, GestureFn> = {
     p[CX] = -0.18;
     p[HX] = -0.15;
   },
+  throw(p, t) {
+    // overhand wind-up and release, looping
+    const k = (t * 1.6) % 1;
+    const swing = k < 0.55 ? -2.7 + k * 0.8 : -2.3 + (k - 0.55) * 5.5;
+    p[URX] = Math.min(0.4, swing);
+    p[URZ] = -0.25;
+    p[LRX] = k < 0.55 ? -1.4 : -0.3;
+    p[ULX] = -0.7;
+    p[ULZ] = 0.3;
+    p[CY] = k < 0.55 ? 0.35 : -0.25;
+    p[CX] = 0.1;
+  },
   dust(p, t) {
     p[ULX] = -0.35;
     p[ULZ] = -0.25;
@@ -239,6 +252,11 @@ export class Animator {
     this.fromPelvis.copy(this.rig.bones.pelvis.position);
     this.getupT = 0;
     this.getupDur = dur;
+  }
+
+  /** Skip the rest of the get-up blend. */
+  finishGetup() {
+    this.getupT = 1;
   }
 
   get gettingUp() {
@@ -304,9 +322,14 @@ export class Animator {
         continue;
       }
       this.weights.set(name, w);
+      const fn = GESTURES[name];
+      if (!fn) {
+        this.weights.delete(name);
+        continue;
+      }
       const q = this.tmp;
       q.set(p);
-      GESTURES[name](q, t, amp);
+      fn(q, t, amp);
       for (let i = 0; i < N; i++) p[i] += (q[i] - p[i]) * w;
     }
 

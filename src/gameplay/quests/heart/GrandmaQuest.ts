@@ -80,7 +80,16 @@ export class GrandmaQuest implements HeartQuest {
     this.bowl = buildBowl();
     this.bowl.position.copy(this.bowlPos);
     ctx.game.scene.add(this.bowl);
+    // A warm porch light so her porch glows at night (the only light we add; on only at night, nearby).
+    this.lamp = new THREE.PointLight(0xffc27a, 0, 7.5, 1.6);
+    this.lamp.castShadow = false;
+    const up = new THREE.Vector3(0, 2.1, 0);
+    this.lamp.position.copy(pos).add(up).addScaledVector(new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)), 1.1);
+    this.lamp.visible = false;
+    ctx.game.scene.add(this.lamp);
   }
+
+  private lamp!: THREE.PointLight;
 
   /** Face away from the nearest wall (the house) — porches look out at the street. */
   private faceOpen(p: THREE.Vector3, fallbackTarget: THREE.Vector3): number {
@@ -172,6 +181,12 @@ export class GrandmaQuest implements HeartQuest {
     this.lineCd -= dt;
     this.waveT = Math.max(0, this.waveT - dt);
 
+    // porch light: fades in at night while Jimothy is in the neighbourhood
+    const nf = ctx.env?.nightFactor ?? (night ? 1 : 0);
+    const lampOn = nf > 0.2 && ctx.distToPlayer(this.porch) < 45;
+    const want = lampOn ? 9 * Math.min(1, nf * 1.3) : 0;
+    this.lamp.intensity += (want - this.lamp.intensity) * Math.min(1, dt * 2);
+    this.lamp.visible = this.lamp.intensity > 0.05;
     // rocking
     this.rockT += dt * (this.visiting ? 0.8 : 1.5);
     this.rock = Math.sin(this.rockT) * 0.11;
@@ -245,23 +260,38 @@ export class GrandmaQuest implements HeartQuest {
     this.waveT = 1.5;
     ctx.game.sfx('happy', this.porch, 0.4, 1.3);
     const head = new THREE.Vector3();
-    const focus = () => head.copy(this.porch).lerp(player.position, 0.35).setY(this.porch.y + 0.95);
-    const dx = player.position.x - this.porch.x;
-    const dz = player.position.z - this.porch.z;
-    const a0 = Math.atan2(dx, dz) + 0.9;
+    const focus = () => head.copy(this.porch).lerp(player.position, 0.35).setY(Math.max(this.porch.y + 1.0, player.position.y + 0.4));
+    // Her chair faces the street (away from the house): look in from out front, over the railing and under the
+    // porch roof, from whichever angle isn't blocked by a column.
+    const fwd = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+    const side = new THREE.Vector3(fwd.z, 0, -fwd.x);
+    const sgn = side.dot(new THREE.Vector3(player.position.x - this.porch.x, 0, player.position.z - this.porch.z)) >= 0 ? -1 : 1;
+    const f0 = focus().clone();
+    const a = ctx.clearAngle(f0, 4.2, 0.65, Math.atan2(fwd.x, fwd.z) + sgn * 0.45);
+    const base = new THREE.Vector3(f0.x + Math.sin(a) * 4.2, f0.y + 0.65, f0.z + Math.cos(a) * 4.2);
+    const cam = new THREE.Vector3();
+    // the camera stays on the porch through the dialog and the hat toss; hatOn() ends the scene
     ctx.cutscene({
-      duration: 2.2,
+      duration: 60,
       focus,
-      camPos: ctx.orbit(focus, 3.2, 0.55, a0, 0.1),
-      fov: 50,
+      camPos: (t) => cam.copy(base).addScaledVector(side, -sgn * Math.min(t, 12) * 0.03),
+      fov: 52,
       onEnd: () => {
-        ctx.dialog(
-          'Grandma Rosie',
-          ["Oh! It's you, sweet pea. I made you something.", 'A little hat, for that perfectly round head of yours. Hold still now...'],
-          () => this.throwHat(),
-          { portrait: '👵', color: '#b05a7a' },
-        );
+        if (!this.done && this.visiting) {
+          // cut short (shouldn't happen): finish the gift without the flourish
+          this.hatFlight?.obj.removeFromParent();
+          this.hatFlight = null;
+          this.hatOn(false);
+        }
       },
+    });
+    ctx.after(0.9, () => {
+      ctx.dialog(
+        'Grandma Rosie',
+        ["Oh! It's you, sweet pea. I made you something.", 'A little hat, for that perfectly round head of yours. Hold still now...'],
+        () => this.throwHat(),
+        { portrait: '👵', color: '#b05a7a' },
+      );
     });
   }
 
@@ -285,12 +315,15 @@ export class GrandmaQuest implements HeartQuest {
     return out.copy(player.position).setY(player.position.y + 0.7);
   }
 
-  private hatOn() {
+  private hatOn(endScene = true) {
     const ctx = this.ctx;
     const game = ctx.game;
     const player = ctx.player;
+    if (this.done) return;
     this.visiting = false;
     this.done = true;
+    // linger a moment on the new hat, then hand the camera back
+    if (endScene) ctx.after(1.6, () => ctx.endCutscene());
     game.events.emit('grandmaVisit', {});
     const mut = game.get<any>('mutators');
     let equipped = false;

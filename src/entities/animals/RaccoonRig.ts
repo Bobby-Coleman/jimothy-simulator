@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Assets } from '../../core/Assets';
-import { furParts, type FurOpts } from './AnimalFur';
+import { furParts, PART_NAME_RE as PART_RE, type FurOpts } from './AnimalFur';
 
 /**
  * Visual model + procedural animation for the raccoon family.
@@ -215,6 +215,42 @@ export class RaccoonRig {
     // The model itself is also a "part" (the placeholder root may share a name) — never animate its transform.
     this.rest.delete(model);
     if (furOn && this.spec.fur) furParts(model, this.spec.fur.parts, this.spec.fur);
+    // Level-of-detail bookkeeping: fur shells, and which meshes are worth a shadow.
+    this.shells = [];
+    this.shadowMeshes = [];
+    model.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      if (mesh.userData.furShell) {
+        this.shells.push(mesh);
+        return;
+      }
+      // the rig part this mesh belongs to (the mesh itself, or its parent for multi-material nodes)
+      const part = PART_RE.test(mesh.name) ? mesh.name : (mesh.parent?.name ?? '');
+      const tier = /^(Body|Head)$/.test(part) ? 2 : /^(Leg|Arm|Tail[123]$)/.test(part) ? 1 : 0;
+      this.shadowMeshes.push({ mesh, tier });
+    });
+    this.detail = -1;
+    this.setDetail(0);
+  }
+
+  private shells: THREE.Object3D[] = [];
+  private shadowMeshes: { mesh: THREE.Mesh; tier: number }[] = [];
+  private detail = -1;
+
+  /**
+   * 0 = close-up (fur, shadows from body/head/limbs), 1 = mid (no fur, body/head shadows), 2 = far (no fur,
+   * no shadows). Eyes, noses, ears and tail tips never cast shadows (invisible at this scale anyway).
+   */
+  setDetail(level: 0 | 1 | 2) {
+    if (level === this.detail) return;
+    this.detail = level;
+    for (const s of this.shells) s.visible = level === 0;
+    for (const m of this.shadowMeshes) m.mesh.castShadow = level === 0 ? m.tier >= 1 : level === 1 ? m.tier >= 2 : false;
+  }
+
+  get detailLevel() {
+    return this.detail;
   }
 
   private pose(name: string, x: number, y = 0, z = 0) {

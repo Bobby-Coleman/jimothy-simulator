@@ -3,7 +3,7 @@ import type { Game, System } from '../../core/Game';
 import type { Entity } from '../../core/Entities';
 import { RAPIER, G, groups, type ContactForceInfo } from '../../core/Physics';
 import { destroyProp } from '../../entities/Props';
-import { after, fxOf, entityPos, playerOf, releaseIfHeld, rand } from './shared';
+import { after, fxOf, entityPos, playerOf, releaseIfHeld, rand, markDisturbed } from './shared';
 
 /**
  * 'impacts' system: turns Rapier contact-force events into gameplay.
@@ -90,6 +90,13 @@ export class ImpactSystem implements System {
     // Jimothy vs the world: he handles his own landings.
     if ((a?.kind === 'player' && !b) || (b?.kind === 'player' && !a)) return;
     const now = game.time;
+    // Contact with another entity (not static world) "disturbs" a prop; player-ish if Jimothy or his throw.
+    if (a && b) {
+      const pa = b.kind === 'player' || !!b.data.yeet || !!b.data.heldByPlayer;
+      const pb = a.kind === 'player' || !!a.data.yeet || !!a.data.heldByPlayer;
+      markDisturbed(game, a, pa);
+      markDisturbed(game, b, pb);
+    }
     const fire = (e: Entity | undefined, other: Entity | undefined, s: number) => {
       if (!e || !e.alive || s < 1.5) return;
       if (now - (this.lastImpact.get(e.id) ?? -1) < 0.08) return;
@@ -120,11 +127,13 @@ export class ImpactSystem implements System {
     // Ignore the settle right after spawning (a vase placed slightly inside a table shouldn't blow up).
     const born = (e.data.spawnT as number | undefined) ?? 0;
     if (this.game.time - born < 1.0) return;
-    if (e.tags.has('fragile') && s > (e.data.shatterAt ?? 6.5)) {
+    // thrown or bonked in the last 3 s → breaks/blows much more easily (gentle drops still survive)
+    const now = this.game.time;
+    const launched = (e.data.yeet && now - e.data.yeet.t < 3) || now - ((e.data.launchedAt as number | undefined) ?? -9) < 3;
+    if (e.tags.has('fragile') && s > (launched ? 3.5 : (e.data.shatterAt ?? 6.5))) {
       shatter(this.game, e);
     } else if (e.tags.has('explosive') && !e.data.exploded && !e.data.armed) {
-      const thrown = e.data.yeet && this.game.time - e.data.yeet.t < 3;
-      if (s > 8.5 || (thrown && s > 4.5)) armExplosive(this.game, e, 0.05);
+      if (s > 8.5 || (launched && e.data.yeet && s > 4.5)) armExplosive(this.game, e, 0.05);
       else if (s > 4.5) {
         e.data.damage = (e.data.damage ?? 0) + 1;
         if (e.data.damage >= 2) armExplosive(this.game, e, 0.25);
@@ -145,6 +154,7 @@ export class ImpactSystem implements System {
   }
 
   private onBonk(e: Entity | undefined) {
+    if (e?.alive) e.data.launchedAt = this.game.time;
     if (!e?.alive || !e.tags.has('explosive') || e.data.exploded || e.data.armed) return;
     e.data.bonks = (e.data.bonks ?? 0) + 1;
     if (e.data.bonks >= 2) armExplosive(this.game, e, 0.35);
@@ -259,6 +269,7 @@ export function explode(
   const dir = new THREE.Vector3();
   for (const { e, body } of targets) {
     if (e && (!e.alive || e === opts.source || e.kind === 'player')) continue;
+    markDisturbed(game, e, true);
     if (!game.physics.world.getRigidBody(body.handle)) continue;
     const t = body.translation();
     dir.set(t.x - pos.x, t.y - pos.y, t.z - pos.z);

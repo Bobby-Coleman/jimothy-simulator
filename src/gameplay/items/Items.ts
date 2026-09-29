@@ -3,7 +3,7 @@ import type { Game } from '../../core/Game';
 import type { Entity } from '../../core/Entities';
 import { spawnProp, destroyProp, type ColliderShape } from '../../entities/Props';
 import { BUILD, brokenScreenMaterial, devaluedCardMaterial, teddyCleanMaterials, buildBow } from './models';
-import { registry, after, fxOf, entityPos, releaseIfHeld, heldByPlayer, emoteState, playerOf, rand } from './shared';
+import { registry, after, fxOf, entityPos, releaseIfHeld, heldByPlayer, emoteState, playerOf, rand, surfaceY } from './shared';
 
 /**
  * Items: small grabbable, washable props with charming procedural models and special wash reactions.
@@ -88,9 +88,12 @@ function at(e: Entity) {
   return entityPos(e) ?? undefined;
 }
 
-/** Give an item its own material copies with the colour multiplied (wet / soggy / faded looks). */
+/**
+ * Give an item its own material copies with the colour multiplied (wet / soggy / faded / gilded looks).
+ * `mul`: a scalar 0–4 (brightness) or any colour (hex number > 4, CSS string, THREE.Color).
+ */
 export function tintItem(e: Entity, mul: THREE.ColorRepresentation | number, opts: { roughness?: number; metalness?: number } = {}) {
-  const c = typeof mul === 'number' ? new THREE.Color(mul, mul, mul) : new THREE.Color(mul);
+  const c = typeof mul === 'number' && mul >= 0 && mul <= 4 ? new THREE.Color(mul, mul, mul) : new THREE.Color(mul);
   e.object?.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
@@ -769,6 +772,9 @@ export function spawnItem(game: Game, kindName: ItemKind | string, bottomPos: TH
   const kind = resolveItemKind(kindName);
   const def = kind && DEFS[kind];
   if (!kind || !def) throw new Error(`[items] unknown item kind "${kindName}"`);
+  // never start inside pavement laid over the terrain (only ever raises the spawn)
+  const sy = surfaceY(game, bottomPos.x, bottomPos.y, bottomPos.z, 0, 0.5);
+  if (sy > bottomPos.y) bottomPos = new THREE.Vector3(bottomPos.x, sy, bottomPos.z);
   let ent!: Entity;
   const e = spawnProp(
     game,

@@ -442,7 +442,7 @@ function stands(kit: Kit, b: Batch, seats: Seat[]) {
   // press box / suites on top of the home section
   const pz = H.z + 11.5 + ROWS * ROW_D + 0.3;
   b.box([H.x, ROW_H * ROWS + 3.8, pz + 0.3], [24, 3.2, 3], 0xeae6de, { mat: 'concrete' });
-  b.box([H.x, ROW_H * ROWS + 3.9, pz - 1.22], [23, 1.6, 0.06], 0x23415c, { collide: false, mat: 'glossy' });
+  b.box([H.x, ROW_H * ROWS + 3.9, pz - 1.22], [23, 1.6, 0.06], 0x23415c, { collide: false, mat: 'window' });
   b.box([H.x, ROW_H * ROWS + 5.5, pz + 0.3], [24.6, 0.3, 3.6], TEAL, { mat: 'glossy' });
   const pb = kit.textSign([{ text: 'TEE-HEE PARK', px: 90, color: '#fff', stroke: '#0b4a50' }, { text: 'Home of the Ballard Barnacles', px: 40, color: '#e9ffff', font: FONT_ROUND }], { w: 8, h: 1.4, bg: '#0f8a93' });
   kit.sign(b, { pos: [H.x, ROW_H * ROWS + 6.5, pz + 0.3], rotY: Math.PI, w: 8, h: 1.4, tex: pb, depth: 0.2, frame: 0x0b4a50 });
@@ -490,7 +490,6 @@ function seatMesh(kit: Kit, seats: Seat[]) {
   const geo = bake([
     { geo: GEO.box, pos: [0, 0.22, 0], scale: [0.48, 0.07, 0.42], color: 0xffffff },
     { geo: GEO.box, pos: [0, 0.48, -0.19], scale: [0.48, 0.5, 0.06], color: 0xffffff },
-    { geo: GEO.box, pos: [0, 0.1, -0.05], scale: [0.08, 0.2, 0.3], color: 0x888888 },
   ]);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 });
   const im = new THREE.InstancedMesh(geo, mat, seats.length);

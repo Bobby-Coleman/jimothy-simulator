@@ -151,7 +151,7 @@ export const OldBallard: ZoneBuilder = {
     poi('kit:1', 29.6, walkY(29.6, 19.6) + 0.75, 19.6);
     poi('bobblehead:c1', -38, (built.get(SHOPS.grunge.name)?.height ?? 15.4) + 0.35, -15.5);
     poi('bobblehead:c2', 34.6, roadY(34.6, 22.5) + 0.35, 22.5);
-    poi('bobblehead:c3', CLOCK.x, walkY(CLOCK.x, CLOCK.z) + 5.75, CLOCK.z);
+    poi('bobblehead:c3', CLOCK.x + 0.3, walkY(CLOCK.x, CLOCK.z) + 5.75, CLOCK.z + 0.3);
     poi('cottonCandyCart', 22.5, walkY(22.5, 12.2), 12.2);
     poi('hotDogCart', 28.8, walkY(28.8, 12.0), 12.0);
     poi('streetClock', CLOCK.x, walkY(CLOCK.x, CLOCK.z), CLOCK.z);
@@ -429,9 +429,8 @@ function buildPorchAndDen(game: Game, world: World, batch: Batch) {
   batch.add(atlas.quad(home, 0.7, 0.3), home.page.glowMat, { matrix: TR(10.05, y0 + 0.82, Z1 + 0.22, 0, -0.12, 0.05), castShadow: false });
   // warm light spilling out of the den + under the porch lamp (night)
   lightPools(game, world, [
-    { x: 9.0, y: y0, z: Z1 + 0.9, r: 2.6 },
-    { x: 9.0, y: y0, z: Z1 - 1.2, r: 3.2 },
-    { x: 10.0, y: y0, z: Z1 + 2.2, r: 3.4 },
+    { x: 9.0, y: y0, z: Z1 - 1.1, r: 2.2 },
+    { x: 9.6, y: y0, z: Z1 + 1.6, r: 2.7 },
   ], batch);
   // welcome mat
   batch.add(new THREE.BoxGeometry(0.9, 0.02, 0.55), trim, { matrix: T(9.0, y0 + 0.01, Z1 + 0.35), color: 0x8a5a2e, castShadow: false });

@@ -274,9 +274,9 @@ function lockmaster(kit: Kit, b: Batch) {
   const z = 201.8;
   b.box([x, TOP + 1.3, z], [2.6, 2.6, 3.4], 0xf3ead6, { mat: 'concrete' });
   b.box([x, TOP + 2.75, z], [3.0, 0.3, 3.8], 0xb5543a);
-  b.box([x, TOP + 1.6, z + 1.72], [2.0, 1.0, 0.05], 0x2b4a66, { collide: false, mat: 'glossy' });
-  b.box([x + 1.31, TOP + 1.6, z], [0.05, 1.0, 2.6], 0x2b4a66, { collide: false, mat: 'glossy' });
-  b.box([x - 1.31, TOP + 1.6, z], [0.05, 1.0, 2.6], 0x2b4a66, { collide: false, mat: 'glossy' });
+  b.box([x, TOP + 1.6, z + 1.72], [2.0, 1.0, 0.05], 0x2b4a66, { collide: false, mat: 'window' });
+  b.box([x + 1.31, TOP + 1.6, z], [0.05, 1.0, 2.6], 0x2b4a66, { collide: false, mat: 'window' });
+  b.box([x - 1.31, TOP + 1.6, z], [0.05, 1.0, 2.6], 0x2b4a66, { collide: false, mat: 'window' });
   b.box([x, TOP + 1.05, z - 1.72], [1.0, 2.1, 0.05], 0x7a4a2a, { collide: false });
   const t = kit.textSign([{ text: 'LOCKMASTER', px: 60, color: '#fff', stroke: '#1d3b52' }], { w: 2.4, h: 0.5, bg: '#2f6690' });
   kit.sign(b, { pos: [x, TOP + 2.3, z - 1.72], rotY: Math.PI, w: 2.4, h: 0.5, tex: t, depth: 0.04, back: false, collide: false });
@@ -354,6 +354,13 @@ function fishLadder(kit: Kit, b: Batch, water: WaterSystem) {
       g.position.set(LAD.x0 - 0.25, (F + wallTop - 0.16) / 2, z);
       kit.root.add(g);
       kit.collider([LAD.x0 - 0.25, (F + wallTop) / 2, z], [0.5, wallTop - F, LAD.len]);
+      // clerestory glass from the pool wall up to the viewing room roof (keeps the room enclosed but bright)
+      const roofY = 3.3;
+      const cg = new THREE.Mesh(new THREE.PlaneGeometry(segLen, roofY - wallTop).rotateY(Math.PI / 2), glassMat);
+      cg.position.set(LAD.x0 - 0.5, (wallTop + roofY) / 2, z);
+      kit.root.add(cg);
+      kit.collider([LAD.x0 - 0.5, (wallTop + roofY) / 2, z], [0.08, roofY - wallTop, segLen]);
+      b.box([LAD.x0 - 0.5, (wallTop + roofY) / 2, zn - 0.25], [0.12, roofY - wallTop, 0.12], 0xe8e4da, { collide: false, shadow: false });
       // translucent water body visible through the glass
       const body = new THREE.Mesh(new THREE.BoxGeometry(W - 0.06, L - F - 0.03, LAD.len - 0.06), bodyMat);
       body.position.set(cx, (F + L) / 2 - 0.015, z);
@@ -460,7 +467,7 @@ function viewingRoom(kit: Kit, b: Batch) {
   b.box([(x0 + x1) / 2, H + 0.15, (z0 + z1) / 2], [x1 - x0 + 0.6, 0.3, z1 - z0 + 0.6], trim, { mat: 'shingles' });
   b.box([(x0 + x1) / 2, H - 0.12, z0 - 0.02], [x1 - x0 + 0.1, 0.18, 0.06], trim, { collide: false });
   // arched windows on the west wall (fake: dark insets)
-  for (let z = z0 + 3; z < z1 - 2; z += 4) b.box([x0 - 0.01, 1.8, z], [0.04, 1.4, 1.2], 0x2b4a66, { collide: false, mat: 'glossy' });
+  for (let z = z0 + 3; z < z1 - 2; z += 4) b.box([x0 - 0.01, 1.8, z], [0.04, 1.4, 1.2], 0x2b4a66, { collide: false, mat: 'window' });
   // benches facing the glass
   for (const z of [150, 154.5, 159]) bench(b, -169.2, 0, z, Math.PI / 2, { wood: 0x9a6a3e, iron: 0x333333 });
   // interior signs

@@ -548,6 +548,11 @@ export function buildHuman(L: Look): HumanRig {
   mesh.receiveShadow = true;
   root.add(mesh);
   mesh.bind(skeleton, new THREE.Matrix4());
+  // Pre-seed bounds from the bind pose so Box3.setFromObject (UI bubble anchoring, photo mode…) doesn't run the
+  // per-vertex skinned bounds computation.
+  geo.computeBoundingBox();
+  mesh.boundingBox = geo.boundingBox!.clone();
+  mesh.boundingSphere = geo.boundingSphere!.clone();
 
   // ---------------------------------------------------------------- decals
   const faceStyle: FaceStyle = {

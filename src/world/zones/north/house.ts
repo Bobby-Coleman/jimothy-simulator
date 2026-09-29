@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import type { Game } from '../../../core/Game';
 import type { World } from '../../World';
-import { Batch, Frame, GEO, footprint, rng, pick } from './kit';
+import { Batch, Frame, GEO, footprint, rng, pick, roofCollider, gableCollider } from './kit';
 
 export type HouseStyle = 'gable' | 'bungalow' | 'foursquare';
 
@@ -208,9 +208,9 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
       thx = Math.atan2(rise, bx / 2);
     for (const s of [-1, 1]) {
       const Lz = Math.hypot(bz / 2, rise);
-      f.collider(game, 0, Ey + rise / 2 - 0.12 * Math.cos(thz), (s * bz) / 4 - s * 0.12 * Math.sin(thz), bx * 0.72, 0.24, Lz, 0, s * thz, 0);
+      roofCollider(game, f, 'z', s, d / 2, Ey + rise * (1 - d / bz), Ey + rise, w * 0.7);
       const Lx = Math.hypot(bx / 2, rise);
-      f.collider(game, (s * bx) / 4 - s * 0.12 * Math.sin(thx), Ey + rise / 2 - 0.12 * Math.cos(thx), 0, Lx, 0.24, bz * 0.72, 0, 0, -s * thx);
+      roofCollider(game, f, 'x', s, w / 2, Ey + rise * (1 - w / bx), Ey + rise, d * 0.7);
     }
     // front dormer with a tiny hip
     const dy = Ey + rise * 0.3;
@@ -242,7 +242,7 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
       const cx = midX + nx * (t / 2) - s * Math.cos(th) * 0.06;
       const cy = midY + ny * (t / 2) + Math.sin(th) * 0.06;
       b.add('roof', GEO.box, f.mat(cx, cy, 0, L, t, zLen, 0, 0, -s * th), roofC, { swap: true });
-      f.collider(game, cx, cy, 0, L, t + 0.1, zLen, 0, 0, -s * th);
+      roofCollider(game, f, 'x', s, w / 2, wallTop, Ry, d);
       // rafter tails
       for (let zz = -d / 2 + 0.3; zz <= d / 2 - 0.2; zz += 0.75)
         f.box(b, 'trim', s * (w / 2 + ov * 0.6), Ey + ov * 0.4 * pitch - 0.05, zz, ov * 0.9, 0.09, 0.07, trim, 0, 0, -s * th);
@@ -252,6 +252,7 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
     // gable ends (front & back) + vents + knee braces
     for (const s of [-1, 1]) {
       f.geo(b, 'siding', GEO.prism, 0, wallTop, (s * d) / 2, w, (w / 2) * pitch, 0.16, gableC);
+      gableCollider(game, f, 'z', s, d / 2, wallTop, w, (w / 2) * pitch);
       f.box(b, 'trim', 0, wallTop + (w / 2) * pitch * 0.45, (s * d) / 2 + s * 0.09, 0.7, 0.5, 0.06, trim);
       f.box(b, 'trim', 0, wallTop + 0.08, (s * d) / 2 + s * 0.05, w + 0.1, 0.16, 0.1, trim);
       for (const k of [-1, 1]) f.box(b, 'trim', k * (w / 2 - 0.35), wallTop - 0.1, (s * d) / 2 + s * rake * 0.45, 0.1, 0.8, 0.1, trim, 0, s * Math.PI * 0.25);
@@ -283,7 +284,7 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
       const cz = midZ + nz * (t / 2) - s * Math.cos(th) * 0.06;
       const cy = midY + ny * (t / 2) + Math.sin(th) * 0.06;
       b.add('roof', GEO.box, f.mat(0, cy, cz, xLen, t, L, 0, s * th, 0), roofC);
-      f.collider(game, 0, cy, cz, xLen, t + 0.1, L, 0, s * th, 0);
+      roofCollider(game, f, 'z', s, d / 2, wallTop, Ry, w);
       for (let xx = -w / 2 + 0.3; xx <= w / 2 - 0.2; xx += 0.75)
         f.box(b, 'trim', xx, Ey + ov * 0.4 * pitch - 0.05, s * (d / 2 + ov * 0.6), 0.07, 0.09, ov * 0.9, trim, 0, s * th, 0);
     }
@@ -291,6 +292,7 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
     ridge = f.p(0, Ry + t + 0.1, 0);
     for (const s of [-1, 1]) {
       f.geo(b, 'siding', GEO.prism, (s * w) / 2, wallTop, 0, d, (d / 2) * pitch, 0.16, gableC, Math.PI / 2);
+      gableCollider(game, f, 'x', s, w / 2, wallTop, d, (d / 2) * pitch);
       f.box(b, 'trim', (s * w) / 2 + s * 0.05, wallTop + 0.08, 0, 0.1, 0.16, d + 0.1, trim);
       const face: Face = s < 0 ? 'L' : 'R';
       // attic windows in the side gables (the "half" story)
@@ -352,11 +354,14 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
     const len = pd + 0.55;
     const ang = Math.atan(slope);
     b.add('roof', GEO.box, f.mat(px, porchTop + 0.42, pz0 + len / 2 - 0.05, pw + 0.5, 0.16, len / Math.cos(ang), 0, ang, 0), roofC);
-    const x0 = px - (pw + 0.5) / 2,
-      x1 = px + (pw + 0.5) / 2;
+    // collider stops at the column line (no overhang) so you can climb a column and mantle onto the roof
+    const x0 = px - pw / 2,
+      x1 = px + pw / 2;
     const slot = o.porchRoofSlotX;
     const segs: [number, number][] = slot !== undefined && slot > x0 + 0.3 && slot < x1 - 0.3 ? [[x0, slot - 0.16], [slot + 0.16, x1]] : [[x0, x1]];
-    for (const [a, c] of segs) f.collider(game, (a + c) / 2, porchTop + 0.42, pz0 + len / 2, c - a, 0.3, len, 0, ang, 0);
+    const lc = pd - 0.3;
+    const yc = porchTop + 0.42 + (len / 2 - 0.05 - lc / 2) * Math.tan(ang);
+    for (const [a, c] of segs) f.collider(game, (a + c) / 2, yc, pz0 + lc / 2, c - a, 0.3, lc / Math.cos(ang), 0, ang, 0);
   } else {
     // low front gable over the porch
     const pitch = 0.26;
@@ -369,7 +374,10 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
       const cx = px + (s * half) / 2;
       const cy = baseY + (half * pitch) / 2 + 0.1;
       b.add('roof', GEO.box, f.mat(cx, cy, pz0 + zl / 2 - 0.1, L, 0.16, zl, 0, 0, -s * th), roofC, { swap: true });
-      f.collider(game, cx, cy, pz0 + zl / 2, L, 0.25, zl, 0, 0, -s * th);
+      // collider only over the columns' footprint (no side/front overhang), so a column climb mantles onto it
+      const hc = pw / 2;
+      const zc = pd - 0.25;
+      f.collider(game, px + (s * hc) / 2, baseY + (half - hc / 2) * pitch + 0.1, pz0 + zc / 2, hc / Math.cos(th) + 0.1, 0.25, zc, 0, 0, -s * th);
     }
     f.geo(b, 'siding', GEO.prism, px, baseY, pz0 + pd - 0.25, half * 2 - 0.1, half * pitch - 0.02, 0.14, gableC);
     f.box(b, 'trim', px, baseY + half * pitch * 0.4, pz0 + pd - 0.16, 0.5, 0.35, 0.05, trim);
@@ -429,12 +437,10 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
       const top = -(i + 1) * h;
       f.box(b, i === 0 ? 'cedar' : 'concrete', px, (top + bot) / 2, pz0 + pd + run * (i + 0.5), stairW, top - bot, run + 0.02, stepCol);
     }
-    if (n > 1) {
-      const len = (n - 1) * run;
-      for (const s of [-1, 1]) {
-        const hh = -gl - h * 0.5;
-        f.box(b, fMat, px + s * (stairW / 2 + 0.12), bot + (hh + 0.3) / 2, pz0 + pd + len / 2, 0.24, hh + 0.3, len, fCol);
-      }
+    // low stepped cheek blocks flanking the top two treads (Craftsman-ish), not full-height walls
+    for (let i = 0; i < Math.min(2, n - 1); i++) {
+      const top = -(i + 1) * h + 0.32;
+      for (const s of [-1, 1]) f.box(b, fMat, px + s * (stairW / 2 + 0.14), (top + bot) / 2, pz0 + pd + run * (i + 0.5), 0.28, top - bot, run + 0.02, fCol);
     }
     const len = Math.hypot(n * run, rise);
     const ang = Math.atan2(rise, n * run);

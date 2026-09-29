@@ -440,15 +440,16 @@ export class Kit {
       const d = this.goldDur;
       const w = t < 0.7 ? t / 0.7 : t > d - 1.6 ? Math.max(0, (d - t) / 1.6) : 1;
       if (t >= d) this.goldDur = 0;
+      this.overlay.setGold(this.goldDur > 0 ? w * 0.5 : 0);
       const env = this.game.get<any>('environment');
       if (env) {
         env.sun?.color?.lerp(GOLD_SUN, 0.65 * w);
         if (env.sun) env.sun.intensity *= 1 + 0.3 * w;
         env.hemi?.color?.lerp(GOLD_SKY, 0.5 * w);
         const fog = this.game.scene.fog as THREE.Fog | null;
-        fog?.color.lerp(GOLD_FOG, 0.45 * w);
+        fog?.color.lerp(GOLD_FOG, 0.3 * w);
         const bg = this.game.scene.background as THREE.Color | null;
-        if (bg && (bg as any).isColor) bg.lerp(GOLD_FOG, 0.45 * w);
+        if (bg && (bg as any).isColor) bg.lerp(GOLD_FOG, 0.3 * w);
         const bloom = this.game.renderer?.bloom;
         if (bloom) bloom.intensity += 0.35 * w;
       }

@@ -179,6 +179,7 @@ async function buildStatue(game: Game, world: World, batch: Batch) {
   const yaw = -Math.PI / 2;
   let bodyR = 1.5;
   let headTop = top + 3.2;
+  const headXZ = new THREE.Vector3(x, 0, z);
   if (model) {
     const minY = model.min.y;
     const oy = top - minY * S + 0.02;
@@ -188,9 +189,10 @@ async function buildStatue(game: Game, world: World, batch: Batch) {
     for (const p of model.parts) batch.add(p.geo, bronze, { matrix: M });
     bodyR = Math.max(model.size.x, 0.8) * S * 0.5;
     headTop = oy + (model.min.y + model.size.y) * S;
-    // body ball collider (climbable & you can sit on top), tail box
     const body = new THREE.Vector3(0, 0, 0).applyMatrix4(M);
-    cylinderCollider(game, body.clone().setY(top + bodyR * 0.9), bodyR * 0.95, bodyR * 1.8);
+    headXZ.set(body.x, 0, body.z);
+    // one cylinder as tall as the statue, so things (and bobbleheads) can sit on its head
+    cylinderCollider(game, body.clone().setY((top + headTop) / 2), bodyR * 0.95, headTop - top);
   } else {
     // primitive fallback: a bronze ball with ears, mask band and ringed tail
     const parts = mergeColored([
@@ -211,7 +213,7 @@ async function buildStatue(game: Game, world: World, batch: Batch) {
     batch.add(new THREE.CircleGeometry(0.15, 10).rotateX(-Math.PI / 2), glow, { matrix: T(x - 4.2, y + 0.26, z + dz), castShadow: false });
   }
   world.poi.set('jimothyStatue', new THREE.Vector3(x - PL.w / 2 - 2.2, y, z));
-  world.poi.set('bobblehead:e3', new THREE.Vector3(x, headTop + 0.25, z));
+  world.poi.set('bobblehead:e3', new THREE.Vector3(headXZ.x, headTop + 0.25, headXZ.z));
 }
 
 // ============================================================================================ city hall
@@ -362,20 +364,20 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
 
   // podium riser, lectern + microphone on the portico
   const px = CH.x0 + 4.6;
-  batch.add(new THREE.BoxGeometry(3.4, 0.3, 3.0), trim, { matrix: T(px, baseTop + 0.15, 0), color: 0x8a1c1c });
-  world.collider(new THREE.Vector3(px, baseTop + 0.15, 0), new THREE.Vector3(3.4, 0.3, 3.0));
+  batch.add(new THREE.BoxGeometry(2.6, 0.3, 3.0), trim, { matrix: T(px, baseTop + 0.15, 0), color: 0x8a1c1c });
+  world.collider(new THREE.Vector3(px, baseTop + 0.15, 0), new THREE.Vector3(2.6, 0.3, 3.0));
   const lect = mergeColored([
     { geo: new THREE.BoxGeometry(0.7, 1.1, 0.9), color: 0x6b4424, matrix: T(0, 0.55, 0) },
     { geo: new THREE.BoxGeometry(0.85, 0.08, 1.05), color: 0x4a2c14, matrix: TR(0.05, 1.15, 0, 0, 0, 0.25) },
     { geo: new THREE.CylinderGeometry(0.02, 0.02, 0.55, 6), color: 0x222222, matrix: TR(-0.25, 1.4, 0, 0, 0, -0.5) },
     { geo: new THREE.SphereGeometry(0.07, 10, 8), color: 0x1a1a1a, matrix: T(-0.39, 1.63, 0) },
   ]);
-  batch.add(lect, trim, { matrix: T(px + 0.5, baseTop + 0.3, 0) });
-  world.collider(new THREE.Vector3(px + 0.5, baseTop + 0.3 + 0.55, 0), new THREE.Vector3(0.7, 1.1, 0.9));
+  batch.add(lect, trim, { matrix: T(px + 0.35, baseTop + 0.3, 0) });
+  world.collider(new THREE.Vector3(px + 0.35, baseTop + 0.3 + 0.55, 0), new THREE.Vector3(0.7, 1.1, 0.9));
   const lseal = atlas.draw(256, 256, (ctx, w, h) => drawCitySeal(ctx, w, h));
-  batch.add(atlas.quad(lseal, 0.6, 0.6), lseal.page.mat, { matrix: T(px + 0.14, baseTop + 0.9, 0, -Math.PI / 2), castShadow: false });
+  batch.add(atlas.quad(lseal, 0.6, 0.6), lseal.page.mat, { matrix: T(px - 0.01, baseTop + 0.9, 0, -Math.PI / 2), castShadow: false });
   world.poi.set('cityHallPodium', new THREE.Vector3(px - 0.7, baseTop + 0.32, 0));
-  world.poi.set('mayor', new THREE.Vector3(px + 1.35, baseTop + 0.32, 0.4));
+  world.poi.set('mayor', new THREE.Vector3(px + 1.05, baseTop + 0.32, 0.35));
   world.poi.set('cityHall', new THREE.Vector3(mbX0 - 1.5, baseTop, 0));
 
   // flags (animated) in front of the steps
@@ -454,7 +456,8 @@ function buildFlags(game: Game, world: World, batch: Batch, spots: [number, numb
   mesh.name = 'flags';
   mesh.castShadow = true;
   mesh.frustumCulled = false;
-  world.staticRoot.add(mesh);
+  // animated every frame: keep it out of world.staticRoot so static-mesh batching never freezes it
+  game.scene.add(mesh);
   let acc = 0;
   onFrame(game, (gm, dt) => {
     acc += dt;
@@ -593,8 +596,8 @@ const pasta = cached('mat:pasta', () => glowAtNight(game, new THREE.MeshStandard
   const red = 0xd4312b;
   // core segments: [y0, y1, r] — each narrower than the one below; the step is a rest ledge
   const segs: [number, number, number][] = [
-    [0, 16, 4.0],
-    [16, 31, 3.0],
+    [0, 16, 4.3],
+    [16, 31, 3.1],
     [31, 46, 2.1],
     [46, 60, 1.4],
   ];
@@ -623,6 +626,20 @@ const pasta = cached('mat:pasta', () => glowAtNight(game, new THREE.MeshStandard
     for (const dz of [-0.28, 0.28]) rails.push({ geo: new THREE.BoxGeometry(0.06, h, 0.06), color: 0x3d434a, matrix: T(r + 0.1, a + h / 2, dz) });
     for (let yy = a + 0.3; yy < b; yy += 0.35) rails.push({ geo: new THREE.BoxGeometry(0.05, 0.04, 0.56), color: 0x3d434a, matrix: T(r + 0.1, yy, 0) });
     batch.add(mergeColored(rails), trim, { matrix: T(nx, y0, nz) });
+    // rest landings beside the ladder at mid-height (sidestep onto one while climbing, let go, get your breath back)
+    const land: { geo: THREE.BufferGeometry; color: number; matrix: THREE.Matrix4 }[] = [];
+    for (const side of [-1, 1]) {
+      const ly = a + h * (side < 0 ? 0.42 : 0.62);
+      const ang = side * (1.35 / (r + 0.4)); // ~1.35 m of arc beside the ladder line
+      const lr = r + 0.55;
+      const lx = Math.cos(ang) * lr,
+        lz = Math.sin(ang) * lr;
+      const yaw = -ang;
+      land.push({ geo: new THREE.BoxGeometry(1.1, 0.12, 1.2), color: 0x5b636b, matrix: T(lx, ly, lz, yaw + Math.PI / 2) });
+      land.push({ geo: new THREE.BoxGeometry(0.05, 0.5, 1.2), color: red, matrix: T(Math.cos(ang) * (r + 1.08), ly + 0.3, Math.sin(ang) * (r + 1.08), yaw + Math.PI / 2 + Math.PI / 2) });
+      world.collider(new THREE.Vector3(nx + lx, y0 + ly, nz + lz), new THREE.Vector3(1.2, 0.14, 1.1), yaw);
+    }
+    batch.add(mergeColored(land), trim, { matrix: T(nx, y0, nz) });
   }
   // base: plinth + three splayed legs
   batch.add(new THREE.CylinderGeometry(5.6, 6.0, 0.9, 40), stoneMat(), { matrix: T(nx, y0 + 0.45, nz), uv: 2 });

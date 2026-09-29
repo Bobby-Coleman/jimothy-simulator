@@ -283,8 +283,13 @@ export class TeddyQuest implements HeartQuest {
     this.hugT = 3.2;
     const npc = this.npc;
     if (npc && typeof npc.walkTo === 'function') {
+      // run up to just in front of Jimothy (not onto whatever he's standing next to)
+      const from = npc.position as THREE.Vector3;
       const to = player.position.clone();
-      npc.walkTo(to, { arrive: 0.95 }).then((ok: boolean) => {
+      const d = Math.hypot(to.x - from.x, to.z - from.z);
+      if (d > 1.1) to.lerp(from, 0.9 / d);
+      else to.copy(from);
+      npc.walkTo(to, { arrive: 0.3, run: true }).then((ok: boolean) => {
         if (npc.removed) return;
         const yaw = Math.atan2(player.position.x - npc.position.x, player.position.z - npc.position.z);
         npc.setCustom?.((n: any) => {

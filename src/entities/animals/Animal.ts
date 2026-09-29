@@ -40,6 +40,13 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const DOWN = new THREE.Vector3(0, -1, 0);
+const ICONS = new Set(['question', 'exclaim', 'heart', 'note', 'zzz', 'dots', 'dizzy', 'sparkle', 'grumpy']);
+
+/** True if some system subscribed to `name`. */
+function hasListener(game: Game, name: string): boolean {
+  const map = (game.events as any)?.map as Map<string, Set<unknown>> | undefined;
+  return !!map?.get?.(name)?.size;
+}
 export const UP = new THREE.Vector3(0, 1, 0);
 export const WORLD_ONLY = groups(G.ALL, G.WORLD);
 export const GRAVITY = 14;
@@ -125,6 +132,7 @@ export abstract class Animal {
       onRelease: (_g, thrown) => this.handleRelease(thrown),
     });
     this.emote = new Emote(visualRoot, cfg.emoteY, cfg.emoteSize ?? 0.36);
+    this.visualRoot = visualRoot;
   }
 
   // ----------------------------------------------------------------------------------------- hooks
@@ -172,7 +180,7 @@ export abstract class Animal {
   /** Jump straight to a spot (ground-snapped unless `keepY`). */
   place(p: THREE.Vector3, yaw?: number, keepY = false) {
     this.pos.copy(p);
-    if (!keepY) this.pos.y = this.groundAt(p.x, p.z, p.y + 1.5);
+    if (!keepY) this.pos.y = this.groundAt(p.x, p.z, p.y + 0.6);
     if (yaw != null) this.yaw = yaw;
     this.airborne = false;
     this.vel.set(0, 0, 0);
@@ -359,9 +367,19 @@ export abstract class Animal {
   }
 
   // ----------------------------------------------------------------------------------------- helpers
+  /** Emote icon ('heart', 'question', …) as a little bubble sprite, or a short line of text. */
   say(what: EmoteIcon | string, secs = 2) {
+    const isIcon = ICONS.has(what);
+    if (!isIcon && this.visualRoot && hasListener(this.game, 'speech')) {
+      // text goes through the UI's speech bubbles so it matches the humans' bubbles
+      this.game.events.emit('speech', { object: this.visualRoot, text: what, duration: secs, offsetY: this.cfg.emoteY, key: this });
+      return;
+    }
     this.emote?.show(what, secs);
   }
+
+  /** The visual root the emote bubble follows. */
+  protected visualRoot: THREE.Object3D | null = null;
 
   /** Hearts above us (FX system or fallback). */
   hearts(count = 5, yOff = 0) {
@@ -419,6 +437,17 @@ export abstract class RaccoonAnimal extends Animal {
       this.tumbleQ.slerp(this.pivotTarget, 1 - Math.exp(-dt * 9));
       this.rig.pivot.quaternion.copy(this.tumbleQ);
     }
+    // Level of detail from the camera distance (with a little hysteresis)
+    const camD = game.camera.position.distanceTo(this.pos);
+    const cur = this.rig.detailLevel;
+    const lvl = camD < (cur === 0 ? 17 : 15) ? 0 : camD < (cur === 2 ? 42 : 46) ? 1 : 2;
+    this.rig.setDetail(lvl as 0 | 1 | 2);
+    this.emote.update(dt, game.time);
+    // Far away: animate at a quarter rate (the pose barely reads at that size)
+    this.animAcc += dt;
+    if (camD > 70 && (game.frame + this.lodPhase) % 4 !== 0) return;
+    const adt = Math.min(this.animAcc, 0.25);
+    this.animAcc = 0;
     clearPose(this.pose);
     if (this.airborne) {
       this.pose.flail = 1;
@@ -426,11 +455,13 @@ export abstract class RaccoonAnimal extends Animal {
       this.pose.earsBack = 1;
       this.pose.eyes = 0.3;
     }
-    this.animatePose(dt, this.pose);
+    this.animatePose(adt, this.pose);
     this.rig.night = game.get<any>('environment')?.nightFactor ?? 0;
-    this.rig.animate(dt, this.pose, this.speed, game.time);
-    this.emote.update(dt, game.time);
+    this.rig.animate(adt, this.pose, this.speed, game.time);
   }
+
+  private animAcc = 0;
+  private readonly lodPhase = Math.floor(Math.random() * 4);
 
   /** Standard "shake it off" after a tumble: flail → shake → back to normal. */
   protected poseRecover(p: RigPose) {

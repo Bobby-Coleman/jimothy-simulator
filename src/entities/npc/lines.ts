@@ -20,6 +20,9 @@ export type LineKey =
   | 'scold'
   | 'scolded'
   | 'bump'
+  | 'ouch'
+  | 'hat'
+  | 'charmed'
   | 'ambient'
   | 'chaosFilm'
   | 'returned'
@@ -45,6 +48,9 @@ const COMMON: Record<LineKey, string[]> = {
   scold: ['Please don\'t approach Jimothy!', "He's a wild animal, sir!", 'Ma\'am, please give him space!', 'Wild raccoons can carry germs!', 'Nobody touch the raccoon!', 'Step away from the round boy!'],
   scolded: ['Sorry, officer!', 'Worth it!', 'Just one more pic?', 'Okay, okay!', 'He came to ME!'],
   bump: ['Oh! Hi, little guy!', 'Excuse you!', 'Oof, sorry buddy!', 'Watch it, fuzzball!'],
+  hat: ['Is he wearing a little HAT?!', "Grandma knitted that, didn't she?", "I can't. I literally can't.", 'The hat! THE HAT!', 'Precious. Round. Knitwear.'],
+  charmed: ['...Carry on, then.', 'Nice hat, Jimothy.', "I'll allow it. This once."],
+  ouch: ['Ow!', 'Hey! Rude!', 'Did he just throw that at me?!', 'Bonk.', 'I felt that!'],
   ambient: ['Nice weather for Seattle.', 'Have you seen the round raccoon?', 'My phone is at 2%.', 'Is it Jimothy Summer yet?', 'I heard he washes things.'],
   chaosFilm: ['This is going viral!', 'Are you getting this?!', 'Best vacation ever!'],
   returned: ['You brought it back!', 'Aww, good boy!', 'He returned it! Best raccoon!'],

@@ -16,13 +16,18 @@ interface Racer {
   v1: number;
   finishedAt: number;
   lastSlap: number;
+  /** Stuck detection: progress checkpoint + timer, and a lane squeeze toward the racing line. */
+  checkS: number;
+  checkT: number;
+  squeeze: number;
   idleSpot: THREE.Vector3;
 }
 
 const RACERS: { name: string; color: number; v0: number; v1: number; lane: number }[] = [
-  { name: 'Sockeye Sam', color: 0xd6453d, v0: 7.0, v1: 5.9, lane: 1.4 },
-  { name: 'Coho Cora', color: 0xe88a7a, v0: 6.3, v1: 6.3, lane: -1.4 },
-  { name: 'King Kevin', color: 0xb35a4a, v0: 5.7, v1: 6.9, lane: 2.8 },
+  // lanes: metres toward the infield from Jimothy's line (warning tracks are narrow, fences are hard)
+  { name: 'Sockeye Sam', color: 0xd6453d, v0: 7.0, v1: 5.9, lane: 0.9 },
+  { name: 'Coho Cora', color: 0xe88a7a, v0: 6.3, v1: 6.3, lane: -0.9 },
+  { name: 'King Kevin', color: 0xb35a4a, v0: 5.7, v1: 6.9, lane: 2.9 },
 ];
 const TRASH_TALK = [
   'You? Race US? Heh. Sure, little guy.',
@@ -76,6 +81,10 @@ export class SalmonRun extends Landmark {
   path!: Path;
   private start = new THREE.Vector3(120, 0, 120);
   private finish = new THREE.Vector3(120, 0, 120);
+  /** Middle of the field (infield side of the track), if known. */
+  private center: THREE.Vector3 | null = null;
+  /** +1 when path.side() points toward the infield, else -1. */
+  private inward = 1;
   private racers: Racer[] = [];
   private crowd!: Crowd;
   private sJ = 0;
@@ -102,12 +111,14 @@ export class SalmonRun extends Landmark {
         way.push(w);
       }
       const center = k.poi('stadiumCenter') ?? k.poi('fieldCenter') ?? k.poi('pitchersMound');
+      this.center = center ?? null;
       if (way.length) pts = [start, ...way, finish];
       else if (center) pts = Path.arc(center, start, finish, { stepDeg: 8 });
       else if (start.distanceTo(finish) < 20) {
         // loop start/finish without a known centre: oval next to the line
         const dir = Math.atan2(120 - start.x, 120 - start.z);
         const c = local(start, dir, -19, 0, 0);
+        this.center = c.clone();
         pts = Path.oval(c, dir, 40, 19);
       } else {
         const mid = start.clone().add(finish).multiplyScalar(0.5);
@@ -117,6 +128,7 @@ export class SalmonRun extends Landmark {
         const toC = new THREE.Vector3(120 - mid.x, 0, 120 - mid.z);
         if (n.dot(toC) < 0) n.negate();
         const bulge = d.length() * 0.3;
+        this.center = this.center ?? mid.clone().addScaledVector(n, -bulge);
         pts = [];
         for (let i = 0; i <= 12; i++) {
           const t = i / 12;
@@ -130,6 +142,7 @@ export class SalmonRun extends Landmark {
       const spot = k.findClearSpot(118, 112, 24, 70);
       k.reserve(spot, 30);
       const yaw = 0;
+      this.center = spot.clone();
       pts = Path.oval(spot, yaw, 40, 19);
       this.start.copy(pts[0]);
       this.finish.copy(pts[pts.length - 1]);
@@ -157,6 +170,10 @@ export class SalmonRun extends Landmark {
     this.path = new Path(grounded);
     this.start.copy(grounded[0]);
     this.finish.copy(grounded[grounded.length - 1]);
+    if (this.center) {
+      const mid = this.path.at(this.path.length / 2);
+      this.inward = this.path.side(this.path.length / 2).dot(new THREE.Vector3(this.center.x - mid.x, 0, this.center.z - mid.z)) >= 0 ? 1 : -1;
+    }
     this.game.events.on('bonk', (p: { entity?: Entity }) => this.onBonk(p?.entity));
   }
 
@@ -175,11 +192,14 @@ export class SalmonRun extends Landmark {
   }
 
   // ------------------------------------------------------------------ racers
+  /** Unit vector toward the infield at arc length s. */
+  private inSide(s: number) {
+    return this.path.side(s).multiplyScalar(this.inward);
+  }
+
   private idleSpot(i: number) {
-    const s = 0;
-    const side = this.path.side(s);
-    const back = this.path.dir(s).negate();
-    return this.kit.onGround(this.start.clone().addScaledVector(side, -4.5 - i * 1.3).addScaledVector(back, 1.5 + (i % 2)), 2, 6);
+    const back = this.path.dir(0).negate();
+    return this.kit.onGround(this.start.clone().addScaledVector(this.inSide(0), 4 + i * 1.3).addScaledVector(back, 1.5 + (i % 2)), 2, 6);
   }
 
   private ensureRacers() {
@@ -197,7 +217,7 @@ export class SalmonRun extends Landmark {
         passive: true,
       });
       addTailFin(actor, def.color);
-      return { actor, name: def.name, lane: def.lane, s: 0, v0: def.v0, v1: def.v1, finishedAt: 0, lastSlap: -10, idleSpot: spot };
+      return { actor, name: def.name, lane: def.lane, s: 0, v0: def.v0, v1: def.v1, finishedAt: 0, lastSlap: -10, idleSpot: spot, checkS: 0, checkT: 0, squeeze: 1 };
     });
   }
 
@@ -296,16 +316,19 @@ export class SalmonRun extends Landmark {
     p.teleport(this.start.clone().addScaledVector(dir, -1).add(new THREE.Vector3(0, 0.6, 0)), yaw);
     p.frozen = true;
     for (const r of this.racers) {
-      const spot = k.onGround(this.start.clone().addScaledVector(dir, -1).addScaledVector(this.path.side(0), r.lane), 2, 6);
+      const spot = k.onGround(this.start.clone().addScaledVector(dir, -1).addScaledVector(this.inSide(0), r.lane), 2, 6);
       r.actor.teleport(spot, yaw);
       r.actor.stop();
       r.s = 0;
       r.finishedAt = 0;
+      r.checkS = 0;
+      r.checkT = 0;
+      r.squeeze = 1;
     }
     this.sJ = 0;
     // fans at the finish
     const fin = this.finish.clone();
-    const out = this.path.side(this.path.length).multiplyScalar(-6);
+    const out = this.inSide(this.path.length).multiplyScalar(6);
     this.crowd.gather({ center: fin.clone().add(out), faceTo: fin, count: 4, radius: 2.5, type: 'fan', names: ['Barnacles Fan', 'Superfan', 'Fan', 'Season Ticket Holder'], outfit: { jimothyTee: true, shirt: 0x0c2c56, hat: 'cap', hatColor: 0x0c2c56 }, look: { print: 'jimothy' }, from: 0 });
     k.banner('THE SALMON RUN', 'First to the finish wins!', 1.8, 'Jimothy Night at Tee-Hee Park');
     this.game.sfx('crowd_cheer', this.start, 0.9);
@@ -347,9 +370,21 @@ export class SalmonRun extends Landmark {
     const L = this.path.length;
     const pr = this.path.project(a.position, Math.max(0, r.s - 6), r.s + 12);
     r.s = Math.max(r.s, pr.s);
+    // Stuck on a pole / banner post? Squeeze toward the racing line and hop past it.
+    r.checkT += dt;
+    if (r.checkT > 1) {
+      if (r.s - r.checkS < 0.6 && r.s < L - 1) {
+        r.squeeze = Math.max(0, r.squeeze - 0.5);
+        const hop = this.path.at(Math.min(L, r.s + 1.5)).addScaledVector(this.inSide(Math.min(L, r.s + 1.5)), r.lane * r.squeeze);
+        const d = this.path.dir(r.s);
+        a.teleport(this.kit.onGround(hop, 2, 6), Math.atan2(d.x, d.z));
+      } else r.squeeze = Math.min(1, r.squeeze + 0.25);
+      r.checkS = r.s;
+      r.checkT = 0;
+    }
     const ahead = Math.min(L + 3, r.s + Math.max(1.5, v * 0.45));
-    const lane = r.lane * THREE.MathUtils.clamp((L - r.s) / 12, 0.15, 1); // merge toward the line at the end
-    const target = this.path.at(Math.min(ahead, L)).addScaledVector(this.path.side(Math.min(ahead, L)), lane);
+    const lane = r.lane * r.squeeze * THREE.MathUtils.clamp((L - r.s) / 12, 0.15, 1); // merge toward the line at the end
+    const target = this.path.at(Math.min(ahead, L)).addScaledVector(this.inSide(Math.min(ahead, L)), lane);
     if (ahead > L) target.addScaledVector(this.path.dir(L), ahead - L);
     a.moveTo(target, v);
   }

@@ -126,15 +126,19 @@ export function buildCrow(): CrowParts {
   skull.scale.set(0.068, 0.066, 0.078);
   head.add(skull);
   const beak = mesh(S.beakG, S.beak);
+  beak.castShadow = false;
   beak.position.set(0, -0.005, 0.055);
   beak.rotation.x = 0.08;
   head.add(beak);
   const jaw = new THREE.Group();
   jaw.position.set(0, -0.022, 0.05);
   head.add(jaw);
-  jaw.add(mesh(S.jawG, S.beak));
+  const jawM = mesh(S.jawG, S.beak);
+  jawM.castShadow = false;
+  jaw.add(jawM);
   for (const sx of [-1, 1]) {
     const e = mesh(S.eyeG, S.eye);
+    e.castShadow = false;
     e.position.set(sx * 0.045, 0.018, 0.045);
     head.add(e);
     const sh = new THREE.Mesh(S.shineG, S.shine);
@@ -168,9 +172,11 @@ export function buildCrow(): CrowParts {
   root.add(legs);
   for (const sx of [-1, 1]) {
     const l = mesh(S.legG, S.beak);
+    l.castShadow = false;
     l.position.set(sx * 0.035, 0, 0);
     legs.add(l);
     const toe = mesh(S.toeG, S.beak);
+    toe.castShadow = false;
     toe.position.set(sx * 0.035, -0.1, 0.012);
     legs.add(toe);
   }

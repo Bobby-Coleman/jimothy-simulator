@@ -312,6 +312,35 @@ export class Frame {
   }
 }
 
+/**
+ * Climbable roof collider: a slab from the wall line up to the ridge (no eave overhang, so a raccoon climbing the
+ * wall can mantle straight onto the roof instead of bonking the eaves). `axis` = local axis the slope runs along;
+ * side `s` = ±1; `wallPos` = |coordinate| of the wall line; `extent` = size along the other horizontal axis.
+ */
+export function roofCollider(game: Game, f: Frame, axis: 'x' | 'z', s: number, wallPos: number, wallY: number, ridgeY: number, extent: number, center = 0) {
+  const run = Math.abs(wallPos);
+  const rise = ridgeY - wallY;
+  const th = Math.atan2(rise, run);
+  const L = Math.hypot(run, rise) + 0.12;
+  const tc = 0.3;
+  const mh = (s * run) / 2;
+  const my = (wallY + ridgeY) / 2;
+  const ch = mh + s * Math.sin(th) * (tc / 2) - s * Math.cos(th) * 0.06;
+  const cy = my + Math.cos(th) * (tc / 2) + Math.sin(th) * 0.06;
+  if (axis === 'x') f.collider(game, ch, cy, center, L, tc, extent, 0, 0, -s * th);
+  else f.collider(game, center, cy, ch, extent, tc, L, 0, s * th, 0);
+}
+
+/** Stepped (3-box) collider filling a gable-end triangle so climbers can keep going up the gable wall. */
+export function gableCollider(game: Game, f: Frame, axis: 'x' | 'z', s: number, pos: number, baseY: number, width: number, rise: number, thick = 0.3) {
+  for (let k = 0; k < 3; k++) {
+    const wk = width * (1 - (k + 0.5) / 3);
+    const yk = baseY + ((k + 0.5) * rise) / 3;
+    if (axis === 'z') f.collider(game, 0, yk, s * pos, wk, rise / 3, thick);
+    else f.collider(game, s * pos, yk, 0, thick, rise / 3, wk);
+  }
+}
+
 /** Static box collider with an arbitrary rotation (Euler YXZ). */
 export function colliderBox(game: Game, x: number, y: number, z: number, sx: number, sy: number, sz: number, ry = 0, rx = 0, rz = 0) {
   _e.set(rx, ry, rz, 'YXZ');
@@ -467,6 +496,15 @@ export function ribbon(
     }
     g.computeVertexNormals();
   }
+  return g;
+}
+
+/** Terrain-conforming square decal centred on (x, z) with half-size R and UVs 0..1 (use a round texture/alpha). */
+export function groundDecal(world: World, x: number, z: number, R: number, lift = 0.05, segs = 6): THREE.BufferGeometry {
+  const g = ribbon(world, [new THREE.Vector2(x - R, z), new THREE.Vector2(x + R, z)], -R, R, lift, { tile: 1, across: segs });
+  const pos = g.getAttribute('position') as THREE.BufferAttribute;
+  const uv = g.getAttribute('uv') as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, (pos.getX(i) - (x - R)) / (2 * R), (pos.getZ(i) - (z - R)) / (2 * R));
   return g;
 }
 

@@ -52,8 +52,10 @@ export const WaterfrontZone: ZoneBuilder = {
     world.poi.set('market', V(0, 0.1, 80));
     world.poi.set('waterfront', V(0, DECK + 0.1, 163));
     world.npcSpawns.push(
-      { zone: AREA, center: V(0, 0, 85.5), radius: 5, count: 8, types: ['tourist', 'tourist', 'pedestrian'], path: [V(-22, 0, 85.5), V(22, 0, 85.5)] },
-      { zone: AREA, center: V(-2.5, 0, 94.3), radius: 1.2, count: 2, types: ['fishmonger'] },
+      // (spawn points must have open sky above: the NPC spawner raycasts down and would land on the arcade roof)
+      { zone: AREA, center: V(0, 0, 84), radius: 7, count: 8, types: ['tourist', 'tourist', 'pedestrian'], path: [V(-20, 0, 76.4), V(-8, 0, 76.4), V(8, 0, 76.4), V(20, 0, 76.4)] },
+      { zone: AREA, center: V(15.2, 0, 74.4), radius: 1.2, count: 1, types: ['fishmonger'] },
+      { zone: AREA, center: V(-28.7, 0, 103), radius: 0.8, count: 1, types: ['fishmonger'] },
       { zone: AREA, center: V(0, 0, 71), radius: 8, count: 5, types: ['tourist', 'pedestrian'] },
       { zone: AREA, center: V(-27, 0, 88), radius: 2.5, count: 2, types: ['tourist'] },
       { zone: AREA, center: V(0, DECK, 163), radius: 10, count: 6, types: ['tourist', 'pedestrian', 'jogger'], path: [V(-50, DECK, 163.5), V(50, DECK, 163.5)] },
@@ -336,7 +338,7 @@ function fishStall(kit: Kit, b: Batch, water: WaterSystem) {
 // ------------------------------------------------------------------ fruit & flower stalls
 
 async function fruitModels(kit: Kit) {
-  const names = ['apple', 'orange', 'lemon', 'banana', 'pineapple', 'grapes', 'watermelon'];
+  const names = ['banana', 'pineapple', 'watermelon'];
   const objs = await Promise.all(names.map((n) => kit.kenney('food-kit', n)));
   return Object.fromEntries(names.map((n, i) => [n, objs[i]])) as Record<string, THREE.Object3D | null>;
 }
@@ -357,35 +359,51 @@ function fruitStall(kit: Kit, b: Batch) {
     b.box([cx, h / 2, z], [W, h, 1.0], 0xb98552, { mat: 'planks' });
     for (let x = x0 + 1.3; x < x1; x += 2.6) b.box([x, h - 0.1, z - 0.52], [0.05, 0.2, 0.04], 0x7a5230, { collide: false, shadow: false });
   }
-  // fruit piles (instanced Kenney food), filled once the models load
-  void fruitModels(kit).then((f) => {
-    const piles: [string, number, number][] = [
-      ['apple', 0, 0.55],
-      ['orange', 0, 0.55],
-      ['lemon', 1, 0.45],
-      ['grapes', 1, 0.5],
-      ['banana', 2, 0.4],
-      ['pineapple', 2, 0.6],
+  // fruit piles: low-poly instanced spheres (one draw call), plus a few Kenney pineapples/bananas/melons
+  {
+    const r = rng(55);
+    const piles: [number, number, number[], number][] = [
+      // tier, section (0 = left half, 1 = right half), colours, radius
+      [0, 0, [0xd8262f, 0xe0402a, 0xb81d2a], 0.08],
+      [0, 1, [0xff8c1a, 0xff9a2a], 0.08],
+      [1, 0, [0xffe04a, 0xfff06a], 0.07],
+      [1, 1, [0x6a2a7a, 0x7d3a8f, 0x5a2266], 0.07],
+      [2, 0, [0x5fbf3a, 0x7ad04a], 0.065],
+      [2, 1, [0xff4f7a, 0xd8262f], 0.055],
     ];
-    const sections = piles.length;
-    piles.forEach(([name, tier, s], si) => {
-      const obj = f[name];
-      if (!obj) return;
+    const list: { x: number; y: number; z: number; s: number; c: number }[] = [];
+    for (const [tier, sec, cols, rad] of piles) {
       const [tz, th] = tiers[tier];
-      const sx0 = x0 + 0.3 + (si % 2) * (W / 2);
-      const sx1 = sx0 + W / 2 - 0.6;
-      const list: [number, number, number, number, number][] = [];
-      const r = rng(si * 31 + 5);
-      const step = name === 'pineapple' ? 0.34 : name === 'banana' ? 0.3 : 0.14;
-      for (let x = sx0; x < sx1; x += step) for (let z = tz - 0.4; z < tz + 0.4; z += step * 0.9) list.push([x + (r() - 0.5) * 0.03, th + (r() > 0.7 ? 0.06 : 0), z, r() * 6, s * (0.9 + r() * 0.2)]);
-      kit.instances(obj, list, { shadow: false });
+      const sx0 = x0 + 0.25 + sec * (W / 2);
+      const sx1 = sx0 + W / 2 - 0.5;
+      const step = rad * 2.25;
+      for (let x = sx0; x < sx1; x += step)
+        for (let z = tz - 0.4; z < tz + 0.42; z += step) {
+          list.push({ x: x + (r() - 0.5) * 0.02, y: th + rad, z, s: rad, c: cols[Math.floor(r() * cols.length)] });
+          if (r() > 0.55) list.push({ x: x + step / 2, y: th + rad * 2.6, z: z + step / 2, s: rad, c: cols[Math.floor(r() * cols.length)] });
+        }
+    }
+    const im = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ roughness: 0.45, flatShading: true }), list.length);
+    const mm = new THREE.Matrix4();
+    const cc = new THREE.Color();
+    list.forEach((f, i) => {
+      im.setMatrixAt(i, mm.makeScale(f.s, f.s * 0.95, f.s).setPosition(f.x, f.y, f.z));
+      im.setColorAt(i, cc.set(f.c));
     });
-    void sections;
+    im.instanceMatrix.needsUpdate = true;
+    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    im.computeBoundingSphere();
+    im.receiveShadow = true;
+    kit.root.add(im);
+  }
+  void fruitModels(kit).then((f) => {
     if (f.watermelon) {
       const list: [number, number, number, number, number][] = [];
       for (let i = 0; i < 9; i++) list.push([x0 + 0.6 + i * 1.4, 0, 90.35 + (i % 2) * 0.15, i, 0.75]);
       kit.instances(f.watermelon, list);
     }
+    if (f.pineapple) kit.instances(f.pineapple, [0, 1, 2, 3, 4].map((i) => [x0 + 0.5 + i * 0.5, tiers[2][1] + 0.25, tiers[2][0] + 0.52, i, 0.6] as [number, number, number, number, number]), { shadow: false });
+    if (f.banana) kit.instances(f.banana, [0, 1, 2, 3, 4, 5].map((i) => [x1 - 0.6 - i * 0.45, tiers[1][1] + 0.3, tiers[1][0] + 0.55, 1.4 + i * 0.2, 0.45] as [number, number, number, number, number]), { shadow: false });
   });
   // grabbable fruit at the front edge
   const kinds: ('apple' | 'orange' | 'banana' | 'pineapple')[] = ['apple', 'orange', 'banana', 'apple', 'orange', 'pineapple'];
@@ -445,7 +463,7 @@ function flowerStall(kit: Kit, b: Batch) {
 
 function frontPlaza(kit: Kit, b: Batch) {
   const game = kit.game;
-  b.decal([-12, 0.02, 72.2], [82, 11.6], 0xe6ddcf, { mat: 'paving' });
+  b.decal([-12, 0.02, 72.6], [82, 10.8], 0xe6ddcf, { mat: 'paving' });
   // Bronze "Jimothy the Bronze Ball" piggy bank (parody of the market's famous bronze pig)
   const sx = 0;
   const sz = 72.5;
@@ -512,6 +530,8 @@ function frontPlaza(kit: Kit, b: Batch) {
   ]);
   P.trashCan(game, -9.5, 0, 69.2, 0x1f4d3a);
   P.trashCan(game, 9.5, 0, 69.2, 0x1f4d3a);
+  fishCart(kit, b, 15.2, 72.6, Math.PI, 'SALMON TO GO', 'Wild · Round-tested', '#1d6fa3');
+  fishCart(kit, b, -27, 103, Math.PI / 2, 'CRAB SHACK', 'Dungeness · Pinchy', '#d64b3a');
   P.cottonCandy(game, 30, 0.9, 74, 0xff9fd2);
   // a little snack cart east of the market
   b.box([30, 0.6, 74], [1.8, 1.2, 1], 0x2f7fc1, { mat: 'glossy' });
@@ -519,6 +539,27 @@ function frontPlaza(kit: Kit, b: Batch) {
   b.cyl([30, 2.7, 74], 1.2, 0.4, 0xffd23a, { rTop: 0.05, seg: 10, collide: false, mat: 'glossy' });
   const cs = kit.textSign([{ text: 'MINI DONUTS', px: 64, color: '#fff', stroke: '#1d3557' }], { w: 1.7, h: 0.45, bg: '#ff8c3a' });
   kit.sign(b, { pos: [30, 0.75, 73.47], rotY: Math.PI, w: 1.6, h: 0.42, tex: cs, depth: 0.02, collide: false, back: false });
+}
+
+/** Open-air fish cart with an umbrella (visual only, so NPC spawns under it work). Faces +z rotated by rotY. */
+function fishCart(kit: Kit, b: Batch, x: number, z: number, rotY: number, title: string, sub: string, color: string) {
+  const c = Math.cos(rotY);
+  const s = Math.sin(rotY);
+  const L = (lx: number, ly: number, lz: number): V3 => [x + lx * c + lz * s, ly, z - lx * s + lz * c];
+  b.box(L(0, 0.5, 0), [2.4, 0.8, 1.1], new THREE.Color(color).getHex(), { rotY, mat: 'glossy' });
+  b.box(L(0, 0.94, 0), [2.5, 0.08, 1.2], 0xc9d1d5, { rotY, mat: 'metal' });
+  for (const lx of [-0.9, 0.9]) b.geo(GEO.cyl(1, 14), L(lx, 0.28, 0.58), [Math.PI / 2, rotY, 0], [0.28, 0.08, 0.28], 0x2b2f33, {});
+  const qTilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+  const kinds: P.FishKind[] = ['salmon', 'snapper', 'cod', 'salmon'];
+  for (let i = 0; i < 4; i++) {
+    const p = L(-0.8 + i * 0.53, 1.06, 0.1 - (i % 2) * 0.25);
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotY + 0.1 * i).multiply(qTilt);
+    b.add(P.fishGeometry(kinds[i]), new THREE.Matrix4().compose(new THREE.Vector3(p[0], p[1], p[2]), q, new THREE.Vector3(0.8, 0.8, 0.8)), 0xffffff, { keepColors: true, mat: 'glossy', shadow: false });
+  }
+  b.cyl(L(0.9, 1.6, -0.3), 0.04, 1.3, 0xdddddd, { seg: 6, collide: false });
+  b.cyl(L(0.9, 2.35, -0.3), 1.35, 0.35, 0xe63946, { rTop: 0.05, seg: 8, collide: false, mat: 'glossy' });
+  const t = kit.textSign([{ text: title, px: 60, color: '#fff', stroke: '#1b1d24' }, { text: sub, px: 28, color: '#fff8f0', font: FONT_ROUND }], { w: 2.3, h: 0.6, bg: color });
+  kit.sign(b, { pos: L(0, 0.55, 0.57), rotY, w: 2.2, h: 0.55, tex: t, depth: 0.02, collide: false, back: false });
 }
 
 // ------------------------------------------------------------------ the Gum Wall (Post Alley)
@@ -584,8 +625,8 @@ function gumWall(kit: Kit, b: Batch) {
   const H = 8;
   b.box([(bx0 + bx1) / 2, H / 2, (z0 + z1) / 2], [bx1 - bx0, H, z1 - z0], 0xffffff, { mat: 'brick' });
   b.box([(bx0 + bx1) / 2, H + 0.2, (z0 + z1) / 2], [bx1 - bx0 + 0.4, 0.4, z1 - z0 + 0.4], 0x5a2e24, { mat: 'concrete' });
-  for (let x = bx0 + 2; x < bx1 - 1; x += 3.2) for (const y of [3.4, 6]) b.box([x, y, z0 - 0.02], [1.4, 1.6, 0.06], 0x2b4a66, { collide: false, mat: 'glossy' });
-  for (let z = z0 + 5; z < z1 - 1; z += 4) b.box([GUM_X + 0.02, 6, z], [0.06, 1.6, 1.4], 0x2b4a66, { collide: false, mat: 'glossy' });
+  for (let x = bx0 + 2; x < bx1 - 1; x += 3.2) for (const y of [3.4, 6]) b.box([x, y, z0 - 0.02], [1.4, 1.6, 0.06], 0x2b4a66, { collide: false, mat: 'window' });
+  for (let z = z0 + 5; z < z1 - 1; z += 4) b.box([GUM_X + 0.02, 6, z], [0.06, 1.6, 1.4], 0x2b4a66, { collide: false, mat: 'window' });
   // theatre marquee (north face)
   const mq = canvasTex(1200, 360, (ctx, w, h) => {
     ctx.fillStyle = '#1b1d24';
@@ -756,7 +797,7 @@ function prettyGoodWheel(kit: Kit, b: Batch) {
     b.pipe([px, py, cz - 1.1], [px, py, cz + 1.1], 0.08, 0x9aa3ad, { seg: 6, mat: 'metal' });
     const gy = py - 1.6;
     b.box([px, gy, cz], [2.2, 1.9, 2.0], cols[i % cols.length], { mat: 'glossy' });
-    b.box([px, gy + 0.2, cz], [2.25, 0.7, 2.05], 0x2b4a66, { collide: false, mat: 'glossy' });
+    b.box([px, gy + 0.2, cz], [2.25, 0.7, 2.05], 0x2b4a66, { collide: false, mat: 'window' });
     b.box([px, gy + 1.0, cz], [2.4, 0.15, 2.2], white, { collide: false });
     b.cyl([px, gy + 1.3, cz], 0.05, 0.6, 0x9aa3ad, { seg: 5, collide: false });
     bulbs.push([px, py, cz - 1.35], [px, py, cz + 1.35]);
@@ -960,7 +1001,7 @@ function piers(kit: Kit, b: Batch) {
   const wx = -4.3;
   b.box([wx, DECK + 1.4, 175.5], [5, 2.8, 6], 0xf4efe4, { mat: 'siding' });
   b.box([wx, DECK + 2.95, 175.5], [5.6, 0.3, 6.6], 0x0f6b3e);
-  b.box([wx + 2.52, DECK + 1.5, 175.5], [0.06, 1.2, 4.4], 0x2b4a66, { collide: false, mat: 'glossy' });
+  b.box([wx + 2.52, DECK + 1.5, 175.5], [0.06, 1.2, 4.4], 0x2b4a66, { collide: false, mat: 'window' });
   const ft = kit.textSign(
     [
       { text: 'FERRY TERMINAL', px: 60, color: '#fff' },
@@ -1055,11 +1096,11 @@ function ferry(kit: Kit, b: Batch) {
   const cw = hw - 0.9;
   b.box([0, (pass + sun) / 2, (cz0 + cz1) / 2], [cw * 2, sun - pass, cz1 - cz0], white, { mat: 'glossy' });
   for (const s of [-1, 1]) {
-    b.box([s * (cw + 0.02), pass + 1.65, (cz0 + cz1) / 2], [0.06, 1.1, cz1 - cz0 - 1], glass, { collide: false, mat: 'glossy' });
+    b.box([s * (cw + 0.02), pass + 1.65, (cz0 + cz1) / 2], [0.06, 1.1, cz1 - cz0 - 1], glass, { collide: false, mat: 'window' });
     b.box([s * (cw + 0.03), sun - 0.3, (cz0 + cz1) / 2], [0.06, 0.35, cz1 - cz0], green, { collide: false, mat: 'glossy' });
   }
   for (const z of [cz0 - 0.02, cz1 + 0.02]) {
-    b.box([0, pass + 1.65, z], [cw * 1.6, 1.1, 0.06], glass, { collide: false, mat: 'glossy' });
+    b.box([0, pass + 1.65, z], [cw * 1.6, 1.1, 0.06], glass, { collide: false, mat: 'window' });
     b.box([-cw + 1.2, pass + 1.05, z], [1.0, 2.1, 0.07], 0x5a6570, { collide: false });
   }
   // promenade railings on the passenger deck
@@ -1073,8 +1114,8 @@ function ferry(kit: Kit, b: Batch) {
   // wheelhouses at both ends + funnel + radar + lifeboats
   for (const z of [cz0 + 2.2, cz1 - 2.2]) {
     b.box([0, sun + 1.2, z], [5.6, 2.0, 3.4], white, { mat: 'glossy' });
-    b.box([0, sun + 1.5, z + (z < zc ? -1.72 : 1.72)], [5.2, 0.9, 0.06], glass, { collide: false, mat: 'glossy' });
-    for (const s of [-1, 1]) b.box([s * 2.82, sun + 1.5, z], [0.06, 0.9, 3.0], glass, { collide: false, mat: 'glossy' });
+    b.box([0, sun + 1.5, z + (z < zc ? -1.72 : 1.72)], [5.2, 0.9, 0.06], glass, { collide: false, mat: 'window' });
+    for (const s of [-1, 1]) b.box([s * 2.82, sun + 1.5, z], [0.06, 0.9, 3.0], glass, { collide: false, mat: 'window' });
     b.box([0, sun + 2.3, z], [6, 0.25, 3.8], green, { mat: 'glossy' });
     b.cyl([0, sun + 3.1, z], 0.06, 1.4, 0x333333, { seg: 5, collide: false });
     b.box([0, sun + 3.7, z], [1.6, 0.12, 0.2], 0x333333, { collide: false });
