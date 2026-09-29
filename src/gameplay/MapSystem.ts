@@ -46,6 +46,16 @@ export class MapSystem implements System {
     this.mini.style.cssText =
       'position:fixed;left:16px;bottom:16px;width:160px;height:160px;border-radius:50%;border:4px solid rgba(255,255,255,.9);box-shadow:0 4px 14px rgba(0,0,0,.45);z-index:20;pointer-events:none;background:#6aa84f';
     document.body.appendChild(this.mini);
+    // Touch devices: smaller minimap tucked under the score, tap it to open the big map
+    if (window.matchMedia?.('(pointer: coarse)').matches) {
+      this.mini.style.left = '12px';
+      this.mini.style.bottom = 'auto';
+      this.mini.style.top = '92px';
+      this.mini.style.width = '104px';
+      this.mini.style.height = '104px';
+      this.mini.style.pointerEvents = 'auto';
+      this.mini.addEventListener('click', () => this.toggleBig());
+    }
     this.big = document.createElement('div');
     this.big.style.cssText =
       'position:fixed;inset:0;display:none;place-items:center;background:rgba(8,12,20,.72);z-index:45;font:700 15px system-ui,sans-serif;color:#fff';
@@ -54,7 +64,10 @@ export class MapSystem implements System {
     this.bigCanvas.style.cssText = 'width:min(88vh,92vw);height:min(88vh,92vw);border-radius:18px;border:5px solid #fff;box-shadow:0 20px 60px rgba(0,0,0,.6)';
     this.big.appendChild(this.bigCanvas);
     const tip = document.createElement('div');
-    tip.textContent = 'M to close';
+    tip.textContent = window.matchMedia?.('(pointer: coarse)').matches ? 'Tap to close' : 'M to close';
+    this.big.addEventListener('click', () => {
+      if (this.bigOpen) this.toggleBig();
+    });
     tip.style.cssText = 'position:absolute;bottom:3vh;left:0;right:0;text-align:center;opacity:.8';
     this.big.appendChild(tip);
     document.body.appendChild(this.big);

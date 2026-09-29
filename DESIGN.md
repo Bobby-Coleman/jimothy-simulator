@@ -52,13 +52,15 @@ Read it fully before writing code or assets.
 | Sprint | Shift | L3 / LT |
 | Jump / climb | Space (hold against a wall/tree/pole to climb) | A |
 | **Grabby Hands** (grab/carry/drag/hang) | Left mouse / E | X / RT |
-| **Bonk** (round-boy body slam / headbutt equivalent) | Right mouse / F | B / RB |
+| **Bonk** (round-boy body slam / headbutt equivalent) | Right mouse / F | RB |
 | **Wash** (hold near water while holding something / near an NPC face) | R | Y |
-| **Tuck & Roll** (become a ball) | Q (toggle) | LB |
-| **Flop** (ragdoll) | Z (hold) | Down on d-pad / R3 |
+| **Tuck & Roll** (become a ball) | Q (toggle) | B |
+| **Flop** (ragdoll) | Z (hold) | LB / D-pad down |
 | Chitter (taunt, NPCs go "awww") | C | Up on d-pad |
 | Objectives | Tab | Select/Back |
 | Pause | Esc / P | Start |
+| Photo mode | V | R3 |
+| Slow-mo / Respawn / Map | T / H / M | — |
 
 ## 4. Mechanics (raccoon-specific, replacing goat-specific ones)
 
