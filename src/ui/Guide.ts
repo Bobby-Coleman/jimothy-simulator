@@ -111,7 +111,7 @@ const BOBBLE_ROUTES: Record<string, string> = {
   'bobblehead:n1': "On Grandma Rosie's roof ridge. The porch roof bonks your head: climb the back wall and walk up the shingles.",
   'bobblehead:n2': 'On the library tower. Sprint-climb {sprint} the buttress beside the tower, rest on top, climb onto the slates, walk up beside the tower and climb the last bit.',
   'bobblehead:s1': 'On top of this gas tower. Too tall for tiny arms in one go: sprint-climb {sprint} the fat valve pipe standing against it, rest on its top, then climb on to the cap.',
-  'bobblehead:s2': "In the crow's nest. Jump for the rope ladder dangling from it.",
+  'bobblehead:s2': "In the crow's nest. Sprint-climb {sprint} the trunk from the right side, then tightrope along the big branch.",
 };
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
