@@ -179,3 +179,6 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
   colliders, on fairly flat lawn and off the street/sidewalk (several sat inside porches or under steps).
 * University hall entrance steps (shared gothic builder): sized to meet the ground downhill instead of floating,
   every step reaches the ground and has a collider (only a narrow central ramp was solid before).
+* **Music player v2**: playlist with checkboxes (unchecked tracks are skipped), draggable seek bar, volume + mute
+  (synced with Settings), shuffle, and a pause-menu Music page with an "Auto music" / "My playlist" toggle. Choices
+  persist across visits.
