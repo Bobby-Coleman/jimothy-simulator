@@ -422,11 +422,14 @@ export class Jimothy implements System {
     this.facing = Math.atan2(into.x, into.z);
     if (!hit || Math.abs(hit.normal.y) > 0.65) {
       // Ran out of wall: mantle over the top if climbing upward
+      // (longer cooldown after a mantle so holding forward lands on the ledge instead of re-grabbing)
+      let mantled = false;
       if (inp.move.y > 0.1) {
-        this.body.setLinvel({ x: into.x * 3.4, y: 4.6, z: into.z * 3.4 }, true);
+        this.body.setLinvel({ x: into.x * 4.2, y: 4.8, z: into.z * 4.2 }, true);
         this.game.events.emit('mantle', {});
+        mantled = true;
       }
-      this.climbCooldown = 0.25;
+      this.climbCooldown = mantled ? 0.7 : 0.25;
       this.setMode('walk');
       return;
     }
