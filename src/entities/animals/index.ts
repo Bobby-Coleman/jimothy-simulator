@@ -5,4 +5,5 @@ export { Mom } from './Mom';
 export { Kit, CongaLine, KIT_NAMES, type KitState } from './Kit';
 export { Danny } from './Danny';
 export { Crow, CrowFlock, buildCrow, frenchFryVisual, type CrowJob } from './Crow';
+export { Gull, GullSystem } from './Gull';
 export { Emote, HeartBurst, type EmoteIcon } from './Emote';

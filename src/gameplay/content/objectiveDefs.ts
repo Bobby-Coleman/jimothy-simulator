@@ -54,6 +54,7 @@ export const OBJECTIVES: ObjectiveDef[] = [
   { id: 'leapOfFaith', category: 'chaos', points: 1500, target: 25, title: 'Leap of Faith', desc: 'Fall 25 m and walk it off. Round things bounce.' },
   { id: 'frequentFlyer', category: 'chaos', points: 2000, target: 8, title: 'Frequent Flyer', desc: 'Get launched 8 m into the air. Backyard trampolines are a start. Earn miles.' },
   { id: 'jaywalker', category: 'chaos', points: 500, title: 'Look Both Ways', desc: "Get bonked by a car. He's fine! He's round!" },
+  { id: 'whenceYouCame', category: 'chaos', points: 1500, title: 'Return From Whence You Came', desc: "Throw an animal into the ocean. It's a seagull. It'll be fine. It will not be happy." },
   { id: 'flopEra', category: 'chaos', points: 300, target: 25, title: 'Flop Era', desc: 'Ragdoll 25 times. Floppiness is a lifestyle.' },
   { id: 'officerScold', category: 'chaos', points: 1500, target: 10, title: "Please Don't Approach Jimothy", desc: 'Get the Wildlife Officer to scold 10 fans.' },
 

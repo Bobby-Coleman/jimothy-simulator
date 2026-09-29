@@ -1493,6 +1493,35 @@ const objScenarios = {
       return T.result('officerScold', { secs: t, scolds: T.count('officerScold') });
     });
   },
+  async obj_whenceYouCame() {
+    // Grab the seagull off the promenade railing, face the bay and throw it (Bonk while carrying). It must splash down
+    // in the bay, complete the Instinct, and later fly back to its perch unharmed.
+    return ev(() => {
+      T.resetObj('whenceYouCame');
+      T.release();
+      const gull = T.g.get('gulls')?.list?.[0];
+      if (!gull) return { pass: false, detail: 'no seagull on the waterfront' };
+      T.p.teleport(new T.V(gull.home.x, 0.85, gull.home.z - 0.75), 0);
+      T.step(0.3);
+      T.face(gull.home.x, gull.home.z);
+      T.press('grab');
+      T.step(0.3);
+      const held = T.p.held?.entity?.name ?? null;
+      T.p.facing = 0; // south, over the railing
+      T.g.get('camera').snapBehind(0);
+      const before = T.count('animalSplash');
+      T.press('bonk');
+      let t = 0;
+      while (t < 5 && gull.state !== 'splash') { T.step(0.05); t += 0.05; }
+      const splashed = gull.state === 'splash';
+      T.step(1);
+      const r = T.result('whenceYouCame', { held, splashed, secs: +t.toFixed(2), events: T.count('animalSplash') - before });
+      T.step(14);
+      r.backHome = gull.state === 'perch' && gull.pos.distanceTo(gull.home) < 0.2;
+      r.pass = r.pass && !!held && splashed && r.backHome;
+      return r;
+    });
+  },
   // ---------------------------------------------------------------- secrets & meta
   async obj_humanMade() {
     return ev(() => {

@@ -6,7 +6,7 @@ import { Emote, type EmoteIcon } from './Emote';
 import { RaccoonRig, defaultPose, clearPose, type RigPose, type RigSpec } from './RaccoonRig';
 
 /**
- * Base class for gameplay animals (Mom, kits, Danny, crows).
+ * Base class for gameplay animals (Mom, kits, Danny, crows, waterfront gulls).
  *
  * Animals are *kinematic* bodies in collision group G.ANIMAL driven by simple behaviour code, so they never
  * get stuck, launched into orbit or crushed: every knock is a cartoon tumble (our own little ballistic sim)
@@ -14,7 +14,7 @@ import { RaccoonRig, defaultPose, clearPose, type RigPose, type RigSpec } from '
  * and wash them — each species decides how cute the reaction is.
  */
 
-export type Species = 'mom' | 'kit' | 'danny' | 'crow';
+export type Species = 'mom' | 'kit' | 'danny' | 'crow' | 'gull';
 
 export interface AnimalConfig {
   name: string;
@@ -124,12 +124,16 @@ export abstract class Animal {
       tags: new Set(['animal', cfg.species, ...(cfg.tags ?? [])]),
       data: { animal: this, species: cfg.species, size: new THREE.Vector3(0.4, 0.34, 0.5), floatRadius: 0.3 },
       onBonk: (_g, impulse, point) => {
+        if (this.isPlayerBonk()) this.markToss('bonk');
         this.handleBonk(impulse, point);
         return true;
       },
       onGrab: () => this.handleGrab(),
       onWash: () => this.handleWash(),
-      onRelease: (_g, thrown) => this.handleRelease(thrown),
+      onRelease: (_g, thrown) => {
+        if (thrown) this.markToss('throw');
+        this.handleRelease(thrown);
+      },
     });
     this.emote = new Emote(visualRoot, cfg.emoteY, cfg.emoteSize ?? 0.36);
     this.visualRoot = visualRoot;
@@ -170,6 +174,43 @@ export abstract class Animal {
     const moved = Math.hypot(this.pos.x - this.prevPos.x, this.pos.z - this.prevPos.z);
     this.speed = dt > 0 ? moved / dt : 0;
     this.pushBody();
+    if (this.tossT > -1e8) this.checkToss();
+  }
+
+  // ----------------------------------------------------------------------------------------- tossed by Jimothy
+  /** When Jimothy last threw us / knocked us flying (game time), and how. */
+  private tossT = -1e9;
+  private tossHow: 'throw' | 'bonk' = 'throw';
+  /** Seconds after a toss in which landing in water still counts as his doing. */
+  static readonly TOSS_WINDOW = 5;
+
+  protected markToss(how: 'throw' | 'bonk') {
+    this.tossT = this.game.time;
+    this.tossHow = how;
+  }
+
+  /**
+   * A toss by Jimothy that ends in water within TOSS_WINDOW s emits 'animalSplash' { animal, entity, species,
+   * water (kind), waterName, how, position } once. "Return From Whence You Came" listens for water 'bay'.
+   */
+  private checkToss() {
+    if (this.entity.data.heldByPlayer) return;
+    if (this.game.time - this.tossT > Animal.TOSS_WINDOW) {
+      this.tossT = -1e9;
+      return;
+    }
+    const vol = this.game.get<any>('water')?.volumeAt?.(_v.set(this.pos.x, this.pos.y + 0.05, this.pos.z));
+    if (!vol) return;
+    this.tossT = -1e9;
+    this.game.events.emit('animalSplash', {
+      animal: this,
+      entity: this.entity,
+      species: this.species,
+      water: vol.kind,
+      waterName: vol.name,
+      how: this.tossHow,
+      position: this.pos.clone(),
+    });
   }
 
   /** Move the kinematic body to follow `pos`/`yaw` (skipped while Jimothy is carrying us). */
