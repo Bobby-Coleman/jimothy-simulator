@@ -92,7 +92,7 @@ Files are unmodified (renamed) in `public/assets/audio/music/`; loudness is even
 
 | File | Title | Author (OGA user) | Page | Theme |
 |---|---|---|---|---|
-| `respectable_bounce.ogg` | A respectable amount of Bounce | Some Weirdo | <https://opengameart.org/content/a-respectable-amount-of-bounce> | title |
+| `respectable_bounce.ogg` | A respectable amount of Bounce | Some Weirdo | <https://opengameart.org/content/a-respectable-amount-of-bounce> | title player (every track plays in the title-screen music player) |
 | `banana_track.ogg` | Banana Track | skrjablin | <https://opengameart.org/content/banana-track> | day |
 | `wacky_workings.ogg` | Wacky Workings | Fupi | <https://opengameart.org/content/wacky-workings> | day |
 | `trouble_in_the_garden.ogg` | Trouble in the Garden | HaelDB (OGA-BY 3.0 / CC0 — used as CC0) | <https://opengameart.org/content/trouble-in-the-garden> | day |
