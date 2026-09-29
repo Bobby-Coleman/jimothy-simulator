@@ -8,3 +8,6 @@ tools/_downloads/
 .DS_Store
 Thumbs.db
 tools/_catalog_previews/
+
+# helper-agent git worktrees
+.claude/worktrees/
