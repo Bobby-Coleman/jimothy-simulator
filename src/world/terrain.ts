@@ -42,7 +42,8 @@ export function terrainHeight(x: number, z: number): number {
   h += hill * (Math.sin(x * 0.031) * 1.2 + Math.sin(x * 0.07 + 1.3) * 0.5);
   // East/West map edges: gentle berms so the world feels bounded
   const edge = Math.max(Math.abs(x) - 188, 0);
-  h += edge * edge * 0.02;
+  // (capped: uncapped they rose ~100 m at the terrain edge and read as a giant green wall)
+  h += Math.min(edge * edge * 0.02, 26);
   // South: drop into Salmon Bay past the seawall
   if (z > MAP.seawallZ - 1) {
     const s = smooth01((z - (MAP.seawallZ - 1)) / 5);

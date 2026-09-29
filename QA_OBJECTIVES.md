@@ -10,8 +10,9 @@ real dialogs advanced with key presses. Nothing was completed by emitting gamepl
 its row.)
 
 Automated: `node tools/playtest.mjs --url http://127.0.0.1:5198/ --group obj` runs one scenario per objective (+ a
-feedback check and a save/reload check) in ~5 min; long grinds are checked for progress and extrapolated unless
-`--full` is passed (~12 min). Build + serve first:
+feedback check and a save/reload check) in ~4 min; long grinds are checked for progress and extrapolated unless
+`--full` is passed (~6 min). Last runs: 52/52 scenarios pass (the propane lob into a crowd is the only flaky one,
+so it gets 3 tries). Build + serve first:
 `npx vite build --outDir tools/_downloads/qa_build --emptyOutDir` then
 `npx vite preview --outDir tools/_downloads/qa_build --port 5198 --strictPort`.
 
@@ -44,7 +45,7 @@ feedback check and a save/reload check) in ~5 min; long grinds are checked for p
 | 4 | **Water Resistant\*** — wash a phone | ✅ | Grab a person holding a phone (fans, tourists, tech bros) → you steal it → wash it. | 1 min | |
 | 5 | **Dumpster Diver** — dumpster diving ×5 | ⚠️ | Jump onto a dumpster (or drop in from above). Each dumpster pays out once per 15 s. | 1–2 min | Needed 5 *different* dumpsters but town only has 4 → counts dives now. Jumping onto one from the street "fell" only 0.1 m and didn't count (needed 0.6 m) → any real landing counts. |
 | 6 | **Trash Panda Tornado** — tip 20 trash cans | ⚠️ | Bonk (F / RMB) or roll into cans. 85 cans in town; cans you knock into other cans count. | 3–5 min | Cars and pedestrians tip ~1 can a minute somewhere in town and those counted, so it finished itself after ~30 min of play → only cans Jimothy touched (or that tip within 15 m of him) count now. |
-| 7 | **Round Boy** — roll 500 m | ✅ | Tuck & Roll (Q), hold Sprint. Cumulative. The waterfront promenade is a good car-free runway. | 45 s rolling | Unlocks **Chonk**. |
+| 7 | **Round Boy** — roll 500 m | ✅ | Tuck & Roll (Q), hold Sprint. Cumulative. The long cross-town avenues are fastest (mind the cars); the waterfront promenade is car-free. | 45 s rolling | Unlocks **Chonk**. |
 | 8 | **Not A Cat** — let someone say "here kitty kitty", turn around | ✅ | Stand with your back to a pedestrian/tourist/fan/tech bro 2–6 m away; when they call "here kitty kitty" and tiptoe closer, turn to face them. | 1–3 min | Global 22 s cooldown + a dice roll, so it can take a few tries. |
 | 9 | **Cryptid Sighting** — get filmed by 12 different people | ⚠️ | Walk up to people with phones/cameras (tourists, fans, tech bros, some pedestrians) and let them notice you. Don't chitter at them — an "awww" interrupts filming. | 5–10 min | Target was 25 but only ~17–25 people with phones/cameras exist per game, spread over the whole map → 12. Counts accumulate across sessions. |
 | 10 | **Five-Finger Discount** — steal a whole pizza | ⚠️ | A whole pizza sits on the picnic blanket in Gasworks-ish Park (by the basket). Pedestrians sometimes carry one — stealing that works too. | 1 min | Pizzas only appeared by luck (4 % of pedestrians, rare bin spill) → added the picnic pizza. |
@@ -120,7 +121,8 @@ feedback check and a save/reload check) in ~5 min; long grinds are checked for p
 | Bobblehead | Bobblehead Collector | Rookie | Rookie Card (and, currently, winning the Salmon Run) |
 | AI Enhanced | Touch Grass | Tiny | Kit Collector |
 
-All 12 unlock toasts + sounds were seen in the QA run.
+All 12 were unlocked by playing during the QA runs (the "Mutator unlocked!" toast + `mutator_unlock` sound were checked
+on AI Enhanced; every reward goes through the same path).
 
 ## Feedback & saving (checked)
 

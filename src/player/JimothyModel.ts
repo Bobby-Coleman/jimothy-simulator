@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Assets } from '../core/Assets';
 import { applyFur } from './Fur';
+import { makeShadowOnly, shadowOnlyMaterial } from '../world/shadowOnly';
 
 export interface AnimState {
   mode: string;
@@ -110,6 +111,21 @@ export class JimothyModel {
     }
     this.headPivot = this.parts.Head ?? null;
     applyFur(model);
+    // Perf: one shadow-only sphere (+ a tail blob) instead of ~23 shadow-casting parts. He's round; so is his shadow.
+    model.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && !m.userData.shadowOnly) m.castShadow = false;
+    });
+    const ball = makeShadowOnly(new THREE.Mesh(new THREE.SphereGeometry(0.37, 16, 12), shadowOnlyMaterial()));
+    ball.name = 'ShadowBall';
+    this.parts.Body ? this.parts.Body.add(ball) : this.pivot.add(ball);
+    const tail = this.parts.Tail2 ?? this.parts.Tail1;
+    if (tail) {
+      const blob = makeShadowOnly(new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), shadowOnlyMaterial()));
+      blob.scale.set(1, 1, 3.2);
+      blob.position.z = -0.12;
+      tail.add(blob);
+    }
     // Collect materials for wetness / eyeshine effects (clone so we don't touch shared assets)
     this.furMats = [];
     this.eyeMats = [];

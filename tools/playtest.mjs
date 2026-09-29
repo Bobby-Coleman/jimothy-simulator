@@ -1123,7 +1123,10 @@ const objScenarios = {
       const CQ = T.g.get('heartQuests').crows;
       const tree = CQ.tree;
       const fountain = T.water('Park Fountain');
-      for (let i = 0; i < 4 && !T.O.isDone('crowDeals'); i++) {
+      // crows startled earlier (e.g. by the bobblehead hunt in their tree) need a moment to settle back down
+      T.tp(tree.x + 12, tree.z, -Math.PI / 2);
+      for (let w = 0; w < 60 && !CQ.flock.crows.some((c) => c.available); w++) T.step(1);
+      for (let i = 0; i < 5 && !T.O.isDone('crowDeals'); i++) {
         const it = T.nearestEntity((e) => e.alive && e.body && (e.tags.has('beanbag') || e.tags.has('food')) && e.body.translation().y < 0.8 && !e.data.heldByPlayer && !e.data.washed && !e.tags.has('cottoncandy') && !e.data.crowGift, new T.V(tree.x, 0, tree.z));
         if (!it) break;
         T.grabEnt(it, 0.7);
@@ -1136,9 +1139,9 @@ const objScenarios = {
         T.tp(tree.x + 9, tree.z, -Math.PI / 2);
         const before = CQ.trades;
         let t = 0;
-        while (t < 30 && CQ.trades === before) { T.step(0.5); t += 0.5; }
+        while (t < 45 && CQ.trades === before) { T.step(0.5); t += 0.5; }
       }
-      return T.result('crowDeals', { trades: CQ.trades, crowRider: T.g.get('mutators').get('crowRider')?.unlocked });
+      return T.result('crowDeals', { trades: CQ.trades, crowRider: T.g.get('mutators').get('crowRider')?.unlocked, crowStates: CQ.flock.crows.map((c) => c.state).join(',') });
     });
   },
   async obj_teddyRescue() {

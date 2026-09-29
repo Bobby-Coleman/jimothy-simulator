@@ -3,6 +3,7 @@ import { Environment } from './world/Environment';
 import { WaterSystem } from './world/Water';
 import { WeatherSystem } from './world/Weather';
 import { World } from './world/World';
+import { Horizon } from './world/Horizon';
 import { Jimothy } from './player/Jimothy';
 import { CameraRig } from './player/CameraRig';
 import { ScoreSystem } from './gameplay/Score';
@@ -47,6 +48,7 @@ export function registerSystems(game: Game) {
   game.add(new ObjectivesSystem());
   game.add(new MutatorSystem());
   const world = game.add(new World());
+  game.add(new Horizon());
   registerZones(world);
 
   // --- player

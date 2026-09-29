@@ -80,45 +80,69 @@ export class World implements System {
   }
 
   // ------------------------------------------------------------------ terrain
+  /** Visual terrain chunks (4×4) so the camera frustum can cull what's off-screen; `terrain` = first chunk. */
+  readonly terrainChunks: THREE.Mesh[] = [];
+
   private buildTerrain() {
     const half = MAP.terrainHalf;
     const n = Math.round((half * 2) / MAP.cell);
-    const geo = new THREE.PlaneGeometry(half * 2, half * 2, n, n);
-    geo.rotateX(-Math.PI / 2);
-    const pos = geo.getAttribute('position') as THREE.BufferAttribute;
-    const colors = new Float32Array(pos.count * 3);
-    // splat weights: x = grass, y = dirt, z = sand
-    const splat = new Float32Array(pos.count * 3);
+    const CH = 4;
+    const per = Math.round(n / CH);
+    const chunkSize = (half * 2) / CH;
     const tintA = new THREE.Color(0xcfeeb0);
     const tintB = new THREE.Color(0xf4f7c0);
     const c = new THREE.Color();
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
-      const h = terrainHeight(x, z);
-      pos.setY(i, h);
-      const noise = Math.sin(x * 0.13) * Math.sin(z * 0.11) * 0.5 + Math.sin(x * 0.037 + z * 0.041) * 0.5;
-      // Macro tint to break up tiling (Goat-Sim-ish sunny greens)
-      c.copy(tintA).lerp(tintB, 0.5 + noise * 0.45);
-      colors.set([c.r, c.g, c.b], i * 3);
-      let g = 1,
-        d = 0,
-        s = 0;
-      if (h < -0.35) d = THREE.MathUtils.clamp((-0.35 - h) / 1.0, 0, 1);
-      if (z > MAP.seawallZ - 3) s = THREE.MathUtils.clamp((z - (MAP.seawallZ - 3)) / 3, 0, 1);
-      g = Math.max(0, 1 - d - s);
-      const sum = g + d + s || 1;
-      splat.set([g / sum, d / sum, s / sum], i * 3);
-    }
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.setAttribute('splat', new THREE.BufferAttribute(splat, 3));
-    geo.computeVertexNormals();
+    const eps = 0.6;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, color: 0xa6d46e });
-    this.terrain = new THREE.Mesh(geo, mat);
+    for (let cz = 0; cz < CH; cz++) {
+      for (let cx = 0; cx < CH; cx++) {
+        const geo = new THREE.PlaneGeometry(chunkSize, chunkSize, per, per);
+        geo.rotateX(-Math.PI / 2);
+        geo.translate(-half + chunkSize * (cx + 0.5), 0, -half + chunkSize * (cz + 0.5));
+        const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+        const uv = geo.getAttribute('uv') as THREE.BufferAttribute;
+        const nrm = geo.getAttribute('normal') as THREE.BufferAttribute;
+        const colors = new Float32Array(pos.count * 3);
+        // splat weights: x = grass, y = dirt, z = sand
+        const splat = new Float32Array(pos.count * 3);
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i);
+          const z = pos.getZ(i);
+          const h = terrainHeight(x, z);
+          pos.setY(i, h);
+          // world-space UVs (one continuous texture mapping across chunks)
+          uv.setXY(i, (x + half) / (half * 2), (half - z) / (half * 2));
+          // analytic normals: seamless across chunk borders
+          const hx = (terrainHeight(x + eps, z) - terrainHeight(x - eps, z)) / (2 * eps);
+          const hz = (terrainHeight(x, z + eps) - terrainHeight(x, z - eps)) / (2 * eps);
+          const il = 1 / Math.hypot(hx, 1, hz);
+          nrm.setXYZ(i, -hx * il, il, -hz * il);
+          const noise = Math.sin(x * 0.13) * Math.sin(z * 0.11) * 0.5 + Math.sin(x * 0.037 + z * 0.041) * 0.5;
+          // Macro tint to break up tiling (Goat-Sim-ish sunny greens)
+          c.copy(tintA).lerp(tintB, 0.5 + noise * 0.45);
+          colors.set([c.r, c.g, c.b], i * 3);
+          let g = 1,
+            d = 0,
+            sa = 0;
+          if (h < -0.35) d = THREE.MathUtils.clamp((-0.35 - h) / 1.0, 0, 1);
+          if (z > MAP.seawallZ - 3) sa = THREE.MathUtils.clamp((z - (MAP.seawallZ - 3)) / 3, 0, 1);
+          g = Math.max(0, 1 - d - sa);
+          const sum = g + d + sa || 1;
+          splat.set([g / sum, d / sum, sa / sum], i * 3);
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geo.setAttribute('splat', new THREE.BufferAttribute(splat, 3));
+        geo.computeBoundingSphere();
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.receiveShadow = true;
+        mesh.name = 'terrain';
+        mesh.userData.noCull = true;
+        this.game.scene.add(mesh);
+        this.terrainChunks.push(mesh);
+      }
+    }
+    this.terrain = this.terrainChunks[0];
     this.applyTerrainTextures(mat, half * 2);
-    this.terrain.receiveShadow = true;
-    this.terrain.name = 'terrain';
-    this.game.scene.add(this.terrain);
 
     // Heightfield collider. Rapier: heights in column-major order, rows along Z, columns along X.
     const rows = n;
