@@ -483,7 +483,7 @@ export class SalmonRun extends Landmark {
     if (first) {
       this.game.score(800, 'Salmon Run Champion', this.finish.clone());
       this.setStep('won');
-      this.complete('rookie');
+      this.complete(); // the Rookie mutator comes from the gold rookie card (see objectiveDefs)
     } else {
       this.game.score(120, 'Salmon Run Repeat Champ', this.finish.clone());
       this.save();

@@ -236,7 +236,7 @@ export class Cannon {
 
   // ---------------------------------------------------------------------------------------------- trigger
   /** Is Jimothy walking into the breech? */
-  wantsLoad(p: THREE.Vector3, r = 1.05 * Math.max(1, this.scale)): boolean {
+  wantsLoad(p: THREE.Vector3, r = 1.35 * Math.max(1, this.scale)): boolean {
     const b = this.breech;
     return Math.hypot(p.x - b.x, p.z - b.z) < r && p.y > b.y - 0.9 && p.y < b.y + 1.1;
   }

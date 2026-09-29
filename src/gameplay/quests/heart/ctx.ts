@@ -448,6 +448,7 @@ export class HeartCtx {
    */
   clearAngle(focus: THREE.Vector3, r: number, h: number, a0: number, speed = 0, subjects: THREE.Vector3[] = []): number {
     const rc = new THREE.Raycaster();
+    rc.camera = this.game.camera; // sprites need it (otherwise three logs 'Raycaster.camera needs to be set')
     const player = this.player;
     const skip = new Set<THREE.Object3D>();
     if (player?.model?.root) skip.add(player.model.root);
