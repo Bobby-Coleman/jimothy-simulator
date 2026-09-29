@@ -3,6 +3,7 @@ import type { Game, System } from '../../core/Game';
 import type { Entity } from '../../core/Entities';
 import { RAPIER, G, groups } from '../../core/Physics';
 import type { World } from '../../world/World';
+import { audio, type SoundHandle } from '../../audio/AudioManager';
 
 /**
  * Traffic: kinematic cars that follow `world.lanes` loops, brake & honk for Jimothy, launch whatever they hit,
@@ -40,6 +41,7 @@ interface Car {
   velocity: THREE.Vector3;
   model: string;
   prevPos: THREE.Vector3;
+  engine?: SoundHandle | null;
 }
 
 const _p = new THREE.Vector3();
@@ -200,10 +202,41 @@ export class VehicleSystem implements System {
     this.game.sfx('car_horn', car.object.position, volume, car.model === 'garbage-truck' || car.model === 'delivery' ? 0.8 : 1);
   }
 
+  private engineT = 0;
+
+  /** Engine hum loops only for the 3 nearest moving cars (cheap). */
+  private updateEngines(dt: number, ppos: THREE.Vector3 | undefined) {
+    this.engineT -= dt;
+    if (!ppos) return;
+    if (this.engineT <= 0) {
+      this.engineT = 0.5;
+      const ranked = this.cars
+        .filter((c) => !c.wrecked)
+        .map((c) => ({ c, d: c.object.position.distanceToSquared(ppos) }))
+        .sort((a, b) => a.d - b.d);
+      const keep = new Set(ranked.slice(0, 3).filter((r) => r.d < 45 * 45).map((r) => r.c));
+      for (const c of this.cars) {
+        if (keep.has(c)) {
+          if (!c.engine || !c.engine.playing) c.engine = audio.play('car_engine_loop', { position: c.object.position, loop: true, volume: 0.5 });
+        } else if (c.engine) {
+          c.engine.stop(0.4);
+          c.engine = null;
+        }
+      }
+    }
+    for (const c of this.cars) {
+      if (!c.engine) continue;
+      c.engine.setPosition(c.object.position);
+      c.engine.setPitch(0.7 + Math.min(1, c.speed / 14) * 0.6);
+      c.engine.setVolume(0.25 + Math.min(1, c.speed / 12) * 0.45);
+    }
+  }
+
   update(dt: number) {
     const game = this.game;
     const player = game.get<any>('player');
     const ppos: THREE.Vector3 | undefined = player?.position;
+    this.updateEngines(dt, ppos);
     for (const car of this.cars) {
       if (car.wrecked) {
         const t = car.body.translation();
