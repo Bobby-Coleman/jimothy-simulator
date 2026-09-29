@@ -1,0 +1,129 @@
+[
+ {
+  "name": "01-den-golden-hour",
+  "time": 19.85,
+  "hud": true,
+  "player": [
+   10.1,
+   26.8,
+   2.9
+  ],
+  "js": "g.input.virtual.move.set(0,0); g.input.virtual.buttons.clear(); if (p.held) p.release(false);",
+  "cam": {
+   "p": [
+    12.3,
+    0.62,
+    29.2
+   ],
+   "t": [
+    7.6,
+    1.25,
+    22.6
+   ],
+   "fov": 50
+  },
+  "after": "const c = g.camera.position; p.facing = Math.atan2(c.x - p.position.x, c.z - p.position.z) - 0.9;"
+ },
+ {
+  "name": "05-park-npcs",
+  "time": 13,
+  "hud": true,
+  "player": [
+   -90,
+   6,
+   -1.2
+  ],
+  "js": "g.input.virtual.move.set(0,0); g.input.virtual.buttons.clear(); const w = g.get('world'); const npcs = g.get('npcs').list.filter(n => n.alive !== false && !n.ragdolled).slice(0, 5); const spots = [[-94, 2.5], [-86.5, 1.5], [-92.5, -3.5], [-97, 6.5], [-88, -5]]; npcs.forEach((n, i) => { const [x, z] = spots[i]; try { n.teleport(new V(x, w.heightAt(x, z) + 0.05, z), Math.atan2(-90 - x, 6 - z)); } catch (e) {} }); g.advance(1.8);",
+  "cam": {
+   "p": [
+    -84,
+    2.4,
+    12.5
+   ],
+   "t": [
+    -100,
+    0.8,
+    -2
+   ],
+   "fov": 60
+  }
+ },
+ {
+  "name": "06-market",
+  "time": 13,
+  "player": [
+   -6,
+   70.5,
+   3.1
+  ],
+  "js": "g.input.virtual.move.set(0,0); g.input.virtual.buttons.clear();",
+  "cam": {
+   "p": [
+    -10,
+    1.6,
+    63.5
+   ],
+   "t": [
+    -4,
+    5.5,
+    80
+   ],
+   "fov": 60
+  }
+ },
+ {
+  "name": "03-washing-cotton-candy",
+  "time": 15.5,
+  "js": "g.input.virtual.move.set(0,0); g.input.virtual.buttons.clear(); if (p.held) p.release(false); g.advance(0.1); const w = g.get('world'); let cc = null, bd = 1e9; for (const e of g.entities.list) { if (!e.alive || !e.tags.has('cottoncandy')) continue; const t = e.body ? e.body.translation() : e.object.position; const d = Math.hypot(t.x - 22.5, t.z - 12.2); if (d < bd) { bd = d; cc = e; } } const t = cc.body ? cc.body.translation() : cc.object.position; p.teleport(new V(t.x + 0.7, w.heightAt(t.x + 0.7, t.z) + 0.5, t.z), 0); g.advance(0.25); p.facing = Math.atan2(t.x - p.position.x, t.z - p.position.z); g.advance(0.1); g.input.virtual.buttons.add('grab'); g.advance(1/60); g.input.virtual.buttons.delete('grab'); g.advance(0.3); const water = g.get('water'); let best = null, b2 = 1e9; for (const v of water.volumes) { if (v.kind !== 'puddle') continue; const d = Math.hypot(v.center.x - 22, v.center.z - 12); if (d < b2) { b2 = d; best = v; } } window.__puddle = best; const r = (best.radius ?? Math.min(best.halfX, best.halfZ)) + 0.45; p.teleport(new V(best.center.x - r * 0.7, best.surfaceY + 0.5, best.center.z - r * 0.7), 0); g.advance(0.3); p.facing = Math.atan2(best.center.x - p.position.x, best.center.z - p.position.z); g.advance(0.05); g.input.virtual.buttons.add('wash'); g.advance(0.5);",
+  "adv": 0.05,
+  "cam": {
+   "p": "const q = p.position; const b = window.__puddle.center; let ux = q.x - b.x, uz = q.z - b.z; const L = Math.hypot(ux, uz) || 1; ux /= L; uz /= L; return [q.x - ux * 2.2 + uz * 1.0, q.y + 0.42, q.z - uz * 2.2 - ux * 1.0];",
+   "t": "const q = p.position; const b = window.__puddle.center; let ux = q.x - b.x, uz = q.z - b.z; const L = Math.hypot(ux, uz) || 1; return [q.x - ux / L * 0.25, q.y + 0.12, q.z - uz / L * 0.25];",
+   "fov": 50
+  }
+ },
+ {
+  "name": "02-tumble-st-roll",
+  "time": 10.5,
+  "player": [
+   0.6,
+   -132,
+   0
+  ],
+  "orbit": {
+   "yaw": 3.14159,
+   "pitch": -0.25,
+   "dist": 5
+  },
+  "js": "if (p.held) p.release(false); g.input.virtual.buttons.clear(); g.input.virtual.buttons.add('roll'); g.advance(1/60); g.input.virtual.buttons.delete('roll'); g.advance(0.1); g.input.virtual.move.set(0, 1); g.advance(1.7);",
+  "adv": 0.05,
+  "cam": {
+   "p": "const q = p.position; return [q.x + 2.4, q.y + 0.35, q.z + 3.4];",
+   "t": "const q = p.position; return [q.x - 0.4, q.y + 0.45, q.z - 1.2];",
+   "fov": 60
+  },
+  "after": "g.input.virtual.move.set(0, 1);"
+ },
+ {
+  "name": "07-slopcorp",
+  "time": 17.2,
+  "js": "g.input.virtual.move.set(0,0); g.input.virtual.buttons.clear(); if (p.held) p.release(false); const s = g.get('slop'); const d = s.dragon; window.__dragon = d; d.startLanding(); g.advance(9); const dp = d.body.translation(); const w = g.get('world'); const jx = dp.x + 5.5, jz = dp.z + 7.5; p.teleport(new V(jx, Math.max(w.heightAt(jx, jz), dp.y - 3) + 0.8, jz), Math.atan2(dp.x - jx, dp.z - jz)); s.spawnAt(dp.x + 3, dp.z + 4.5, 5, 'campus'); g.advance(1.5); return d.state;",
+  "adv": 0.1,
+  "cam": {
+   "p": "const d = window.__dragon.body.translation(); const q = p.position; return [q.x + 3.2, q.y + 1.3, q.z + 5.2];",
+   "t": "const d = window.__dragon.body.translation(); const q = p.position; return [(d.x + q.x) / 2, (d.y + q.y) / 2 + 1.2, (d.z + q.z) / 2];",
+   "fov": 62
+  }
+ },
+ {
+  "name": "04-space-noodle",
+  "time": 9.8,
+  "adv": 0.05,
+  "js": "g.input.virtual.move.set(0,0); g.input.virtual.buttons.clear(); if (p.held) p.release(false); const cam = g.get('camera'); const w = g.get('world'); const cx = 150, cz = -38, sx = 157.5, sz = -38; p.teleport(new V(sx, w.heightAt(sx, sz) + 0.6, sz), Math.atan2(cx - sx, cz - sz)); g.advance(0.3); let t = 0; while (t < 14) { const P = p.position; cam.snapBehind(Math.atan2(cx - P.x, cz - P.z)); if (p.mode === 'climb') { g.input.virtual.move.set(0, 1); g.input.virtual.buttons.delete('jump'); if (P.y > 11) break; } else { g.input.virtual.move.set(0, 1); g.input.virtual.buttons.add('jump'); } g.advance(0.1); t += 0.1; } g.input.virtual.move.set(0, 0); g.input.virtual.buttons.clear(); window.__climb = { mode: p.mode, y: +p.position.y.toFixed(1), t: +t.toFixed(1) }; console.warn('climb', JSON.stringify(window.__climb));",
+  "cam": {
+   "p": "const q = p.position; let ux = 150 - q.x, uz = -38 - q.z; const L = Math.hypot(ux, uz) || 1; ux /= L; uz /= L; return [q.x - ux * 5.0 + uz * 1.9, q.y - 1.5, q.z - uz * 5.0 - ux * 1.9];",
+   "t": "const q = p.position; let ux = 150 - q.x, uz = -38 - q.z; const L = Math.hypot(ux, uz) || 1; return [q.x + ux / L * 1.2, q.y + 3.3, q.z + uz / L * 1.2];",
+   "fov": 70
+  }
+ }
+]

@@ -123,7 +123,9 @@ export class Horizon implements System {
   lateUpdate(_dt: number, game: Game) {
     if (!this.mountainMat) return;
     const night = game.get<any>('environment')?.nightFactor ?? 0;
-    this.mountainMat.emissiveIntensity = 0.55 * (1 - night) + 0.04;
+    this.mountainMat.emissiveIntensity = 0.55 * (1 - night);
+    // darker silhouette at night (otherwise the moon + sky grade make it read pale lavender)
+    this.mountainMat.color.setScalar(1 - 0.62 * night);
   }
 
   /** Forest on the east/west edge berms (the north builder covers the north edge) so they read as wooded hills. */

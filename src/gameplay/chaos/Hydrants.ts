@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import type RAPIER_T from '@dimforge/rapier3d-compat';
 import type { Game } from '../../core/Game';
 import { G, groups } from '../../core/Physics';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { audio, type SoundHandle } from '../../audio/AudioManager';
 import type { WaterVolume } from '../../world/Water';
 import {
   type ChaosFeature, scanStaticCuboids, overlapBox, objProgress, addObjective, playerFree, nearCamera,
-  clamp, rand, pick, fx, playerOf, rigOf, uiOf, groundY, paintMesh, T, UP, Timers,
+  clamp, rand, pick, fx, playerOf, rigOf, uiOf, groundY, paintMesh, T, Timers,
 } from './shared';
 
 /**
@@ -181,15 +182,15 @@ export class HydrantFeature implements ChaosFeature {
     c.width = 64;
     c.height = 128;
     const ctx = c.getContext('2d')!;
-    ctx.fillStyle = 'rgb(120,120,120)';
+    ctx.fillStyle = 'rgb(165,165,165)';
     ctx.fillRect(0, 0, 64, 128);
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < 30; i++) {
       const x = Math.random() * 64;
-      const w = 2 + Math.random() * 7;
+      const w = 2 + Math.random() * 8;
       const y = Math.random() * 128;
       const h = 30 + Math.random() * 90;
       const g = ctx.createLinearGradient(0, y, 0, y + h);
-      const a = 0.55 + Math.random() * 0.45;
+      const a = 0.6 + Math.random() * 0.4;
       g.addColorStop(0, 'rgba(255,255,255,0)');
       g.addColorStop(0.5, `rgba(255,255,255,${a})`);
       g.addColorStop(1, 'rgba(255,255,255,0)');
@@ -202,24 +203,31 @@ export class HydrantFeature implements ChaosFeature {
     tex.repeat.set(2, 2.5);
     this.tex = tex;
     this.jetMat = new THREE.MeshStandardMaterial({
-      color: 0xd6f1ff,
-      emissive: 0x7fc8f0,
-      emissiveIntensity: 0.28,
+      color: 0xeaf8ff,
+      emissive: 0x9fd8ff,
+      emissiveIntensity: 0.4,
       map: tex,
       alphaMap: tex,
       transparent: true,
-      opacity: 0.9,
-      roughness: 0.12,
+      opacity: 0.94,
+      roughness: 0.1,
       metalness: 0,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
-    const col = new THREE.CylinderGeometry(0.24, 0.13, 1, 14, 1, true);
-    col.translate(0, 0.5, 0);
-    this.columnGeo = col;
-    const crown = new THREE.SphereGeometry(0.62, 16, 9);
-    crown.scale(1, 0.42, 1);
-    this.crownGeo = crown;
+    const outer = new THREE.CylinderGeometry(0.3, 0.17, 1, 16, 1, true);
+    outer.translate(0, 0.5, 0);
+    const core = new THREE.CylinderGeometry(0.15, 0.09, 1, 10, 1, true);
+    core.translate(0, 0.5, 0);
+    this.columnGeo = mergeGeometries([outer, core], false) ?? outer;
+    // crown: a dome of spray + an umbrella skirt of water falling back down (UVs flipped so it flows downward)
+    const dome = new THREE.SphereGeometry(0.46, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2);
+    dome.scale(1, 0.75, 1);
+    const skirt = new THREE.CylinderGeometry(0.42, 1.2, 1.2, 18, 1, true);
+    skirt.translate(0, -0.6, 0);
+    const uv = skirt.getAttribute('uv') as THREE.BufferAttribute;
+    for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i));
+    this.crownGeo = mergeGeometries([dome.toNonIndexed(), skirt.toNonIndexed()], false) ?? dome;
     const pud = new THREE.CircleGeometry(1, 28);
     pud.rotateX(-Math.PI / 2);
     this.puddleGeo = pud;
@@ -560,7 +568,7 @@ export class HydrantFeature implements ChaosFeature {
     const v = b.linvel();
     const lift = m > 160 ? 0.55 : 1;
     const err = targetY - t.y;
-    const ay = clamp((14 + 10 * err - 2.4 * v.y) * lift * strength, -2, 46);
+    const ay = clamp((14 + 12 * err - 4.6 * v.y) * lift * strength, -2, 46);
     const ax = -(t.x - h.nozzle.x) * 7 - v.x * 1.3 + rand(-3, 3);
     const az = -(t.z - h.nozzle.z) * 7 - v.z * 1.3 + rand(-3, 3);
     b.applyImpulse({ x: m * ax * dt, y: m * ay * dt, z: m * az * dt }, true);
@@ -583,7 +591,7 @@ export class HydrantFeature implements ChaosFeature {
     }
     pl.ragdoll('hydrant', 0.6); // keep flopping while on the jet
     h.riding += dt;
-    this.hover(body, h, dt, top + 0.45, 1);
+    this.hover(body, h, dt, top + 0.55 + Math.sin(game.time * 7) * 0.22, 1);
     if (h.riding > 1.4 && !h.rideScored) {
       h.rideScored = true;
       game.score(150, 'Geyser Rider', pl.position.clone().setY(pl.position.y + 1));
@@ -629,4 +637,3 @@ export class HydrantFeature implements ChaosFeature {
   }
 }
 
-void UP;

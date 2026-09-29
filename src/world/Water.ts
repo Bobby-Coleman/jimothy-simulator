@@ -265,9 +265,10 @@ export class WaterSystem implements System {
     const fog = game.scene.fog as THREE.Fog | null;
     const env = game.get<any>('environment');
     if (fog) {
+      const night = env?.nightFactor ?? 0;
       _sky.copy(fog.color);
-      if (env?.hemi) _sky.lerp(env.hemi.color, 0.6);
-      waterUniforms.uWaterSky.value.copy(_sky).multiplyScalar(0.95);
+      if (env?.hemi) _sky.lerp(env.hemi.color, 0.6 * (1 - 0.7 * night));
+      waterUniforms.uWaterSky.value.copy(_sky).multiplyScalar(0.95 - 0.35 * night);
     }
     // Buoyancy for dynamic things in deep-ish water.
     // NOTE: never modify bodies inside a Rapier query callback — collect first, apply after.

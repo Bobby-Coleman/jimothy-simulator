@@ -205,32 +205,39 @@ export class Jimothy implements System {
         pt.set(t.x, t.y, t.z);
       }
       const dy = pt.y - p.y;
-      if (dy > 1.15 || dy < -0.8) continue; // out of paw reach vertically
+      if (dy > 1.15 || dy < -1.0) continue; // out of paw reach vertically (he can reach down off a step / bench)
       const dx = pt.x - p.x;
       const dz = pt.z - p.z;
       const dist = Math.hypot(dx, dz);
       if (dist > range) continue;
-      let angle = 0;
-      if (dist > 0.08) angle = Math.acos(THREE.MathUtils.clamp((dx * fx + dz * fz) / dist, -1, 1));
-      else {
-        // (he's on top of / inside it: judge by the direction to its centre instead)
-        const t = e.body.translation();
-        const cx = t.x - p.x;
-        const cz = t.z - p.z;
-        const cl = Math.hypot(cx, cz);
-        if (cl > 0.05) angle = Math.acos(THREE.MathUtils.clamp((cx * fx + cz * fz) / cl, -1, 1));
-      }
+      // (nearest point basically at / inside him: he's touching it, direction doesn't matter)
+      const angle = dist > 0.08 ? Math.acos(THREE.MathUtils.clamp((dx * fx + dz * fz) / dist, -1, 1)) : 0;
       if (angle > (dist < TOUCH_RANGE ? 105 * DEG : cone)) continue;
-      const score = dist / range + (angle / cone) * 0.85 + (bias ? bias(e) : 0);
+      // Score like the old grab (paws → the thing's centre, so a small item beats the big table it sits on or the
+      // crow next to it) plus an angle term (what he's facing wins); nearest-point distance only gates the reach.
+      const t = e.body.translation();
+      const hc = Math.hypot(t.x - (p.x + fx * 0.5), (t.y - p.y) * 0.7, t.z - (p.z + fz * 0.5));
+      const score = hc / range + (angle / cone) * 0.45 + (bias ? bias(e) : 0);
       if (best && score >= best.score) continue;
-      if (dist > 0.3) {
-        const dir = _c.set(dx, dy, dz);
-        const los = game.physics.raycast(p, dir, Math.max(0, dir.length() - 0.06), SIGHT_FILTER, this.body, (col) => !game.physics.isThin(col));
-        if (los) continue;
-      }
+      if (dist > 0.65 && !this.canSee(pt, t)) continue; // beyond the old paw reach: no grabbing through walls
       best = { entity: e, collider: c, point: pt.clone(), dist, angle, score };
     }
     return best;
+  }
+
+  /**
+   * Line of sight for aim-assist: clear if either his body → the nearest point, or his head → the thing's centre is
+   * unobstructed by level geometry (so an item lying on a counter above his middle still counts).
+   */
+  private canSee(nearest: THREE.Vector3, center: { x: number; y: number; z: number }) {
+    const game = this.game;
+    const p = this.position;
+    const notThin = (col: RAPIER.Collider) => !game.physics.isThin(col);
+    const d1 = _c.copy(nearest).sub(p);
+    if (!game.physics.raycast(p, d1, Math.max(0, d1.length() - 0.06), SIGHT_FILTER, this.body, notThin)) return true;
+    const head = new THREE.Vector3(p.x, p.y + 0.45 * this.sizeMul, p.z);
+    const d2 = _c.set(center.x - head.x, center.y - head.y, center.z - head.z);
+    return !game.physics.raycast(head, d2, Math.max(0, d2.length() - 0.12), SIGHT_FILTER, this.body, notThin);
   }
 
   /** Snap-turn to face a world point (aim-assist). */
@@ -481,6 +488,8 @@ export class Jimothy implements System {
     const tx = wish.x * max + (plat?.x ?? 0);
     const tz = wish.z * max + (plat?.z ?? 0);
     let accel = this.grounded ? (wish.lengthSq() > 0.01 ? 42 : 34) : 11;
+    // Feel pass: turning back against your momentum bites harder (snappier reversals, no ice-skating)
+    if (this.grounded && wish.lengthSq() > 0.01 && wish.x * (vx - (plat?.x ?? 0)) + wish.z * (vz - (plat?.z ?? 0)) < 0) accel *= 1.45;
     // Feel pass: an aim-assisted bonk lunge at something a bit farther away carries for a moment instead of stopping dead
     if (game.time < this.lungeUntil) accel = Math.min(accel, 10);
     const dx = tx - vx;
@@ -815,12 +824,10 @@ export class Jimothy implements System {
   tryGrab() {
     const game = this.game;
     // Feel pass: soft aim-assist: best grabbable in a ~100° cone within ~1.3 m, then snap-turn to it.
-    const pick = this.pickTarget(
-      GRAB_RANGE,
-      GRAB_CONE,
-      (e) => !e.data.heldByPlayer && (e.tags.has('grabbable') || e.kind === 'npc' || e.kind === 'vehicle' || e.kind === 'animal' || e.kind === 'slop'),
-      (e) => (e.tags.has('grabbable') ? -0.12 : 0), // small things you can carry win ties (old behaviour)
-    );
+    const canGrab = (e: Entity) => !e.data.heldByPlayer && (e.tags.has('grabbable') || e.kind === 'npc' || e.kind === 'vehicle' || e.kind === 'animal' || e.kind === 'slop');
+    const pick =
+      this.pickTarget(GRAB_RANGE, GRAB_CONE, canGrab, (e) => (e.tags.has('grabbable') ? -0.12 : 0)) ?? // small carryables win ties
+      this.pawSpherePick(canGrab); // safety net: anything the pre-assist grab could reach still works
     const best = pick?.entity;
     if (!pick || !best || !best.body) {
       this.whiff();
@@ -864,6 +871,21 @@ export class Jimothy implements System {
     }
     game.sfx('grab', this.position);
     game.events.emit('grab', { entity: target });
+  }
+
+  /** The original (pre-assist) grab query: a 0.62 m sphere at his paws, nearest centre wins, carryables preferred. */
+  private pawSpherePick(accept: (e: Entity) => boolean): AimTarget | null {
+    const game = this.game;
+    const hand = this.handPoint(new THREE.Vector3());
+    let best: AimTarget | null = null;
+    for (const c of game.physics.overlapSphere(hand, 0.62, GRAB_FILTER, this.body)) {
+      const e = game.entities.fromCollider(c);
+      if (!e || !e.alive || !e.body || !accept(e)) continue;
+      const t = e.body.translation();
+      const d = hand.distanceToSquared(_a.set(t.x, t.y, t.z)) * (e.tags.has('grabbable') ? 0.6 : 1);
+      if (!best || d < best.score) best = { entity: e, collider: c, point: hand.clone(), dist: 0, angle: 0, score: d };
+    }
+    return best;
   }
 
   /** Feel pass: a readable grab miss: a quick paw swipe at the air + a tiny whoosh (no score, no penalty). */
@@ -1081,10 +1103,9 @@ export class Jimothy implements System {
     const water = game.get<any>('water');
     const hand = this.handPoint(new THREE.Vector3()).add(_a.set(0, -0.2, 0));
     // Feel pass: be generous: water near his paws OR anywhere within a step of his body (puddles are tiny)
+    const handVol = this.mode === 'swim' ? null : water?.nearWater?.(hand, WASH_REACH_HAND);
     let vol =
-      this.mode === 'swim'
-        ? water?.volumeAt?.(this.position)
-        : (water?.nearWater?.(hand, WASH_REACH_HAND) ?? water?.nearWater?.(this.feetPoint(new THREE.Vector3()), WASH_REACH_BODY));
+      this.mode === 'swim' ? water?.volumeAt?.(this.position) : (handVol ?? water?.nearWater?.(this.feetPoint(new THREE.Vector3()), WASH_REACH_BODY));
     // Seattle rule: when it rains on you, the whole city is a sink
     if (!vol && game.get<any>('weather')?.rainingOnPlayer) vol = { kind: 'rain', name: 'Rain', surfaceY: this.position.y - 0.3 };
     if (!vol) {
@@ -1098,13 +1119,12 @@ export class Jimothy implements System {
       return;
     }
     if (!this.washing) {
-      // Feel pass: turn to what he's about to wash (a face / slop in front), else to the water itself
-      if (!(this.held && this.held.kind === 'carry')) {
-        const front = this.pickWashTarget();
-        if (front) {
-          if (front.dist > 0.12) this.faceToward(front.point);
-        } else if (vol.center && this.mode === 'walk') this.faceToward(this.nearestWaterPoint(vol, _c));
-      } else if (vol.center && this.mode === 'walk') this.faceToward(this.nearestWaterPoint(vol, _c));
+      // Feel pass: turn to what he's about to wash (a face / slop in front); if his paws don't reach the water he
+      // found (it's beside / behind him), turn to the water itself. Never turn when the paws are already in reach.
+      const front = this.held && this.held.kind === 'carry' ? null : this.pickWashTarget();
+      if (front) {
+        if (front.dist > 0.12) this.faceToward(front.point);
+      } else if (!handVol && vol.center && this.mode === 'walk') this.faceToward(this.nearestWaterPoint(vol, _c));
       game.events.emit('washStart', { volume: vol });
     }
     this.washing = true;

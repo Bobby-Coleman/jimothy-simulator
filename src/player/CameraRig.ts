@@ -4,6 +4,8 @@ import { G, groups } from '../core/Physics';
 
 const _v = new THREE.Vector3();
 const _dir = new THREE.Vector3();
+const _dir2 = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
 
 /** Third-person orbit camera with collision, zoom, shake and speed FOV kick. */
 export class CameraRig implements System {
@@ -80,6 +82,7 @@ export class CameraRig implements System {
 
   snapBehind(facing: number) {
     this.yaw = facing + Math.PI;
+    this.lookIdle = 0; // a deliberate camera placement: auto-follow waits before easing in again
   }
 
   lateUpdate(dt: number, game: Game) {
@@ -136,8 +139,21 @@ export class CameraRig implements System {
     // Collision: pull the camera in front of walls
     let dist = this.targetDistance;
     // Ignore thin things (lamp posts, poles, trunks) so the camera doesn't pump in and out on busy streets
-    const hit = game.physics.sphereCast(this.pivot, _dir, 0.22, dist, groups(G.ALL, G.WORLD | G.VEHICLE), player?.body, (c) => !game.physics.isThin(c));
+    const camFilter = groups(G.ALL, G.WORLD | G.VEHICLE);
+    const notThin = (c: any) => !game.physics.isThin(c);
+    const hit = game.physics.sphereCast(this.pivot, _dir, 0.22, dist, camFilter, player?.body, notThin);
     if (hit) dist = Math.max(0.5, hit.distance - 0.05);
+    // Feel pass: back to a wall (the camera would sit inside it at its 0.5 m minimum): swing up over his head instead
+    if (hit && hit.distance < 1.0) {
+      const up = (1 - hit.distance / 1.0) * 0.85;
+      _dir2.copy(_dir).lerp(_up, up).normalize();
+      const hit2 = game.physics.sphereCast(this.pivot, _dir2, 0.22, this.targetDistance, camFilter, player?.body, notThin);
+      const d2 = hit2 ? hit2.distance - 0.05 : this.targetDistance;
+      if (d2 > dist + 0.05) {
+        _dir.copy(_dir2);
+        dist = Math.max(0.5, d2);
+      } else if (hit.distance < 0.55) dist = Math.max(0.2, hit.distance - 0.05);
+    }
     // Zoom out smoothly, snap in quickly
     this.distance = dist < this.distance ? dist : this.distance + (dist - this.distance) * (1 - Math.exp(-dt * 3));
 

@@ -10,7 +10,16 @@ Bring your mom snacks.
 
 No install, no login. Keyboard + mouse, gamepad, or touch (phones/tablets).
 
-<!-- SCREENSHOTS -->
+| | |
+|---|---|
+| ![Jimothy at his den at golden hour](docs/screenshots/01-den-golden-hour.jpg) | ![Rolling down Tumble St](docs/screenshots/02-tumble-st-roll.jpg) |
+| *Home: the den under Goodwheel Thrift's back porch* | *Tumble St. Slow, round boys at play.* |
+| ![Washing cotton candy](docs/screenshots/03-washing-cotton-candy.jpg) | ![Climbing the Space Noodle](docs/screenshots/04-space-noodle-climb.jpg) |
+| *Washing cotton candy. (Where'd it go?)* | *Climbing the Space Noodle* |
+| ![The park](docs/screenshots/05-park-with-npcs.jpg) | ![Pike's Plaice Market](docs/screenshots/06-pikes-plaice-market.jpg) |
+| *Gasworks-ish Park (that's the Slop Dragon up there)* | *Pike's Plaice Market — fresh fish, flying daily* |
+| ![SlopCorp and the Slop Dragon](docs/screenshots/07-slopcorp-dragon.jpg) | ![Finale fireworks](docs/screenshots/08-finale-fireworks.jpg) |
+| *SlopCorp's AI campus: fake Jimothys and a seven-legged dragon* | *Jimothy Summer Forever* |
 
 ## What's in it
 
