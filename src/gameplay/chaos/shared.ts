@@ -29,8 +29,8 @@ export const UP = new THREE.Vector3(0, 1, 0);
 export function scanStaticCuboids(
   game: Game,
   match: (half: { x: number; y: number; z: number }, center: { x: number; y: number; z: number }) => boolean,
-): { center: THREE.Vector3; half: THREE.Vector3; yaw: number }[] {
-  const out: { center: THREE.Vector3; half: THREE.Vector3; yaw: number }[] = [];
+): { center: THREE.Vector3; half: THREE.Vector3; yaw: number; handle: number }[] {
+  const out: { center: THREE.Vector3; half: THREE.Vector3; yaw: number; handle: number }[] = [];
   try {
     game.physics.world.forEachCollider((c: RAPIER_T.Collider) => {
       if (c.parent()) return;
@@ -42,7 +42,7 @@ export function scanStaticCuboids(
       const r = c.rotation();
       const q = new THREE.Quaternion(r.x, r.y, r.z, r.w);
       const yaw = new THREE.Euler().setFromQuaternion(q, 'YXZ').y;
-      out.push({ center: new THREE.Vector3(t.x, t.y, t.z), half: new THREE.Vector3(h.x, h.y, h.z), yaw });
+      out.push({ center: new THREE.Vector3(t.x, t.y, t.z), half: new THREE.Vector3(h.x, h.y, h.z), yaw, handle: c.handle });
     });
   } catch (err) {
     console.warn('[chaos] collider scan failed', err);

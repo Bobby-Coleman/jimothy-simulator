@@ -114,6 +114,7 @@ export class Game {
 
   private frameStep(rawDt: number, render: boolean) {
     this.realTime += rawDt;
+    this.entities.now = this.time;
     this.fpsAccum += rawDt;
     this.fpsFrames++;
     if (this.fpsAccum > 0.5) {

@@ -78,6 +78,7 @@ const _w = new THREE.Vector3();
 export class HydrantFeature implements ChaosFeature {
   readonly id = 'hydrants';
   readonly list: Hydrant[] = [];
+  private byHandle = new Map<number, Hydrant>();
   private bonkWindow = 0;
   private frame = 0;
   private bursts = 0;
@@ -103,7 +104,17 @@ export class HydrantFeature implements ChaosFeature {
       desc: "Pop 3 fire hydrants (bonk 'em!). The city's water bill is not a raccoon problem.",
     });
     const found = scanStaticCuboids(game, (h) => Math.abs(h.x - 0.2) < 0.012 && Math.abs(h.y - 0.4) < 0.012 && Math.abs(h.z - 0.2) < 0.012);
-    for (const f of found) this.addHydrant(f.center.clone().setY(f.center.y - f.half.y), f.yaw, false);
+    for (const f of found) {
+      this.addHydrant(f.center.clone().setY(f.center.y - f.half.y), f.yaw, false);
+      this.byHandle.set(f.handle, this.list[this.list.length - 1]);
+    }
+    // hard hits on a hydrant's own collider (a rolling / flying Jimothy, thrown props, flying people, wrecked cars)
+    game.physics.onContactForce((info) => {
+      const h = this.byHandle.get(info.c1.handle) ?? this.byHandle.get(info.c2.handle);
+      if (!h || !this.armed(h)) return;
+      const other = this.byHandle.has(info.c1.handle) ? info.c2 : info.c1;
+      this.onHit(h, other, info.force);
+    });
     if (!this.list.length) this.buildFallback();
     const world = game.get<any>('world');
     // a POI for the nearest-to-spawn hydrant (maps / guides / tests)
@@ -337,6 +348,32 @@ export class HydrantFeature implements ChaosFeature {
     return !h.active && this.game.time >= h.rearmAt;
   }
 
+  /** Contact-force hit on a hydrant collider (called after the physics step; safe to act). */
+  private onHit(h: Hydrant, other: RAPIER_T.Collider, force: number) {
+    const game = this.game;
+    const b = other.parent();
+    if (!b) return;
+    const e = game.entities.fromCollider(other);
+    const pl = playerOf(game);
+    if (e?.kind === 'player') {
+      // walking into it is just bumping; a ball or a flying raccoon pops it
+      if (!pl || (pl.mode !== 'roll' && pl.mode !== 'ragdoll') || !playerFree(game)) return;
+      if (force < 1800) return;
+      this.burst(h, pl.mode === 'roll' ? 'roll' : 'player', true);
+      if (pl.mode === 'roll') h.ignorePlayerUntil = game.time + 0.45;
+      return;
+    }
+    if (!b.isDynamic() || e?.data?.heldByPlayer) return;
+    // estimated impact speed (Δv from the impulse + what's left)
+    const m = Math.max(0.05, b.mass());
+    const J = force * (game.physics.world.timestep || 1 / 60);
+    const lv = b.linvel();
+    const pre = Math.hypot(lv.x, lv.y, lv.z) + J / m;
+    if (pre < 4.5) return;
+    const near = !!pl?.position && pl.position.distanceTo(h.base) < 35;
+    this.burst(h, e?.kind === 'vehicle' ? 'vehicle' : e?.kind === 'npc' ? 'ragdoll' : 'prop', near);
+  }
+
   private onExplosion(e: any) {
     const p: THREE.Vector3 | undefined = e?.position;
     if (!p) return;
@@ -376,6 +413,8 @@ export class HydrantFeature implements ChaosFeature {
         if (d > (bonking ? 0.8 : 0.72) || Math.abs(probe.y - (h.base.y + 0.45)) > 0.95) continue;
         this.burst(h, bonking ? 'bonk' : rolling ? 'roll' : 'player', true);
         if (bonking) this.bonkWindow = 0;
+        // a ball rolling into it bounces off first (only lingering in the column gets him lifted)
+        if (rolling) h.ignorePlayerUntil = game.time + 0.45;
         break;
       }
     }
@@ -561,7 +600,7 @@ export class HydrantFeature implements ChaosFeature {
     for (const b of bodies) this.hover(b, h, dt, top + 0.3, 1);
   }
 
-  private hover(b: RAPIER_T.RigidBody, h: Hydrant, dt: number, targetY: number, strength: number) {
+  private hover(b: RAPIER_T.RigidBody, h: Hydrant, dt: number, targetY: number, strength: number, lateral = 1) {
     const m = b.mass();
     if (!(m > 0)) return;
     const t = b.translation();
@@ -569,8 +608,8 @@ export class HydrantFeature implements ChaosFeature {
     const lift = m > 160 ? 0.55 : 1;
     const err = targetY - t.y;
     const ay = clamp((14 + 12 * err - 4.6 * v.y) * lift * strength, -2, 46);
-    const ax = -(t.x - h.nozzle.x) * 7 - v.x * 1.3 + rand(-3, 3);
-    const az = -(t.z - h.nozzle.z) * 7 - v.z * 1.3 + rand(-3, 3);
+    const ax = (-(t.x - h.nozzle.x) * 7 - v.x * 1.3 + rand(-3, 3)) * lateral;
+    const az = (-(t.z - h.nozzle.z) * 7 - v.z * 1.3 + rand(-3, 3)) * lateral;
     b.applyImpulse({ x: m * ax * dt, y: m * ay * dt, z: m * az * dt }, true);
     if (Math.random() < 0.05) b.applyTorqueImpulse({ x: rand(-1, 1) * m * 0.05, y: rand(-1, 1) * m * 0.05, z: rand(-1, 1) * m * 0.05 }, true);
   }
@@ -580,7 +619,9 @@ export class HydrantFeature implements ChaosFeature {
     const body = pl.body as RAPIER_T.RigidBody;
     const M = body.mass() || 12;
     pl.wetness = 1;
-    if (pl.mode !== 'ragdoll') {
+    // A tucked-up Jimothy stays a ball on the jet (bowling combos survive) and can steer off it; anyone else flops.
+    const rolling = pl.mode === 'roll';
+    if (pl.mode !== 'ragdoll' && !rolling) {
       // WHOOSH: straight up the jet
       if (pl.held) pl.release?.(false);
       pl.ragdoll('hydrant', 1.2, new THREE.Vector3(rand(-0.4, 0.4) * M, 13 * M, rand(-0.4, 0.4) * M));
@@ -589,9 +630,14 @@ export class HydrantFeature implements ChaosFeature {
       if (h.riding <= 0) h.riding = 0.001;
       return;
     }
-    pl.ragdoll('hydrant', 0.6); // keep flopping while on the jet
+    if (rolling && h.riding <= 0) {
+      body.applyImpulse({ x: 0, y: M * 9, z: 0 }, true);
+      game.sfx('boing', pl.position, 0.8, 1.2);
+    }
+    if (!rolling) pl.ragdoll('hydrant', 0.6); // keep flopping while on the jet
     h.riding += dt;
-    this.hover(body, h, dt, top + 0.55 + Math.sin(game.time * 7) * 0.22, 1);
+    const steering = rolling && game.input.move.lengthSq() > 0.09;
+    this.hover(body, h, dt, top + 0.55 + Math.sin(game.time * 7) * 0.22, 1, steering ? 0.15 : 1);
     if (h.riding > 1.4 && !h.rideScored) {
       h.rideScored = true;
       game.score(150, 'Geyser Rider', pl.position.clone().setY(pl.position.y + 1));

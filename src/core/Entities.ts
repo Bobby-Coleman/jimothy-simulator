@@ -54,6 +54,10 @@ export class EntityRegistry {
   private byCollider = new Map<number, Entity>();
   private handlesOf = new Map<number, number[]>();
   private updatables = new Set<Entity>();
+  /** Game time, updated by Game each frame; stamped on new entities as data.bornAt (cleanup of runtime litter). */
+  now = 0;
+  /** Set once the world is live; entities created after this are "runtime spawned" (loot, spills, gifts...). */
+  worldReady = false;
 
   create(init: Partial<Entity> & { kind: EntityKind; name: string }): Entity {
     const e: Entity = {
@@ -66,6 +70,8 @@ export class EntityRegistry {
     } as Entity;
     if (init.tags instanceof Set) e.tags = init.tags;
     this.list.push(e);
+    if (e.data.bornAt === undefined) e.data.bornAt = this.now;
+    if (this.worldReady && e.data.runtime === undefined) e.data.runtime = true;
     if (e.update) this.updatables.add(e);
     if (e.body) this.bindBody(e.body, e);
     return e;
