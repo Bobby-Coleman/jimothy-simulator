@@ -81,10 +81,14 @@ export class Renderer {
     this.vignette = new VignetteEffect({ offset: 0.28, darkness: 0.45 });
     this.toneMapping = new ToneMappingEffect({ mode: ToneMappingMode.AGX });
     this.saturation = new HueSaturationEffect({ saturation: 0.18 });
+    // HueSaturationEffect only clamps the top (min(color,1.0)); on bright saturated HDR colours (yellow, orange,
+    // gold) it pushes the weak channel negative, which turns those pixels BLACK further down the chain. Clamp at 0.
+    const sat = this.saturation as unknown as { getFragmentShader(): string; setFragmentShader(s: string): void };
+    sat.setFragmentShader(sat.getFragmentShader().replace('min(color,1.0)', 'clamp(color,0.0,1.0)'));
     this.contrast = new BrightnessContrastEffect({ contrast: 0.06, brightness: 0.0 });
     this.smaa = new SMAAEffect({ preset: SMAAPreset.MEDIUM });
 
-    this.setQuality(this.detectQuality());
+    this.setQuality(this.detectQuality(), false);
     window.addEventListener('resize', () => this.resize());
     this.resize();
   }
@@ -96,7 +100,10 @@ export class Renderer {
   private detectQuality(): Quality {
     try {
       const saved = localStorage.getItem('jimothy.quality') as Quality | null;
-      if (saved === 'low' || saved === 'medium' || saved === 'high') return saved;
+      if (saved === 'low' || saved === 'medium' || saved === 'high') {
+        this.qualityWasSaved = true;
+        return saved;
+      }
     } catch {
       /* ignore */
     }
@@ -104,10 +111,13 @@ export class Renderer {
     return mobile ? 'low' : 'high';
   }
 
-  setQuality(q: Quality) {
+  /** True if the quality came from a saved (user/auto) choice rather than device detection. */
+  qualityWasSaved = false;
+
+  setQuality(q: Quality, persist = true) {
     this.quality = q;
     try {
-      localStorage.setItem('jimothy.quality', q);
+      if (persist) localStorage.setItem('jimothy.quality', q);
     } catch {
       /* ignore */
     }

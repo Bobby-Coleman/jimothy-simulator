@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Game } from '../core/Game';
 import type { Entity, EntityKind } from '../core/Entities';
 import { RAPIER, G, groups } from '../core/Physics';
+import { noTinyShadows } from '../world/DetailCuller';
 
 export type ColliderShape = 'box' | 'cylinder' | 'ball' | 'capsule' | 'hull';
 
@@ -67,6 +68,8 @@ export function spawnProp(game: Game, spec: PropSpec, position: THREE.Vector3, r
       m.receiveShadow = true;
     }
   });
+
+  noTinyShadows(holder, 0.3);
 
   // Body origin at the bbox center; place so the bottom sits at position.y
   const bottomOffset = spec.size ? size.y / 2 : _center.y - _box.min.y;

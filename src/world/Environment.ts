@@ -84,7 +84,8 @@ export class Environment implements System {
     sun.castShadow = true;
     const size = game.renderer.shadowMapSize;
     sun.shadow.mapSize.set(size, size);
-    const ext = 38;
+    // Smaller shadow box on lower presets = fewer shadow-pass draw calls (and crisper shadows)
+    const ext = game.renderer.quality === 'high' ? 34 : game.renderer.quality === 'medium' ? 28 : 20;
     sun.shadow.camera.left = -ext;
     sun.shadow.camera.right = ext;
     sun.shadow.camera.top = ext;

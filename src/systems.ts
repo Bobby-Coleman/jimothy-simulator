@@ -15,8 +15,12 @@ import { SlowMoSystem } from './gameplay/SlowMo';
 import { DebugStats } from './core/DebugStats';
 import { PhotoModeSystem } from './gameplay/PhotoMode';
 import { MapSystem } from './gameplay/MapSystem';
+import { StaticBatcher } from './world/StaticBatcher';
+import { DetailCuller } from './world/DetailCuller';
+import { AutoQuality } from './core/AutoQuality';
 import { AudioSystem } from './audio/AudioSystem';
 import { FxSystem } from './fx/FX';
+import { ItemsSystem, ImpactSystem } from './gameplay/items';
 import { SouthSystem } from './world/zones/south';
 import { ObjectiveContent } from './gameplay/content/ObjectiveContent';
 import { MutatorContent } from './gameplay/mutators/MutatorContent';
@@ -25,6 +29,8 @@ import { LandmarkSystem } from './gameplay/quests/landmarks';
 import { NpcSystem } from './entities/npc/NpcSystem';
 import { TrampolineSystem } from './world/zones/north';
 import { SlopSystem } from './gameplay/slop/SlopSystem';
+import { AnimalSystem } from './entities/animals';
+import { HeartQuestSystem } from './gameplay/quests/heart';
 
 /**
  * Registration order = init order = update order.
@@ -57,6 +63,10 @@ export function registerSystems(game: Game) {
   game.add(new LandmarkSystem());
   game.add(new TrampolineSystem());
   game.add(new SlopSystem());
+  game.add(new AnimalSystem());
+  game.add(new HeartQuestSystem());
+  game.add(new ItemsSystem());
+  game.add(new ImpactSystem());
 
   // --- presentation (audio, particles, UI) — keep last
   game.add(new AudioSystem());
@@ -64,4 +74,7 @@ export function registerSystems(game: Game) {
   game.add(new UI());
   game.add(new MapSystem());
   game.add(new DebugStats());
+  game.add(new StaticBatcher());
+  game.add(new DetailCuller());
+  game.add(new AutoQuality());
 }
