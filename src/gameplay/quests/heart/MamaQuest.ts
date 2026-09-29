@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Entity } from '../../../core/Entities';
+import { G, groups } from '../../../core/Physics';
 import { Mom } from '../../../entities/animals';
 import type { HeartCtx, HeartQuest } from './ctx';
 
@@ -129,6 +130,9 @@ export class MamaQuest implements HeartQuest {
     const ctx = this.ctx;
     const game = ctx.game;
     this.fed++;
+    // Final pass: the 3rd snack completes the "Mama's Boy" Instinct (toast, +2,000, combo shout, "Next up…") 0.7 s
+    // before the grooming close-up — hold all of that until the moment is over (the cutscene keeps holding it).
+    if (this.fed >= 3 && !this.done) ctx.hush(2);
     game.events.emit('momFed', { count: this.fed, food });
     game.events.emit('momSnack', { count: this.fed, food });
     game.score(150, this.fed <= 3 ? `Fed Mom ${Math.min(this.fed, 3)}/3` : 'Spoiled Mom Rotten', this.mom.pos.clone());
@@ -149,20 +153,32 @@ export class MamaQuest implements HeartQuest {
     this.groomT = 0;
     if (player.held) player.release(false);
     if (player.mode !== 'walk' && typeof player.setMode === 'function') player.setMode('walk');
+    // Final pass (playtest: the close-up showed the back of Jimothy's head — in the doorway the den's lattice blocks
+    // every side view): Jimothy steps back out onto the alley so Mom comes *out* of the den to groom him, and the
+    // camera sits side-on and a little raised, so both faces are in the shot.
+    const out = new THREE.Vector3(Math.sin(mom.homeYaw), 0, Math.cos(mom.homeYaw));
+    const phys = ctx.game.physics;
+    if (Math.hypot(player.position.x - mom.home.x, player.position.z - mom.home.z) < 3.3) {
+      const spot = mom.home.clone().addScaledVector(out, 3.4);
+      const from = mom.entrance().setY(mom.home.y + 0.4);
+      const blocked = phys.raycast(from, out, 1.7, groups(G.ALL, G.WORLD));
+      const ground = blocked ? null : phys.raycast(spot.clone().setY(mom.home.y + 2), new THREE.Vector3(0, -1, 0), 4, groups(G.ALL, G.WORLD));
+      if (ground && Math.abs(ground.point.y - mom.home.y) < 0.8) player.teleport(spot.setY(ground.point.y + 0.45), mom.homeYaw + Math.PI);
+    }
     mom.groomJimothy(5.2, () => this.finishGrooming());
     ctx.hint('Mom grooms Jimothy\'s face with her tiny paws. Scrub scrub scrub.', 5);
     const mid = new THREE.Vector3();
     const focus = () => mid.copy(player.position).lerp(mom.pos, 0.45).setY(Math.max(player.position.y, mom.pos.y + 0.4) + 0.12);
-    const dx = mom.pos.x - player.position.x;
-    const dz = mom.pos.z - player.position.z;
-    const a0 = Math.atan2(dz, -dx); // perpendicular to the Jimothy→Mom line
+    // where Mom will stand (1.05 m in front of him, see Mom 'groom') — frame the shot for that, not her bed
+    const toMom = new THREE.Vector3(mom.pos.x - player.position.x, 0, mom.pos.z - player.position.z).normalize();
+    const momSpot = player.position.clone().addScaledVector(toMom, 1.05).setY(mom.pos.y + 0.6);
+    const side = new THREE.Vector3(toMom.z, 0, -toMom.x);
+    // side-on two-shot (both faces in profile, nose to nose), raised a bit
+    const a0 = Math.atan2(side.x, side.z);
     ctx.cutscene({
       duration: 11,
       focus,
-      camPos: ctx.orbit(focus, 2.3, 0.45, a0, 0.09, [
-        player.position.clone().setY(player.position.y + 0.3),
-        mom.pos.clone().setY(mom.pos.y + 0.6),
-      ]),
+      camPos: ctx.orbit(focus, 2.5, 0.8, a0, 0.04, [player.position.clone().setY(player.position.y + 0.3), momSpot]),
       fov: 48,
     });
   }

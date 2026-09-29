@@ -96,3 +96,22 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * Lead: a "Janitor" quietly removes old far-away runtime litter so long sessions don't slow down; two more
   5-minute soak tests (0 errors); cleaned up stray preview servers.
 * Final wave started: fresh-eyes playthrough review + fixes, night/golden-hour lighting fixes.
+
+## 03:55–05:10 — Final wave
+* **Night & golden-hour lighting**: sunsets have a sun disc and peach glow (no more white blob), dusk no longer goes
+  black, the stadium field reads green under the lights (was beige haze), the market and City Hall portico have warm
+  lamp pools, balanced low-quality nights, mountains that read at every hour, brighter rim light on Jimothy at night.
+* **Fresh-eyes playthrough** (a critic playing the first 15 minutes): praised the writing, Jimothy, and the first-five-
+  minutes flow; fixed the guide for rain and heights ("Mom · 9 m down"), a false "Give Mom the snack" prompt on the
+  roof, and camera framing for the ceremonies.
+* **Final fixes**: heartfelt cutscenes (Mom's grooming, the kits' family portrait, Danny, the finale) now hold toasts,
+  popups and combo shouts until they end, and Mom steps out of the den so both faces are in frame; City Hall portico
+  night lights; HUD overlap fixes; the "Human Made" secret can't be triggered by accident; the camera respects heavy
+  props like dumpsters.
+* **Final verification** on a production build: typecheck clean, regression playtest 0 errors, all 52 objective
+  scenarios passing, 5-minute random-input soak 0 errors / no NaNs / bounded entity count.
+
+## Numbers
+* ~26 helper agents + the lead. ~200 TypeScript source files. 9 zones, ~60 NPCs, 54 Instincts, 12 mutators,
+  10 golden bobbleheads, 6 heartwarming quests, 6 landmark events, 4 chaos toys, 2 raccoon cannons, 1 finale.
+* First load ≈ 13.6 MB, boots in ~6 s; ≤ 500 draw calls at street level on 'high'.

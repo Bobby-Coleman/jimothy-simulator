@@ -116,7 +116,7 @@ export class ObjectiveContent implements System {
   private lastCandy = -10;
   private scanT = 0;
   /** Mural POIs + the point on the painted wall to look at (found once per scan). */
-  private murals: { pos: THREE.Vector3; look: THREE.Vector3; found: boolean }[] = [];
+  private murals: { pos: THREE.Vector3; look: THREE.Vector3; found: boolean; normal: THREE.Vector3 | null }[] = [];
   private noodle: THREE.Vector3 | null | undefined = undefined;
 
   init(game: Game) {
@@ -290,6 +290,8 @@ export class ObjectiveContent implements System {
       for (const m of this.murals) {
         const to = m.look.clone().sub(cam.position);
         const d = to.length();
+        // final-pass fix: only counts from the plaza side (not from behind / up against the wall)
+        if (m.normal && -(to.x * m.normal.x + to.z * m.normal.z) < 1) continue;
         if (d < 25 && to.divideScalar(d || 1).dot(dir) > 0.5) return this.done('humanMade');
       }
     });
@@ -482,19 +484,31 @@ export class ObjectiveContent implements System {
         if (Math.hypot(pos.x - top.x, pos.z - top.z) < 18 && pos.y > Math.min(60, top.y - 4)) this.done('spaceNoodle');
       } else if (pos.y > 60 && (p.grounded || p.mode === 'climb')) this.done('spaceNoodle');
     }
-    // "Admire" the mural: stand still near it looking at the painted wall for ~1.5 s (walking past doesn't count)
+    // "Admire" the mural: stand still near it looking at the painted wall for ~2 s (walking past doesn't count).
+    // Final-pass fix (playtest: it fired while climbing the wall right next to the mural): must be on the ground
+    // (walk mode + grounded — never climbing/hanging), out on the plaza side 1.5–13 m in front of the painted wall and
+    // roughly in line with it (the mural is ~12 m wide), with both Jimothy and the camera facing it.
     if (this.has('humanMade') && this.murals.length) {
       const cam = game.camera;
       const dir = cam.getWorldDirection(new THREE.Vector3());
-      const still = p.speed < 0.8 && (p.mode === 'walk' || p.mode === 'climb');
+      const still = p.speed < 0.8 && p.mode === 'walk' && p.grounded;
+      const fx = Math.sin(p.facing);
+      const fz = Math.cos(p.facing);
       let looking = false;
       for (const m of this.murals) {
-        if (m.look.distanceTo(p.position) > 9) continue;
+        if (m.normal) {
+          const ox = p.position.x - m.look.x;
+          const oz = p.position.z - m.look.z;
+          const front = ox * m.normal.x + oz * m.normal.z; // metres out from the wall (plaza side > 0)
+          const side = Math.abs(ox * m.normal.z - oz * m.normal.x); // along the wall, from the mural's centre
+          if (front < 1.5 || front > 13 || side > 7.5) continue;
+          if (-(fx * m.normal.x + fz * m.normal.z) < 0.35) continue; // Jimothy turned (roughly) towards it
+        } else if (m.look.distanceTo(p.position) > 9) continue;
         const to = m.look.clone().sub(cam.position).normalize();
         if (to.dot(dir) > 0.8) looking = true;
       }
       this.admire = looking && still ? this.admire + 0.25 : 0;
-      if (this.admire >= 1.5) this.done('humanMade');
+      if (this.admire >= 2) this.done('humanMade');
     }
     const total = game.get<ScoreSystem>('score')?.total ?? 0;
     if (total > 0) this.set('localCelebrity', total >= 100000 ? 100000 : Math.floor(total / 5000) * 5000);
@@ -520,6 +534,7 @@ export class ObjectiveContent implements System {
   private muralWall(poi: THREE.Vector3) {
     const from = poi.clone().add(new THREE.Vector3(0, 1, 0));
     let best: THREE.Vector3 | null = null;
+    let normal: THREE.Vector3 | null = null; // the painted wall's outward (plaza-side) horizontal normal
     let bestD = Infinity;
     for (let i = 0; i < 16; i++) {
       const a = (i / 16) * Math.PI * 2;
@@ -527,9 +542,10 @@ export class ObjectiveContent implements System {
       if (hit && Math.abs(hit.normal.y) < 0.3 && hit.distance < bestD) {
         bestD = hit.distance;
         best = hit.point.clone();
+        normal = new THREE.Vector3(hit.normal.x, 0, hit.normal.z).normalize();
       }
     }
     const look = best ? best.add(new THREE.Vector3(0, 0.8, 0)) : poi.clone().add(new THREE.Vector3(0, 1.5, 0));
-    return { pos: poi.clone(), look, found: !!best };
+    return { pos: poi.clone(), look, found: !!best, normal };
   }
 }

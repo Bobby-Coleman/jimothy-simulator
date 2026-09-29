@@ -2376,6 +2376,11 @@
 }
 .gp-icon svg { width: 62%; height: 62%; fill: currentColor; }
 .gp-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Final pass (playtest: the sub-label got cut to "Trash …"): the pill grows a little and may wrap to a 2nd line;
+   the sub-label moves down whole instead of being truncated. */
+.guide-pill { max-width: min(30em, 58vw); }
+.gp-title { white-space: normal; line-height: 1.15; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.gp-title small { white-space: nowrap; }
 .gp-title i { font-style: normal; color: var(--gold); }
 .gp-dist { flex: none; color: var(--gold); }
 .gp-arrow { flex: none; width: 1.35em; height: 1.35em; } /* rotated every frame: no transition */
@@ -2397,6 +2402,12 @@
   will-change: transform;
 }
 .waypoint.show { opacity: 1; }
+/* final pass: steps aside (almost invisible) over a speech bubble or the hint line — see Guide.placeMarker */
+.waypoint.show.muted { opacity: 0.12; }
+/* final pass: a heartfelt cutscene is playing — what was already up fades out; new ones are held (Hud.setHushed) */
+.hud.hushed .hud-right,
+.hud.hushed .hud-popups,
+.hud.hushed .hud-cele { opacity: 0; transition: opacity 0.3s; }
 .wp-pin {
   position: absolute;
   left: -1.15em;

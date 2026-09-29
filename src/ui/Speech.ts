@@ -29,6 +29,8 @@ export class SpeechBubbles {
   readonly el: HTMLElement;
   private list: Bubble[] = [];
   private lastChitter = 0;
+  /** Final pass: screen-space centres of the bubbles shown this frame (the guide star steps aside from them). */
+  readonly anchors: { x: number; y: number }[] = [];
 
   constructor(
     private game: Game,
@@ -119,6 +121,7 @@ export class SpeechBubbles {
   }
 
   update(dt: number, paused: boolean) {
+    this.anchors.length = 0;
     if (!this.list.length) return;
     const cam = this.game.camera;
     const W = window.innerWidth;
@@ -163,6 +166,7 @@ export class SpeechBubbles {
         continue;
       }
       const s = clamp(1.25 - dist / 30, 0.62, 1.05);
+      if (!b.dying) this.anchors.push({ x, y: y - 32 * s }); // bubble hangs above its anchor point
       b.el.style.visibility = '';
       b.el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -100%) scale(${s.toFixed(3)})`;
       b.el.style.zIndex = String(1000 - Math.round(dist * 10));

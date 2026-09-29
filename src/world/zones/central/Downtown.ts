@@ -14,6 +14,7 @@ import { loadMerged } from './lib/models';
 import { cylinderCollider, glowAtNight, onFrame, Rng, trimeshFromGeometry, boxColliderEuler } from './lib/util';
 import { terrainHeight } from '../../terrain';
 import { RAPIER, G, groups } from '../../../core/Physics';
+import { addNightRig } from '../south/nightLight';
 
 /**
  * E — Downtown: the Civic Plaza with its fountain and the bronze Jimothy statue, City Hall (grand steps,
@@ -44,6 +45,7 @@ export const Downtown: ZoneBuilder = {
     buildFountain(game, world, batch);
     await buildStatue(game, world, batch);
     buildCityHall(game, world, batch);
+    buildCityHallNightLights(game, world, batch);
     buildTowers(game, world, batch, rng);
     buildNoodle(game, world, batch);
     await buildPlazaDecor(game, world, batch, rng);
@@ -390,6 +392,89 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
     [CH.stepsX0 - 2.5, 11.5],
     [CH.stepsX0 - 2.5, 15.5],
   ]);
+}
+
+/**
+ * Polish (night readability): the City Hall portico and the plaza at the foot of its steps were nearly black under the
+ * blue moon fill, and Jimothy turned into a silhouette there. Same recipe as Old Ballard's back alleys: warm lamp heads
+ * + lit windows join the zone batch's existing furniture / lamp-glass / window / trim materials, and warm light pools
+ * join its light-pool batch (additive, night-only) → no extra draw calls.
+ * The pools and glow don't light Jimothy himself, so City Hall also gets ONE proximity-gated rig on the shared night
+ * PointLight from south/nightLight.ts. That light already exists (stadium / market hall rigs, 120+ m away), so this adds
+ * no real-time light and no shader change: it just parks here at night while the player is near City Hall.
+ */
+function buildCityHallNightLights(game: Game, world: World, batch: Batch) {
+  // (same derived dimensions as buildCityHall)
+  const y0 = walkY(CH.x0, 0);
+  const baseTop = y0 + CH.base; // portico floor
+  const mbX0 = CH.x0 + 6; // portico back wall (main block front)
+  const soffit = baseTop + 9; // underside of the entablature (portico ceiling)
+  const stepW = 26;
+  const fm = furnMat();
+  const glass = lampGlassMat(game);
+  const IRON = 0x1f2d27,
+    BRASS = 0xb8923f; // historicLamp's palette
+  // hex lantern, origin = centre of the glass: iron/brass frame (furniture batch) + glowing glass (lamp-glass batch)
+  const frame = mergeColored([
+    { geo: new THREE.ConeGeometry(0.36, 0.3, 6), color: IRON, matrix: T(0, 0.55, 0) },
+    { geo: new THREE.CylinderGeometry(0.3, 0.3, 0.06, 6), color: BRASS, matrix: T(0, 0.38, 0) },
+    { geo: new THREE.CylinderGeometry(0.2, 0.13, 0.12, 6), color: IRON, matrix: T(0, -0.41, 0) },
+    { geo: new THREE.SphereGeometry(0.06, 8, 6), color: BRASS, matrix: T(0, -0.5, 0) },
+    ...[0, 1, 2, 3, 4, 5].map((k) => ({ geo: new THREE.BoxGeometry(0.035, 0.72, 0.035), color: IRON, matrix: T(Math.sin((k / 6) * Math.PI * 2) * 0.235, 0, Math.cos((k / 6) * Math.PI * 2) * 0.235) })),
+  ]);
+  const lantern = new THREE.CylinderGeometry(0.25, 0.2, 0.7, 6);
+  // four lanterns hanging on chains from the portico ceiling, between the column pairs
+  const hx = CH.x0 + 4.2,
+    hy = baseTop + 6.2;
+  const chainL = soffit - (hy + 0.7);
+  for (const z of [-9, -3, 3, 9]) {
+    batch.add(frame, fm, { matrix: T(hx, hy, z) });
+    batch.add(lantern, glass, { matrix: T(hx, hy, z), castShadow: false });
+    batch.add(new THREE.CylinderGeometry(0.025, 0.025, chainL, 5), fm, { matrix: T(hx, hy + 0.7 + chainL / 2, z), color: IRON });
+  }
+  // two wall lanterns on brackets flanking the bronze doors
+  for (const s of [-1, 1]) {
+    const lx = mbX0 - 0.55,
+      ly = baseTop + 3.1,
+      lz = s * 3.15;
+    batch.add(frame, fm, { matrix: T(lx, ly, lz, 0, 0.75) });
+    batch.add(lantern, glass, { matrix: T(lx, ly, lz, 0, 0.75), castShadow: false });
+    batch.add(
+      mergeColored([
+        { geo: new THREE.BoxGeometry(0.05, 0.4, 0.22), color: IRON, matrix: T(mbX0 - 0.025, ly + 0.45, lz) },
+        { geo: new THREE.BoxGeometry(0.6, 0.06, 0.06), color: IRON, matrix: T(mbX0 - 0.3, ly + 0.555, lz) },
+      ]),
+      fm,
+    );
+  }
+  // two always-lit tall windows on the portico back wall (same size/trim as the building's other windows)
+  const win = windowMats(game);
+  const trim = trimMat();
+  for (const s of [-1, 1]) {
+    const M = T(mbX0 - 0.03, baseTop + 3.2, s * 9, -Math.PI / 2);
+    batch.add(new THREE.PlaneGeometry(1.5, 3.2), win.lit, { matrix: M, castShadow: false });
+    batch.add(new THREE.BoxGeometry(1.9, 0.18, 0.25), trim, { matrix: M.clone().multiply(T(0, -1.7, 0.1)), color: 0xefe8da });
+    batch.add(new THREE.BoxGeometry(2.0, 0.35, 0.18), trim, { matrix: M.clone().multiply(T(0, 1.8, 0.05)), color: 0xefe8da });
+  }
+  // stair lamps on the cheek-wall newels at the foot of the grand steps (same acorn lamp as the plaza)
+  placeBatched(
+    world,
+    batch,
+    historicLamp(game),
+    [-1, 1].map((s) => ({ x: CH.stepsX0 + 0.8, y: y0 + CH.base + 0.5, z: s * (stepW / 2 + 0.6), ry: 0 })),
+    { collider: new THREE.Vector3(0.3, 4.6, 0.3), name: 'plazaLamps' },
+  );
+  // warm pools (night only): portico floor under the lanterns, the plaza below the stair lamps, and light spilling down
+  // the steps. Pool y = the actual surface (a pool plane below the paving is hidden by it).
+  const px = CH.stepsX0 - 1.6;
+  lightPools(game, world, [
+    ...[-9, -3, 3, 9].map((z) => ({ x: CH.x0 + 3.9, y: baseTop, z, r: 3.0 })),
+    ...[-1, 1].map((s) => ({ x: px, y: walkY(px, s * 12.8), z: s * 12.8, r: 4.6 })),
+    { x: CH.stepsX0 - 2.4, y: walkY(CH.stepsX0 - 2.4, 0), z: 0, r: 5.0 },
+  ], batch);
+  // the one real light (see above): warm wash from high up at the entablature's front edge (lights the column fronts
+  // AND tops Jimothy from above, so he reads from behind too), on while Jimothy is within ~22 m (off beyond 34 m)
+  addNightRig(game, { pos: new THREE.Vector3(CH.x0 + 1, baseTop + 8.3, 0), color: 0xffc58a, intensity: 1.35, distance: 30, decay: 0, radius: 22, fade: 12 });
 }
 
 function sphereCollider(game: Game, c: THREE.Vector3, r: number) {
@@ -846,7 +931,9 @@ async function buildPlazaDecor(game: Game, world: World, batch: Batch, rng: Rng)
   for (const z of [-20.5, 20.5]) for (let x = 72; x <= 114; x += 10.5) lamps.push({ x, y: walkY(x, z), z, ry: 0 });
   for (const [x, z] of [[74, -8], [74, 8], [104, -9], [104, 9], [140, -20], [156, -20], [140, 20], [156, 20]] as [number, number][]) lamps.push({ x, y: walkY(x, z), z, ry: 0 });
   placeBatched(world, batch, historicLamp(game), lamps, { collider: new THREE.Vector3(0.3, 4.6, 0.3), name: 'plazaLamps' });
-  lightPools(game, world, lamps.map((l) => ({ x: l.x, y: l.y - 0.15, z: l.z, r: 5 })), batch);
+  // polish (night readability): pools sit ON the plaza paving (walkY). At walkY - 0.15 (road level, copied from the
+  // avenue lamps) they were buried 12 cm under Downtown's raised paving and never showed → the plaza read nearly black.
+  lightPools(game, world, lamps.map((l) => ({ x: l.x, y: l.y, z: l.z, r: 5 })), batch);
   // trees in grates along the plaza edges + around city hall
   const trees: Xf[][] = [[], [], []];
   const grates: Xf[] = [];

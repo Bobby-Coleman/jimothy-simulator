@@ -119,6 +119,7 @@ export class DannyQuest implements HeartQuest {
     if ((player.mode === 'roll' || player.mode === 'ragdoll') && typeof player.setMode === 'function') player.setMode('walk');
     danny.reunion();
     this.done = true;
+    ctx.hush(1.5); // final pass: the Instinct toast / popups wait for the reunion close-up below
     ctx.game.events.emit('dannyReunion', {});
     ctx.onComplete('danny');
     const mid = player.position.clone().lerp(danny.pos, 0.5).setY(player.position.y + 0.8);

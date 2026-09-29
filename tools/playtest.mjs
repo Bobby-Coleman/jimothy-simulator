@@ -1472,12 +1472,23 @@ const objScenarios = {
       T.g.get('camera').snapBehind(-Math.PI / 2 + 0.9);
       T.move(0, 1, 2.5);
       const accidental = T.O.isDone('humanMade');
-      // …stopping to look at it does
+      // …nor climbing the painted wall and hanging on it (final-pass playtest report)
+      T.tp(19.3, 20, -Math.PI / 2);
+      T.g.input.virtual.buttons.add('jump'); // climbing starts with jump held against a wall
+      T.move(0, 1, 1.4);
+      T.g.input.virtual.buttons.delete('jump');
+      const climbMode = T.p.mode;
+      T.g.get('camera').snapBehind(-Math.PI / 2);
+      T.step(3);
+      const climbAccidental = T.O.isDone('humanMade');
+      // …stopping to look at it (on the plaza, facing it, ~2 s) does
       T.tp(24, 15.5, -Math.PI / 2);
       T.g.get('camera').snapBehind(-Math.PI / 2);
       T.g.get('camera').pitch = -0.1;
-      T.step(2.2);
-      return T.result('humanMade', { accidental });
+      T.step(3);
+      const r = T.result('humanMade', { accidental, climbMode, climbAccidental });
+      r.pass = r.pass && !accidental && !climbAccidental;
+      return r;
     });
   },
   async obj_backFromTheVoid() {

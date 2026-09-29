@@ -222,6 +222,19 @@ export class HeartCtx {
     this.game.hint(text, secs);
   }
 
+  /**
+   * Final pass: hold HUD notifications (Instinct toasts, score popups, combo shouts, "Next up…") for `secs` of game
+   * time. Call it just before completing a quest whose heartfelt close-up follows: the rewards would otherwise pop
+   * up over it. Cutscenes themselves (game.state 'cutscene') keep holding them automatically; see UI.hush.
+   */
+  hush(secs: number) {
+    try {
+      this.ui?.hush?.(secs);
+    } catch {
+      /* optional */
+    }
+  }
+
   toast(title: string, text?: string, icon = 'heart') {
     const ui = this.ui;
     if (ui?.toast) ui.toast(title, text, icon);

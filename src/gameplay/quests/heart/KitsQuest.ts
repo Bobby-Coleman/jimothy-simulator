@@ -127,6 +127,7 @@ export class KitsQuest implements HeartQuest {
     ctx.confetti(top, 1.4);
     for (let i = 1; i <= 4; i++) ctx.after(i * 0.6, () => ctx.hearts(top, 6));
     ctx.game.sfx('happy', mom.pos, 1, 1.0);
+    ctx.hush(1.5); // final pass: the Instinct toast / popups wait for the family-portrait close-up below
     ctx.onComplete('kits');
     ctx.hint('All five kits are home! Mom counts them twice. Everyone is accounted for.', 5);
     // a little family portrait moment, looking in through the den entrance (unless something else has the camera)

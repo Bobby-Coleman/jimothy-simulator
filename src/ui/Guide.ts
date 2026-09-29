@@ -395,10 +395,18 @@ export class Guide {
 
   constructor(
     readonly ctx: UiCtx,
-    readonly hud: { hint(text: string, secs?: number): void; hintLeft: number; hintRaw: string },
+    readonly hud: { hint(text: string, secs?: number): void; hintLeft: number; hintRaw: string; hintBox?(): DOMRect | null },
     pillParent: HTMLElement,
     markerParent: HTMLElement,
-    private opts: { canShow: () => boolean; canCoach: () => boolean; openPanel: () => void },
+    private opts: {
+      canShow: () => boolean;
+      canCoach: () => boolean;
+      openPanel: () => void;
+      /** Final pass: a heartfelt cutscene holds HUD notifications — the "Next up" announcement waits. */
+      hushed?: () => boolean;
+      /** Final pass: screen positions of visible speech bubbles (the star dims instead of covering them). */
+      bubbles?: () => readonly { x: number; y: number }[];
+    },
   ) {
     this.coach = new Coach(this);
     try {
@@ -444,6 +452,11 @@ export class Guide {
 
   isTracked(id: string) {
     return !this.customPoi && this.cur?.id === id;
+  }
+
+  /** The goal pill is on screen showing this Instinct (final pass: the HUD ticker then doesn't repeat it). */
+  pillShows(id: string) {
+    return this.visible && this.isTracked(id);
   }
 
   get manualId() {
@@ -506,7 +519,7 @@ export class Guide {
     if (this.opts.canCoach()) this.coach.update(dt);
     this.resolveT -= dt;
     if (this.resolveT <= 0) this.resolve();
-    if (this.announceT > 0) {
+    if (this.announceT > 0 && !this.opts.hushed?.()) {
       this.announceT -= dt;
       // Wait (up to ~8 s) for the hint line to be free: quests/washing jokes talk first.
       if (this.announceT <= 0) {
@@ -729,6 +742,19 @@ export class Guide {
     const px = (x * 0.5 + 0.5) * W;
     const py = (-y * 0.5 + 0.5) * H;
     el.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0)`;
+    // Final pass (playtest: the star sat on top of NPC speech bubbles and the hint line): fade it right down while
+    // it's within ~120 px of a bubble, or over / just above the hint line at the bottom. The pill still points the way.
+    const sy = py - 18; // the star is drawn above its anchor
+    let muted = false;
+    for (const b of this.opts.bubbles?.() ?? []) {
+      if (Math.hypot((b.x - px) * 0.8, b.y - sy) < 120) {
+        muted = true;
+        break;
+      }
+    }
+    const hb = muted ? null : this.hud.hintBox?.();
+    if (hb && hb.width > 0 && px > hb.left - 60 && px < hb.right + 60 && sy > hb.top - 70 && sy < hb.bottom + 30) muted = true;
+    el.classList.toggle('muted', muted);
     el.classList.toggle('edge', !on);
     if (!on) el.style.setProperty('--ang', `${((ang * 180) / Math.PI).toFixed(1)}deg`);
     const t = `${Math.round(dist)} m`;

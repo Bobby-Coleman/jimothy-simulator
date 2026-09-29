@@ -77,6 +77,8 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
   private _hudVisible = true;
   private photoMode = false;
   private areaBanners = true;
+  private hushOn = false;
+  private hushUntil = -1;
 
   init(game: Game) {
     this.game = game;
@@ -111,7 +113,12 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
         this.settings.showHud,
       canCoach: () => this.mode === 'play' && this.game.state === 'playing' && !this.photoMode && !this.dialog.open,
       openPanel: () => this.toggleObjectives(),
+      // final pass: the "Next up…" announcement waits for a heartfelt cutscene to end (see hush)
+      hushed: () => this.hud.isHushed,
+      bubbles: () => this.speechLayer.anchors,
     });
+    // final pass: the top-right progress ticker skips the Instinct the goal pill is already showing
+    this.hud.isPillGoal = (id) => this.guide.pillShows(id);
     this.lockEl = h('button', {
       class: 'lockprompt',
       html: `<span class="kc kc-mouse kc-mouse-l"><i></i></span><span><b>Click to play</b><small>Esc pauses · Tab shows Instincts</small></span>`,
@@ -211,6 +218,28 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
   /** Big center shout, like the combo-end "STRIKE!". */
   celebrate(word: string, sub?: string, color?: string) {
     this.hud.celebrate(word, sub, color);
+  }
+
+  /**
+   * Final pass: hold HUD notifications (toasts, score popups, combo shouts, progress ticker, the guide's "Next up"
+   * hint) and replay them afterwards, so they don't trample a heartfelt moment. Automatic while
+   * game.state === 'cutscene' (heart-quest close-ups via HeartCtx.cutscene, the finale). `hush(secs)` also holds
+   * them for `secs` of game time — for moments whose rewards land just *before* the camera cuts in (Mom's 3rd snack
+   * completes "Mama's Boy" 0.7 s before her grooming close-up). `hush(true)` holds until `hush(false)`.
+   */
+  hush(on: boolean | number) {
+    if (on === true) this.hushOn = true;
+    else if (on === false) {
+      this.hushOn = false;
+      this.hushUntil = -1;
+    } else if (on > 0) this.hushUntil = Math.max(this.hushUntil, this.game.time + on);
+    this.syncHush();
+  }
+
+  private syncHush() {
+    const st = this.game.state;
+    if (st === 'paused') return; // pausing mid-cutscene must not flush the held notifications behind the menu
+    this.hud.setHushed(this.hushOn || this.game.time < this.hushUntil || st === 'cutscene');
   }
 
   /** Speech bubble above an entity / Object3D / position. */
@@ -433,6 +462,7 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     }
 
     const paused = game.state === 'paused';
+    this.syncHush();
     this.hud.update(dt);
     this.speechLayer.update(dt, paused);
     this.dialog.update(dt, paused || this.mode !== 'play');

@@ -120,6 +120,17 @@ export class Hud {
   private comboTxt = '';
   private lowCombo = false;
   private frame = 0;
+  /**
+   * Final pass: while hushed (a heartfelt cutscene: Mom's grooming, the kits' portrait, Danny's reunion, the finale),
+   * toasts, score popups, combo shouts and the progress ticker are *held* — not dropped — and replayed, gently
+   * staggered, once it ends. Driven by UI.lateUpdate (see UI.hush). Hint lines are not held: they're the captions.
+   */
+  private hushed = false;
+  private held: (() => void)[] = [];
+  /** Set by UI: true when the guide pill is already showing this objective (the ticker would just repeat it). */
+  isPillGoal: ((id: string) => boolean) | null = null;
+  private hintBoxCache: DOMRect | null = null;
+  private hintBoxAge = 99;
 
   constructor(
     private ctx: UiCtx,
@@ -227,9 +238,41 @@ export class Hud {
     ev.on('cameraFlash', (p: any) => this.onCameraFlash(p));
   }
 
+  // ------------------------------------------------------------------ hush (heartfelt cutscenes)
+  get isHushed() {
+    return this.hushed;
+  }
+
+  setHushed(on: boolean) {
+    if (on === this.hushed) return;
+    this.hushed = on;
+    this.el.classList.toggle('hushed', on); // CSS fades out whatever was already up (toasts, popups, shouts)
+    if (on) return;
+    const q = this.held.splice(0);
+    q.forEach((fn, i) => window.setTimeout(() => (this.hushed ? this.held.push(fn) : fn()), 450 + i * 280));
+  }
+
+  /** While hushed, queue `fn` for after the cutscene instead of showing it now (returns true when held). */
+  private hold(fn: () => void): boolean {
+    if (!this.hushed) return false;
+    if (this.held.length < 30) this.held.push(fn);
+    return true;
+  }
+
+  /** Screen rect of the hint line while it's showing (the guide star steps aside), else null. Re-measured rarely. */
+  hintBox(): DOMRect | null {
+    if (this.hintT <= 0) return null;
+    if (this.hintBoxAge > 0.5 || !this.hintBoxCache) {
+      this.hintBoxCache = this.hintEl.getBoundingClientRect();
+      this.hintBoxAge = 0;
+    }
+    return this.hintBoxCache;
+  }
+
   // ------------------------------------------------------------------ score popups
   private onScore(e: ScoreAdded) {
     if (!e || !(e.points > 0)) return;
+    if (this.hold(() => this.onScore(e))) return;
     replay(this.scoreVal, 'bump');
     const label = String(e.label || 'Something').toUpperCase();
     const live = this.popupList.filter((p) => !p.dying);
@@ -274,6 +317,7 @@ export class Hud {
 
   // ------------------------------------------------------------------ celebration
   celebrate(word: string, sub?: string, color?: string) {
+    if (this.hold(() => this.celebrate(word, sub, color))) return;
     this.celeEl.textContent = '';
     const c = h('div', { class: 'cele' }, h('div', { class: 'cele-word ol-thick', text: word }), sub ? h('div', { class: 'cele-sub ol', text: sub }) : null);
     if (color) c.style.setProperty('--cele', color);
@@ -284,6 +328,7 @@ export class Hud {
 
   // ------------------------------------------------------------------ toasts
   toast(opts: ToastOpts) {
+    if (this.hold(() => this.toast(opts))) return;
     const live = this.toastList.filter((t) => !t.dying).length;
     if (live >= 3) {
       this.toastQueue.push(opts);
@@ -327,6 +372,9 @@ export class Hud {
     if (!p?.id) return;
     const target = p.target ?? 1;
     if (target <= 1 || p.progress >= target) return;
+    if (this.hold(() => this.onProgress(p))) return;
+    // Final pass: the goal pill (top-centre) already shows this Instinct's progress; don't repeat it top-right.
+    if (this.isPillGoal?.(p.id)) return;
     const o = this.ctx.game.get<ObjectivesSystem>('objectives')?.get(p.id);
     if (o?.hidden) return;
     const now = performance.now();
@@ -352,6 +400,7 @@ export class Hud {
 
   hint(text: string, duration = 2.5) {
     this.hintRaw = text;
+    this.hintBoxAge = 99; // re-measure for the guide star (hintBox)
     this.hintEl.innerHTML = fillTokens(text, this.ctx.device);
     this.hintEl.classList.add('show');
     replay(this.hintEl, 'pulse');
@@ -397,6 +446,7 @@ export class Hud {
   update(dt: number) {
     const game = this.ctx.game;
     this.frame++;
+    this.hintBoxAge += dt;
     this.updateScore(dt);
 
     for (const p of this.popupList) {
