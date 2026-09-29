@@ -36,6 +36,8 @@ export class NpcSystem implements System {
   /** Hard cap for auto-population from world.npcSpawns. */
   maxPopulation = 50;
   minPopulation = 30;
+  /** Chance that someone who sees Jimothy from behind tries the "here kitty kitty" gag (global 22 s cooldown). */
+  kittyChance = 0.55;
   readonly list: Npc[] = [];
   player: Jimothy | null = null;
   game!: Game;
@@ -348,12 +350,12 @@ export class NpcSystem implements System {
     }
   }
 
-  onKnockdown(npc: Npc, cause: string, byPlayer: boolean) {
+  onKnockdown(npc: Npc, cause: string, byPlayer: boolean, by?: Entity) {
     const game = this.game;
     const pos = npc.position.clone();
     pos.y += 1.4;
     // (the audio system screams on 'npcRagdoll')
-    game.events.emit('npcRagdoll', { entity: npc.entity, cause, npc, byPlayer, position: pos.clone() });
+    game.events.emit('npcRagdoll', { entity: npc.entity, cause, npc, byPlayer, by, position: pos.clone() });
     if (cause !== 'script' && cause !== 'faint' && cause !== 'fall') this.alarm(npc.position, 9, cause, npc);
     if (!byPlayer) return;
     const info = TYPE_INFO[npc.type];
@@ -462,14 +464,25 @@ export class NpcSystem implements System {
         const sp = Math.max(3, Math.min(9, pre * 0.6));
         if (_v.lengthSq() > 1e-4) _v.normalize().multiplyScalar(sp);
         _v.y = 2;
-        this.queueHit(npc, { cause: 'ragdoll', dv: _v.clone(), byPlayer: owner.knockByPlayer }, J);
+        this.queueHit(npc, { cause: 'ragdoll', dv: _v.clone(), byPlayer: owner.knockByPlayer, by: owner.entity }, J);
       }
       return;
     }
-    const heavy = J > 160;
-    if (!((J > 10 && pre > 4) || heavy)) return;
     const vehicle = e?.kind === 'vehicle' || e?.tags.has('vehicle');
     const thrownByPlayer = !!e && (e.data.heldByPlayer || (typeof e.data.thrownAt === 'number' && game.time - e.data.thrownAt < 4));
+    if (thrownByPlayer) {
+      if (J < 6 || pre < 2.5) return;
+    } else {
+      // The walker is kinematic: when it walks into a resting prop the contact impulse is large but harmless.
+      const t = ob.translation();
+      const tx = t.x - npc.position.x;
+      const tz = t.z - npc.position.z;
+      const tl = Math.hypot(tx, tz) || 1;
+      const walkingInto = (npc.velocity.x * tx + npc.velocity.z * tz) / tl > 0.2;
+      if (walkingInto && vAfter < 6) return;
+      // otherwise it has to be a real incoming hit: still moving after the contact, or a big impulse
+      if (!((J > 25 && vAfter > 1.5 && pre > 4) || J > 90)) return;
+    }
     _v.set(lv.x, 0, lv.z);
     if (_v.lengthSq() < 1e-4) {
       // use the separation direction instead
@@ -479,7 +492,7 @@ export class NpcSystem implements System {
     const mag = THREE.MathUtils.clamp((pre * m) / 18, 2.5, vehicle ? 16 : 11);
     _v.normalize().multiplyScalar(mag);
     _v.y = 1.5 + mag * 0.35;
-    this.queueHit(npc, { cause: vehicle ? 'vehicle' : 'prop', dv: _v.clone(), byPlayer: thrownByPlayer || (vehicle && !!e?.data.drivenByPlayer) }, J);
+    this.queueHit(npc, { cause: vehicle ? 'vehicle' : 'prop', dv: _v.clone(), byPlayer: thrownByPlayer || (vehicle && !!e?.data.drivenByPlayer), by: e }, J);
   }
 
   private onCollision(c1: RAPIER.Collider, c2: RAPIER.Collider, started: boolean) {
@@ -502,7 +515,7 @@ export class NpcSystem implements System {
     if (sp < 2) return;
     _v.set(lv.x, 0, lv.z).multiplyScalar(1.1);
     _v.y = 2 + sp * 0.25;
-    this.queueHit(npc, { cause: 'vehicle', dv: _v.clone(), byPlayer: !!e.data.drivenByPlayer }, sp * 100);
+    this.queueHit(npc, { cause: 'vehicle', dv: _v.clone(), byPlayer: !!e.data.drivenByPlayer, by: e }, sp * 100);
   }
 
   private processExplosion(ex: Explosion) {

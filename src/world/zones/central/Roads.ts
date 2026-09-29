@@ -116,7 +116,7 @@ export const CentralRoads: ZoneBuilder = {
   async build(game: Game, world: World) {
     await loadFonts();
     const mats = await roadMaterials(game);
-    const batch = new Batch('roads', 240);
+    const batch = new Batch('roads', 100000); // one chunk: the grid spans the whole map and is visible from everywhere
     const atlas = sharedAtlas(game);
     const paint = new Paint();
     const rng = new Rng(20260713);

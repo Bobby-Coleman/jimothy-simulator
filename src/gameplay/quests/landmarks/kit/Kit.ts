@@ -374,6 +374,12 @@ export class Kit {
           ...(opts.look ? { outfit: opts.look } : {}),
         });
         if (npc && typeof npc === 'object' && typeof npc.then !== 'function') {
+          // npcs.spawn snaps to the first surface below +30 m, which puts NPCs on the roof when the spot
+          // is under cover (City Hall portico). Re-seat from just above the spot and fix their home.
+          if (typeof npc.teleport === 'function') {
+            npc.teleport(opts.position.clone(), opts.facing);
+            if (npc.home?.center && npc.position) npc.home.center.copy(npc.position);
+          }
           const a = new NpcActor(this, npc, opts);
           if (opts.facing != null) a.face(opts.facing);
           this.actors.add(a);

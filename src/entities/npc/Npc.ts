@@ -46,6 +46,8 @@ export interface KnockOptions {
   byPlayer?: boolean;
   /** Extra flailing strength (default 1). */
   flail?: number;
+  /** The entity that hit us (thrown prop, vehicle, other ragdoll...). */
+  by?: Entity;
 }
 
 type CustomFn = (npc: Npc, dt: number, game: Game) => void;
@@ -720,6 +722,8 @@ export class Npc {
           _a.set(this.position.x - pp.x, 0, this.position.z - pp.z);
           if (_a.lengthSq() < 1e-4) _a.set(1, 0, 0);
           _a.normalize();
+          // spread selfie-takers in an arc around Jimothy instead of queueing on one side
+          _a.applyAxisAngle(UP, ((this.idx % 5) - 2) * 0.55);
           this.goal = _b.copy(pp).addScaledVector(_a, 1.45).clone();
           this.goalSpeed = this.runSpeed * 0.7;
           this.arriveRadius = 0.35;
@@ -909,7 +913,7 @@ export class Npc {
     _a.set(this.position.x - pl.position.x, 0, this.position.z - pl.position.z).normalize();
     const facingDot = Math.sin(f) * _a.x + Math.cos(f) * _a.z;
     const kittyTypes: NpcType[] = ['pedestrian', 'grandma', 'tourist', 'techbro', 'fan'];
-    if (kittyTypes.includes(this.type) && dp < 6 && dp > 1.8 && facingDot < -0.35 && this.sys.kittyReady() && this.rng() < 0.55) {
+    if (kittyTypes.includes(this.type) && dp < 6 && dp > 1.8 && facingDot < -0.35 && this.sys.kittyReady() && this.rng() < this.sys.kittyChance) {
       this.startKitty();
       return;
     }
@@ -1351,7 +1355,7 @@ export class Npc {
     this.knockByPlayer = !!o.byPlayer;
     this.knockedAt = game.time;
     this.setExpression(o.cause === 'faint' ? 'shock' : this.type === 'kid' ? 'happy' : 'shock');
-    this.sys.onKnockdown(this, o.cause, !!o.byPlayer);
+    this.sys.onKnockdown(this, o.cause, !!o.byPlayer, o.by);
   }
 
   /** Called by the system after the physics step while ragdolled. */

@@ -224,11 +224,31 @@ export class Collectibles implements System {
     return out;
   }
 
+  /**
+   * Pick at most `n` POI spots: already-collected ones first (keeps saved progress stable), then round-robin across
+   * zones (`bobblehead:<zone><n>`) so the set is spread over the map even when builders add more than 10.
+   */
+  private choose(spots: { id: string; pos: THREE.Vector3 }[], n: number) {
+    const out = spots.filter((s) => this.collected.has(s.id)).slice(0, n);
+    const groups = new Map<string, { id: string; pos: THREE.Vector3 }[]>();
+    for (const s of spots) {
+      if (out.includes(s)) continue;
+      const zone = s.id.replace(/^bobblehead[:_\-]/i, '').replace(/[\d_\-]+$/, '') || '?';
+      if (!groups.has(zone)) groups.set(zone, []);
+      groups.get(zone)!.push(s);
+    }
+    const lists = [...groups.values()];
+    for (let i = 0; out.length < n && lists.some((l) => l.length > i); i++) {
+      for (const l of lists) if (l[i] && out.length < n) out.push(l[i]);
+    }
+    return out;
+  }
+
   private place() {
     this.placed = true;
     const world = this.game.get<World>('world');
     if (!world) return;
-    const spots = this.poiSpots(world).slice(0, TOTAL);
+    const spots = this.choose(this.poiSpots(world), TOTAL);
     const taken = spots.map((s) => ({ pos: s.pos }));
     const auto: { id: string; pos: THREE.Vector3 }[] = [];
     for (const f of FALLBACKS) {
@@ -248,8 +268,9 @@ export class Collectibles implements System {
     const world = this.game.get<World>('world');
     if (!world) return;
     const have = new Set(this.items.map((b) => b.id));
-    for (const s of this.poiSpots(world)) {
-      if (have.has(s.id)) continue;
+    const fresh = this.poiSpots(world).filter((s) => !have.has(s.id));
+    if (!fresh.length || (this.items.length >= TOTAL && !this.items.some((b) => b.auto && !b.collected))) return;
+    for (const s of this.choose(fresh, TOTAL)) {
       const victim = this.items.find((b) => b.auto && !b.collected && b.anim < 0);
       if (!victim && this.items.length >= TOTAL) break;
       if (victim) this.removeItem(victim);

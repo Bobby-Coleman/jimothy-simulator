@@ -782,7 +782,9 @@ export function spawnItem(game: Game, kindName: ItemKind | string, bottomPos: TH
       friction: def.friction,
       restitution: def.restitution,
       ccd: def.ccd,
-      data: { itemKind: kind, buoyancy: def.buoyancy ?? 1.4, ...(def.data ?? {}) },
+      // report impacts from Δv ≈ 0.5 m/s up (spawnProp's 60 N floor would hide light items' hits)
+      impactThreshold: Math.max(3, def.mass * 30),
+      data: { itemKind: kind, buoyancy: def.buoyancy ?? 1.4, spawnT: game.time, ...(def.data ?? {}) },
       onWash: (g) => washItem(g, ent, kind),
       onImpact: def.onImpact ? (g, o, s) => def.onImpact!(g, ent, o, s) : undefined,
       onBonk: def.onBonk ? (g, imp, pt) => def.onBonk!(g, ent, imp, pt) : undefined,

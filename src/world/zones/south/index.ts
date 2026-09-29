@@ -5,4 +5,5 @@
 export { ParkZone } from './Park';
 export { LocksZone } from './Locks';
 export { WaterfrontZone } from './Waterfront';
+export { StadiumZone } from './Stadium';
 export { SouthSystem } from './SouthSystem';

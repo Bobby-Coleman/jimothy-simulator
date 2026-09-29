@@ -750,10 +750,21 @@ export class Kit {
       return p;
     };
     let page = newPage();
+    const placed = new Map<HTMLCanvasElement, { page: Page; x0: number; y0: number }>();
     for (const i of order) {
       const it = items[i];
       const w = it.canvas.width;
       const h = it.canvas.height;
+      const prev = placed.get(it.canvas);
+      if (prev) {
+        // same artwork used again → reuse its atlas rect
+        for (const g of it.geos) {
+          const uv = g.attributes.uv as THREE.BufferAttribute;
+          for (let k = 0; k < uv.count; k++) uv.setXY(k, (prev.x0 + uv.getX(k) * w) / S, 1 - (prev.y0 + (1 - uv.getY(k)) * h) / S);
+          prev.page.geos.push(g);
+        }
+        continue;
+      }
       if (page.x + w + PAD > S) {
         page.x = PAD;
         page.y += page.rowH + PAD;
@@ -768,6 +779,7 @@ export class Kit {
       page.ctx.drawImage(it.canvas, 0, 0, 1, h, x0 - 3, y0, 3, h);
       page.ctx.drawImage(it.canvas, w - 1, 0, 1, h, x0 + w, y0, 3, h);
       page.ctx.drawImage(it.canvas, x0, y0);
+      placed.set(it.canvas, { page, x0, y0 });
       page.x += w + PAD;
       page.rowH = Math.max(page.rowH, h);
       for (const g of it.geos) {

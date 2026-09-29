@@ -31,6 +31,8 @@ export interface HouseOpts {
   chimney?: boolean;
   /** Leave the porch underside open (lattice with a gap on the +x or -x side) — for kit hiding spots. */
   openPorch?: 1 | -1;
+  /** Local x where the porch-roof collider gets a thin slot (lets top-down ground probes reach the porch floor). */
+  porchRoofSlotX?: number;
   litChance?: number;
   foundation?: 'stone' | 'concrete' | 'brick';
 }
@@ -350,7 +352,11 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
     const len = pd + 0.55;
     const ang = Math.atan(slope);
     b.add('roof', GEO.box, f.mat(px, porchTop + 0.42, pz0 + len / 2 - 0.05, pw + 0.5, 0.16, len / Math.cos(ang), 0, ang, 0), roofC);
-    f.collider(game, px, porchTop + 0.42, pz0 + len / 2, pw + 0.5, 0.3, len, 0, ang, 0);
+    const x0 = px - (pw + 0.5) / 2,
+      x1 = px + (pw + 0.5) / 2;
+    const slot = o.porchRoofSlotX;
+    const segs: [number, number][] = slot !== undefined && slot > x0 + 0.3 && slot < x1 - 0.3 ? [[x0, slot - 0.16], [slot + 0.16, x1]] : [[x0, x1]];
+    for (const [a, c] of segs) f.collider(game, (a + c) / 2, porchTop + 0.42, pz0 + len / 2, c - a, 0.3, len, 0, ang, 0);
   } else {
     // low front gable over the porch
     const pitch = 0.26;

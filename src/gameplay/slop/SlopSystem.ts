@@ -14,7 +14,7 @@ import { SlopProps } from './SlopProps';
 import { SlopFx } from './SlopFx';
 import { drawPadDecal, loadSlopFonts } from './SlopArt';
 import { TECHBRO_PIVOT, TECHBRO_UNPLUGGED } from './lines';
-import { canvasTexture, findClearSpot, findNpcs, markOwned, pick, poi, rand, randInt, say, seeded, surfaceY, terrainY, Timeline, toast, worldOf } from './util';
+import { canvasTexture, findClearSpot, findNpcs, markOwned, pick, poi, rand, randInt, refreshQueries, say, seeded, surfaceY, terrainY, Timeline, toast, worldOf } from './util';
 
 /** Objective ids the objectives agent is expected to use (we add them ourselves if they're missing). */
 const OBJECTIVES: ObjectiveDef[] = [
@@ -106,6 +106,7 @@ export class SlopSystem implements System {
       console.error('[slop] no slopothy model', err);
     }
     this.buildCampus();
+    refreshQueries(game);
     try {
       this.spawnInitial();
     } catch (err) {
@@ -123,6 +124,7 @@ export class SlopSystem implements System {
   // ---------------------------------------------------------------- campus layout
   private buildCampus() {
     const game = this.game;
+    refreshQueries(game); // make the level's colliders visible to our placement queries
     const spawner = poi(game, 'slopSpawner', -106, -110);
     const dc = poi(game, 'dataCenter', -140, -132);
     const bb = poi(game, 'slopBillboard', -96, -148);
@@ -205,6 +207,22 @@ export class SlopSystem implements System {
     } catch (err) {
       console.error('[slop] props failed', err);
     }
+    this.publishPois();
+  }
+
+  /** Publish where our stuff ended up (only names nobody else registered) so the map / other systems find it. */
+  private publishPois() {
+    const world = worldOf(this.game);
+    if (!world) return;
+    const set = (name: string, p: THREE.Vector3 | undefined | null) => {
+      if (p && !world.poi.has(name)) world.poi.set(name, p.clone());
+    };
+    set('slopSpawner', this.portal ? this.portal.spawnPoint() : null);
+    set('serverPlug', this.plug?.socketMouth);
+    set('slopBillboard', this.billboard?.catwalkPoint);
+    set('dragonPad', this.dragon?.pad);
+    const kiosk = this.game.entities.list.find((e) => e.alive && e.data?.nftKiosk);
+    if (kiosk?.object) set('nftKiosk', kiosk.object.position);
   }
 
   private buildPad(p: THREE.Vector3) {

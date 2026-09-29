@@ -290,11 +290,12 @@ function fishStall(kit: Kit, b: Batch, water: WaterSystem) {
   }
   // lemons & parsley garnish
   for (let i = 0; i < 12; i++) b.sphere([-6 + i * 1.1, iceY(91.0) + 0.05, 90.98], [0.06, 0.05, 0.06], i % 3 ? 0xffe04a : 0x3aa84a, { w: 8, h: 6, shadow: false });
-  // a few real (grabbable) fish + crabs at the front
-  for (let i = 0; i < 7; i++) P.fish(game, -5.4 + i * 1.8, iceY(91.15), 91.15, Math.PI / 2 + (i % 2 ? 0.2 : -0.2), kinds[i % 3]);
-  P.crab(game, -1.2, iceY(91.5), 91.5, 0.3);
-  P.crab(game, 2.6, iceY(91.6), 91.6, -0.4);
-  P.crab(game, 5.7, iceY(91.5), 91.5, 1.2);
+  // a flat steel ledge in front of the ice with a few real (grabbable) fish + crabs on it
+  b.box([0, 0.955, 90.85], [13.6, 0.05, 0.75], 0xc9d1d5, { mat: 'metal' });
+  for (let i = 0; i < 7; i++) P.fish(game, -5.4 + i * 1.8, 0.985, 90.85, Math.PI / 2 + (i % 2 ? 0.08 : -0.08), kinds[i % 3]);
+  P.crab(game, -1.3, 0.985, 90.8, 0.3);
+  P.crab(game, 2.7, 0.985, 90.85, -0.4);
+  P.crab(game, 6.3, 0.985, 90.8, 1.2);
   // price cards
   const cards = ['WILD KING $24.99', 'COHO $18.99', 'DUNGENESS $12/lb', 'COD $9.99', 'SNAPPER $14.99'];
   cards.forEach((t, i) => {
@@ -490,8 +491,8 @@ function frontPlaza(kit: Kit, b: Batch) {
     fitText(ctx, 'He is round enough.', w / 2, 425, w * 0.8, 62, FONT_ROUND, { fill: '#c62828' });
     fitText(ctx, '(He is perfect.)', w / 2, 520, w * 0.8, 56, FONT_ROUND, { fill: '#1f6b3a' });
   });
-  b.cyl([7.8, 1.2, 74.2], 0.06, 2.4, 0x5d6770, { seg: 8, collide: true, mat: 'metal' });
-  kit.sign(b, { pos: [7.8, 2.4, 74.2], rotY: Math.PI, w: 1.5, h: 1.07, tex: t, frame: 0x5d6770, depth: 0.05, border: 0.03 });
+  for (const dx of [-0.8, 0.8]) b.cyl([-3.6 + dx, 1.05, 76.3], 0.05, 2.1, 0x5d6770, { seg: 8, collide: true, mat: 'metal' });
+  kit.sign(b, { pos: [-3.6, 2.15, 76.3], rotY: Math.PI, w: 1.8, h: 1.28, tex: t, frame: 0x5d6770, depth: 0.05, border: 0.04 });
   // planters & lamps
   const r = rng(4);
   for (const x of [-20, -12, 12, 20]) {

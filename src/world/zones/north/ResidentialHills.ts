@@ -147,11 +147,14 @@ export const ResidentialHills: ZoneBuilder = {
         const cx = row.frontX - row.dir * (D / 2 + setback);
         const cz = lotZ(k) + (r() - 0.5) * 1.2;
         const style: HouseStyle = isGrandma || isDanny ? 'bungalow' : styles[(ri * 2 + k) % 3];
+        const hw = W + (r() - 0.5) * 0.8;
         const info = buildHouse(game, world, b, {
           x: cx,
           z: cz,
           face: row.face,
-          w: W + (r() - 0.5) * 0.8,
+          w: hw,
+          // Grandma's spot (see grandmasPorch): slot the porch-roof collider above it so NPC ground probes land on the floor
+          porchRoofSlotX: isGrandma ? hw / 2 - 1.5 : undefined,
           d: D,
           style,
           siding: isGrandma ? 0xc9b2e6 : isDanny ? 0xa8e2c4 : nextColor(),
@@ -174,7 +177,7 @@ export const ResidentialHills: ZoneBuilder = {
         // mailbox by the walk (not every house has one)
         if (r() < 0.6 || isDanny || isGrandma) {
           const mbx = row.street === 'tumble' ? Math.sign(row.frontX) * (WALK_OUT + 0.45) : Math.sign(row.frontX) * 52.6;
-          P.spawn(game, P.mailbox(mats, pick(r, [0x2d4a7a, 0x222222, 0x8b2f2f, 0x2f6b4a])), mbx, H(mbx, sf.z + 1.1), sf.z + 1.1, row.face);
+          P.spawnOnGround(game, P.mailbox(mats, pick(r, [0x2d4a7a, 0x222222, 0x8b2f2f, 0x2f6b4a])), mbx, sf.z + 1.1, row.face);
         }
         if (isDanny) dannysLawn(game, world, mats, b, water, info);
         if (isGrandma) grandmasPorch(game, world, mats, b, info);
@@ -210,7 +213,7 @@ export const ResidentialHills: ZoneBuilder = {
         uvTile: 0,
       });
       const mz = crescentZ(sf.x) - 6.45;
-      P.spawn(game, P.mailbox(mats), sf.x + 1.2, H(sf.x + 1.2, mz), mz, 0);
+      P.spawnOnGround(game, P.mailbox(mats), sf.x + 1.2, mz, 0);
     });
 
     // ================================================================ yards, fences, backyard fun
@@ -263,17 +266,29 @@ export const ResidentialHills: ZoneBuilder = {
       if (feat === 'pool') buildPool(game, world, mats, b, water, cx, cz, depth - 0.3, LOT_LEN - 4.6, r);
       else if (feat === 'tramp') {
         buildTrampoline(game, world, mats, b, cx, cz + 2.2, Math.min(1.9, depth / 2 - 0.5), pick(r, [0x2f7de1, 0x35b36a, 0xe8559a, 0xf29f1f]));
-        P.spawn(game, P.beachBall(mats), cx + 0.5, H(cx + 0.5, cz - 3.6), cz - 3.6);
+        P.spawnOnGround(game, P.beachBall(mats), cx + 0.5, cz - 3.6);
       } else if (feat === 'bbq') bbqPatio(game, world, mats, b, cx, cz, row.dir, r);
       else if (feat === 'garden') gardenBeds(game, world, mats, b, cx, cz, depth, r);
       // gnomes & shrubs in front yards
       const fx = row.frontX + row.dir * 2.6;
       if (r() < 0.45) {
         const gz = h.info.frame.z + (r() < 0.5 ? -1 : 1) * (2.2 + r() * 1.5);
-        P.spawn(game, P.gnome(mats, pick(r, [0xd8342c, 0x2f6fb5, 0xe8b923, 0x3d8b3d]), pick(r, [0x2f6fb5, 0x7b3fa0, 0x3d8b3d, 0xd8342c])), fx, H(fx, gz), gz, row.face + (r() - 0.5));
+        P.spawnOnGround(game, P.gnome(mats, pick(r, [0xd8342c, 0x2f6fb5, 0xe8b923, 0x3d8b3d]), pick(r, [0x2f6fb5, 0x7b3fa0, 0x3d8b3d, 0xd8342c])), fx, gz, row.face + (r() - 0.5));
       }
+      // foundation shrubs: at front corners not covered by the porch, and flanking the porch steps
       const list = r() < 0.5 ? rhodos : shrubs;
-      for (const s of [-1, 1]) list.push([row.frontX + row.dir * 0.8, h.info.frame.z + s * (h.info.w / 2 - 0.9)]);
+      const pr = h.info.porch;
+      for (const s of [-1, 1]) {
+        const lx = s * (h.info.w / 2 - 0.7);
+        if (Math.abs(lx - pr.px) > pr.w / 2 + 0.5) {
+          const p = h.info.frame.p(lx, 0, h.info.d / 2 + 0.9);
+          list.push([p.x, p.z]);
+        }
+        if (r() < 0.7) {
+          const p2 = h.info.frame.p(pr.px + s * 1.9, 0, h.info.d / 2 + pr.d + 0.55);
+          (r() < 0.5 ? rhodos : shrubs).push([p2.x, p2.z]);
+        }
+      }
     }
     plantTrees(game, world, mats, 'rhodo', rhodos, { seed: 51, collider: false, scale: [0.9, 1.3] });
     plantTrees(game, world, mats, 'shrub', shrubs, { seed: 52, collider: false, scale: [0.9, 1.3] });
@@ -303,14 +318,14 @@ export const ResidentialHills: ZoneBuilder = {
       const n = 1 + Math.floor(r() * 3);
       for (let i = 0; i < n; i++) {
         const z = z0 + i * 0.85;
-        P.spawn(game, P.wheelieBin(mats, binKinds[(i + h.lot) % 3]), x, H(x, z) + 0.03, z, row.face + Math.PI);
+        P.spawnOnGround(game, P.wheelieBin(mats, binKinds[(i + h.lot) % 3]), x, z, row.face + Math.PI);
       }
     }
     for (let rowi = 0; rowi < 4; rowi++) {
       for (let j = 0; j <= rowi; j++) {
         const x = (j - rowi / 2) * 1.0;
         const z = -80 + rowi * 0.9;
-        P.spawn(game, P.trafficCone(mats), x, H(x, z) + 0.03, z, r() * 6);
+        P.spawnOnGround(game, P.trafficCone(mats), x, z, r() * 6);
       }
     }
 
@@ -569,8 +584,8 @@ function buildPool(game: Game, world: World, mats: MatSet, b: Batch, water: Wate
 function bbqPatio(game: Game, world: World, mats: MatSet, b: Batch, cx: number, cz: number, dir: number, r: () => number) {
   const y = world.heightAt(cx, cz);
   b.add('concrete', ribbon(world, [new THREE.Vector2(cx, cz + 2.6), new THREE.Vector2(cx, cz - 2.6)], -2.2, 2.2, 0.05, { tile: 2.4, across: 2 }), null, 0xcac4b8, { uvTile: 0 });
-  P.spawn(game, P.gasGrill(mats, pick(r, [0x2b2b2e, 0x8b1e1e, 0x1e3f8b])), cx - 0.4, y + 0.05, cz - 1.0, dir > 0 ? -Math.PI / 2 : Math.PI / 2);
-  P.spawn(game, P.propaneTank(mats), cx + 0.6, world.heightAt(cx + 0.6, cz - 2.1) + 0.05, cz - 2.1);
+  P.spawnOnGround(game, P.gasGrill(mats, pick(r, [0x2b2b2e, 0x8b1e1e, 0x1e3f8b])), cx - 0.4, cz - 1.0, dir > 0 ? -Math.PI / 2 : Math.PI / 2, 0.6);
+  P.spawnOnGround(game, P.propaneTank(mats), cx + 0.6, cz - 2.1);
   // patio table + umbrella (static)
   const tx = cx + 0.2,
     tz = cz + 1.3;
@@ -580,8 +595,8 @@ function bbqPatio(game: Game, world: World, mats: MatSet, b: Batch, cx: number, 
   b.add('metal', GEO.cyl8, trs(tx, ty + 1.3, tz, 0.05, 2.2, 0.05), 0xdddddd);
   b.add('plain', GEO.cone, trs(tx, ty + 2.3, tz, 2.6, 0.6, 2.6), pick(r, [0xd8342c, 0x2f8fd1, 0x3d8b3d, 0xf29f1f]));
   world.collider(new THREE.Vector3(tx, ty + 0.4, tz), new THREE.Vector3(1.0, 0.8, 1.0));
-  P.spawn(game, P.lawnChair(mats, 0xf4f1ea), tx + 1.0, world.heightAt(tx + 1, tz) + 0.05, tz, -Math.PI / 2);
-  if (r() < 0.6) P.spawn(game, P.gnome(mats), cx - 1.6, world.heightAt(cx - 1.6, cz + 2.2), cz + 2.2, r() * 6);
+  P.spawnOnGround(game, P.lawnChair(mats, 0xf4f1ea), tx + 1.0, tz, -Math.PI / 2);
+  if (r() < 0.6) P.spawnOnGround(game, P.gnome(mats), cx - 1.6, cz + 2.2, r() * 6);
 }
 
 function gardenBeds(game: Game, world: World, mats: MatSet, b: Batch, cx: number, cz: number, depth: number, r: () => number) {
@@ -597,7 +612,7 @@ function gardenBeds(game: Game, world: World, mats: MatSet, b: Batch, cx: number
       b.add('leaves', GEO.ico, trs(px, y + 0.5, z + (r() - 0.5) * 0.4, 0.5, 0.42, 0.5, r() * 6), pick(r, [0x4f9a3c, 0x62a845, 0xd8342c, 0xf2c14e]));
     }
   }
-  P.spawn(game, P.gnome(mats, 0x3d8b3d, 0xd8342c), cx + 1.1, world.heightAt(cx + 1.1, cz + 5), cz + 5, r() * 6);
+  P.spawnOnGround(game, P.gnome(mats, 0x3d8b3d, 0xd8342c), cx + 1.1, cz + 5, r() * 6);
 }
 
 let _sprayMat: THREE.MeshBasicMaterial | null = null;

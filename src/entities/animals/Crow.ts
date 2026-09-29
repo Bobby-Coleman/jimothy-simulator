@@ -283,6 +283,17 @@ export class Crow extends Animal {
     this.game.sfx('crow_caw', this.pos, 0.8, 0.95 + Math.random() * 0.15);
   }
 
+  /** Done with a job (or it fell through): circle the tree for a bit, then land. Works from any state. */
+  flyHome(secs = 3) {
+    if (!this.flying) this.takeOff();
+    this.fleeFor = secs;
+    this.circleR = 4.5 + Math.random() * 3;
+    this.circleH = 5 + Math.random() * 2.5;
+    const c = this.flock?.tree ?? this.pos;
+    this.circleA = Math.atan2(this.pos.z - c.z, this.pos.x - c.x);
+    this.setState('flee');
+  }
+
   /** Accept a trade/steal job. */
   assign(job: CrowJob, kind: 'fetch' | 'steal') {
     this.job = job;
@@ -449,7 +460,7 @@ export class Crow extends Animal {
         const item = j?.item;
         if (!item || !item.alive || item.data.heldByPlayer) {
           this.endJob(true);
-          this.startle();
+          this.flyHome(2);
           break;
         }
         const t = item.body ? item.body.translation() : item.object!.position;
@@ -460,7 +471,7 @@ export class Crow extends Animal {
           this.setState('pickup');
         } else if (this.stateTime > 12) {
           this.endJob(true);
-          this.startle();
+          this.flyHome(2);
         }
         break;
       }
@@ -471,7 +482,7 @@ export class Crow extends Animal {
           const item = j?.item;
           if (!item || !item.alive || item.data.heldByPlayer) {
             this.endJob(true);
-            this.startle();
+            this.flyHome(2);
             break;
           }
           const vis = j?.onTaken?.(this, item) ?? null;
@@ -494,6 +505,11 @@ export class Crow extends Animal {
         break;
       }
       case 'away': {
+        if (!j) {
+          this.parts.root.visible = true;
+          this.flyHome(2);
+          break;
+        }
         if (this.stateTime > 3 + (this.flock ? this.flock.awayTime : 2)) {
           this.parts.root.visible = true;
           this.holdVisual(j?.giftVisual?.() ?? null);
@@ -506,7 +522,7 @@ export class Crow extends Animal {
         const p = this.player?.position as THREE.Vector3 | undefined;
         if (!p) {
           this.endJob(true);
-          this.setState('flee');
+          this.flyHome(2);
           break;
         }
         const hover = _v2.set(p.x, p.y + 1.9, p.z);
@@ -527,8 +543,7 @@ export class Crow extends Animal {
           this.endJob(false);
           this.cawNow();
           this.say('heart', 1.2);
-          this.startle();
-          this.fleeFor = 2.5;
+          this.flyHome(2.5);
         }
         break;
       }
@@ -536,7 +551,7 @@ export class Crow extends Animal {
         const v = j?.victim?.();
         if (!v) {
           this.endJob(true);
-          this.startle();
+          this.flyHome(2);
           break;
         }
         const d = this.fly(dt, _v2.set(v.x, v.y + 0.3, v.z), 7.5, 2);
@@ -550,7 +565,7 @@ export class Crow extends Animal {
           this.snackAfterLanding = true;
         } else if (this.stateTime > 14) {
           this.endJob(true);
-          this.startle();
+          this.flyHome(2);
         }
         break;
       }

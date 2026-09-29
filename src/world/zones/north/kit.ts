@@ -134,11 +134,12 @@ export class Batch {
     geo: THREE.BufferGeometry,
     m: THREE.Matrix4 | null,
     color: THREE.ColorRepresentation,
-    opts: { uvTile?: number; swap?: boolean; shade?: (p: THREE.Vector3, n: THREE.Vector3, c: THREE.Color) => void } = {},
+    opts: { uvTile?: number; swap?: boolean; keepColors?: boolean; shade?: (p: THREE.Vector3, n: THREE.Vector3, c: THREE.Color) => void } = {},
   ) {
     const pos = geo.getAttribute('position') as THREE.BufferAttribute;
     const nor = geo.getAttribute('normal') as THREE.BufferAttribute;
     const uv = geo.getAttribute('uv') as THREE.BufferAttribute | undefined;
+    const vcol = opts.keepColors ? (geo.getAttribute('color') as THREE.BufferAttribute | undefined) : undefined;
     const index = geo.index;
     let cx: number, cz: number;
     if (m) {
@@ -198,7 +199,8 @@ export class Batch {
         col.copy(_c);
         opts.shade(_v, _n, col);
         a.col.push(col.r, col.g, col.b);
-      } else a.col.push(_c.r, _c.g, _c.b);
+      } else if (vcol) a.col.push(_c.r * vcol.getX(i), _c.g * vcol.getY(i), _c.b * vcol.getZ(i));
+      else a.col.push(_c.r, _c.g, _c.b);
     }
     if (index) for (let i = 0; i < index.count; i++) a.idx.push(base + index.getX(i));
     else for (let i = 0; i < pos.count; i++) a.idx.push(base + i);

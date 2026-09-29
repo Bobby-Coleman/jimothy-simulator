@@ -249,7 +249,8 @@ export function spawnDumpster(game: Game, bottomPos: THREE.Vector3, rotY = 0): E
       return true;
     },
   });
-  setLidPose(ent, state);
+  // (the lid collider desc already has the closed pose; only the visual needs syncing)
+  lidPivot.rotation.x = 0;
   registry.dumpsters.add(ent);
   return ent;
 }
@@ -289,6 +290,8 @@ export function updateDumpster(game: Game, e: Entity, dt: number) {
   const upY = 1 - 2 * (r.x * r.x + r.z * r.z);
   const moving = Math.abs(s.lidVel) > 0.01 || (s.lidAngle > 0.001 && s.lidAngle < LID_MAX - 0.001);
   if (moving && upY > 0.7) {
+    // never re-pose a collider of a sleeping body (Rapier gets its broad-phase state wrong)
+    b.wakeUp();
     s.lidVel += -LID_G * Math.cos(s.lidAngle) * dt;
     s.lidVel *= Math.exp(-0.6 * dt);
     s.lidAngle += s.lidVel * dt;
@@ -310,7 +313,6 @@ export function updateDumpster(game: Game, e: Entity, dt: number) {
       s.lidVel = s.lidVel > 1.5 ? -s.lidVel * 0.2 : 0;
     }
     setLidPose(e, s);
-    b.wakeUp();
   }
   // --- dive detection
   const pl = playerOf(game);

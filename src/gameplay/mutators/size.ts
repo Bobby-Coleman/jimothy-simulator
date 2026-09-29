@@ -34,7 +34,7 @@ export const visualTop = (k: number) => PLAYER_R * (2 * k - 1);
  * Resizes Jimothy. Visual size uses player.sizeMul; the model is lifted so his feet stay on the ground.
  * With `physics`, the ball collider is enlarged *and offset upward* (bottom stays where it was) while walking,
  * so the player controller's ground check / jump / coyote logic — which measure from the body center with the base
- * radius — keep working untouched. In roll/ragdoll/swim the collider returns to base size (the spin physics are
+ * radius — keep working untouched. In every other mode (roll/ragdoll/swim/climb/hang) the collider returns to base size (roll physics are
  * tuned for it) and only the visual stays big.
  */
 function sizeMutator(o: SizeOpts): MutatorImpl {
@@ -84,7 +84,7 @@ function sizeMutator(o: SizeOpts): MutatorImpl {
         const handled = e.onBonk?.(game, impulse, ep.clone()) === true;
         if (!handled && e.body?.isDynamic()) e.body.applyImpulse(impulse, true);
         game.events.emit('bonk', { entity: e, impulse, rolling: false, source: 'chonk' });
-        game.sfx('impact_body', ep, 0.8);
+        game.sfx('impact_body', ep.clone(), 0.8);
         npcs++;
       } else if (e.body?.isDynamic() && e.mass < 250) {
         e.body.applyImpulse(impulse.multiplyScalar(0.55), true);
@@ -102,7 +102,7 @@ function sizeMutator(o: SizeOpts): MutatorImpl {
       const p = getPlayer(game);
       if (p) {
         p.sizeMul *= o.k;
-        if (o.physics) setCollider(p, p.mode === 'walk' || p.mode === 'climb' || p.mode === 'hang' ? 'big' : 'base');
+        if (o.physics) setCollider(p, p.mode === 'walk' ? 'big' : 'base');
       }
       const cam = game.get<CameraRig>('camera');
       if (cam) {
@@ -134,8 +134,8 @@ function sizeMutator(o: SizeOpts): MutatorImpl {
     update(game) {
       const p = getPlayer(game);
       if (!p) return;
-      const walkLike = p.mode === 'walk' || p.mode === 'climb' || p.mode === 'hang';
-      if (o.physics) setCollider(p, walkLike ? 'big' : 'base');
+      const walkLike = p.mode === 'walk';
+      if (o.physics) setCollider(p, p.mode === 'walk' ? 'big' : 'base');
 
       // Carried items ride on top of the (resized) head instead of floating/clipping
       const h = p.held;

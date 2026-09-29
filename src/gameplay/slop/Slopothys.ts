@@ -305,8 +305,8 @@ export class Slopothy {
     const v = b.linvel();
     switch (kind) {
       case 'jump':
-        if (this.grounded) b.setLinvel({ x: v.x * 0.3, y: rand(8.5, 11) * Math.sqrt(this.scale), z: v.z * 0.3 }, true);
-        b.setGravityScale(0.35, true);
+        if (this.grounded) b.setLinvel({ x: v.x * 0.3, y: rand(6.5, 8) * Math.sqrt(this.scale), z: v.z * 0.3 }, true);
+        b.setGravityScale(0.45, true);
         this.game.sfx('boing', this.pos, 0.5, rand(1.2, 1.6));
         break;
       case 'roll': {
@@ -389,7 +389,11 @@ export class Slopothy {
     }
     if (this.state === 'held') this.stun(0.8);
 
-    if (this.lod === 2) return; // far away: sleep
+    if (this.lod === 2) {
+      // far away: sleep (only the occasional water check above)
+      if (this.aiTimer <= 0) this.aiTimer = 1;
+      return;
+    }
     if (this.lod === 1) {
       if (this.aiTimer > 0) return;
       this.aiTimer = 0.5;
@@ -426,6 +430,8 @@ export class Slopothy {
           this.pickTarget();
           break;
         }
+        // following Jimothy counts as "his" slop: lead them into water to wash them away
+        this.lastPlayerTouch = now;
         const f = player!.forwardVec(_w);
         const slot = _v.copy(pp).addScaledVector(f, -(1.3 + this.followIndex * 0.75));
         slot.x += Math.sin(now * 1.3 + this.followIndex) * 0.4;
@@ -593,6 +599,8 @@ export class Slopothy {
     const dP = player ? this.root.position.distanceTo(player.position) : 999;
     this.root.visible = dP < 150;
     if (!this.root.visible) return;
+    // shadows only up close (tiny ones only right next to Jimothy)
+    this.mesh.castShadow = dP < (this.role === 'tiny' ? 14 : 38);
     // far ones animate at a lower rate
     if (dP > 70 && (frame + this.followIndex) % 4 !== 0) return;
     const adt = dP > 70 ? dt * 4 : dt;
@@ -865,7 +873,7 @@ export class SlopothyManager {
     this.list.push(s);
     if (opts.announce) {
       this.game.sfx('slop_glitch', ground, 0.6, rand(0.9, 1.3));
-      if (opts.role !== 'tiny' && Math.random() < 0.7) this.talk(s, pick(SLOP_SPAWN), true);
+      if (opts.role !== 'tiny' && Math.random() < 0.7) this.talk(s, pick(SLOP_SPAWN));
     }
     this.game.events.emit('slopSpawned', { entity: s.entity, role: s.role, count: this.regularCount });
     return s;

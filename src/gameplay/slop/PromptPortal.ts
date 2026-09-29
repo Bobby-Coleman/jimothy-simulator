@@ -91,7 +91,7 @@ export class PromptPortal {
           float h = fract(sin(dot(floor(p * 18.0), vec2(12.9898, 78.233)) + floor(uTime * 9.0)) * 43758.5453);
           col += step(0.94, h) * vec3(1.2);
           col += smoothstep(0.55, 0.0, r) * vec3(0.9, 0.8, 1.0);
-          gl_FragColor = vec4(col * (1.1 + uFlash * 2.5), 1.0);
+          gl_FragColor = vec4(col * (0.78 + uFlash * 2.2), 1.0);
           #include <fog_fragment>
         }
       `,

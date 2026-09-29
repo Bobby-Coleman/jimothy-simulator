@@ -426,7 +426,13 @@ function buildPorchAndDen(game: Game, world: World, batch: Batch) {
   // HOME sign on a stick by the entrance
   const home = atlas.draw(256, 110, (ctx, w, h) => drawHomeSign(ctx, w, h));
   batch.add(new THREE.BoxGeometry(0.05, 0.9, 0.05), trim, { matrix: T(10.05, y0 + 0.45, Z1 + 0.18), color: woodDark });
-  batch.add(atlas.quad(home, 0.7, 0.3), home.page.mat, { matrix: TR(10.05, y0 + 0.82, Z1 + 0.22, 0, -0.12, 0.05), castShadow: false });
+  batch.add(atlas.quad(home, 0.7, 0.3), home.page.glowMat, { matrix: TR(10.05, y0 + 0.82, Z1 + 0.22, 0, -0.12, 0.05), castShadow: false });
+  // warm light spilling out of the den + under the porch lamp (night)
+  lightPools(game, world, [
+    { x: 9.0, y: y0, z: Z1 + 0.9, r: 2.6 },
+    { x: 9.0, y: y0, z: Z1 - 1.2, r: 3.2 },
+    { x: 10.0, y: y0, z: Z1 + 2.2, r: 3.4 },
+  ], batch);
   // welcome mat
   batch.add(new THREE.BoxGeometry(0.9, 0.02, 0.55), trim, { matrix: T(9.0, y0 + 0.01, Z1 + 0.35), color: 0x8a5a2e, castShadow: false });
 }
@@ -455,13 +461,16 @@ async function buildPlaza(game: Game, world: World, batch: Batch) {
     ccz = 12.2;
   const ccSign = atlas.draw(384, 128, (ctx, w, h) => drawCartSign(ctx, w, h, 'cotton'));
   cart(batch, world, ccx, y, ccz, 0xfff0f7, 0xff9fd2, '#ff9fd2', '#ffffff', ccSign, atlas);
-  for (let i = 0; i < 4; i++) spawnCottonCandy(game, new THREE.Vector3(ccx - 0.55 + i * 0.36, y + 1.0, ccz + 0.05), i);
+  // low display stands in front of the carts: raccoon height (the counters are too high for a round boy)
+  displayStand(batch, world, ccx, y, ccz + 0.78, 0xff9fd2);
+  for (let i = 0; i < 4; i++) spawnCottonCandy(game, new THREE.Vector3(ccx - 0.6 + i * 0.4, y + 0.36, ccz + 0.78), i);
   // hot dog cart
   const hdx = 28.8,
     hdz = 12.0;
   const hdSign = atlas.draw(384, 128, (ctx, w, h) => drawCartSign(ctx, w, h, 'hotdog'));
   cart(batch, world, hdx, y, hdz, 0xcfd6dc, 0x9aa4ad, '#d4312b', '#ffd23f', hdSign, atlas);
-  for (let i = 0; i < 3; i++) spawnHotDog(game, new THREE.Vector3(hdx - 0.4 + i * 0.4, y + 1.0, hdz), 0.1 * i);
+  displayStand(batch, world, hdx, y, hdz + 0.78, 0xd4312b);
+  for (let i = 0; i < 3; i++) spawnHotDog(game, new THREE.Vector3(hdx - 0.45 + i * 0.45, y + 0.36, hdz + 0.78), 0.1 * i);
   // benches facing the mural
   placeBatched(world, batch, bench(), [
     { x: 23.5, y, z: 17.2, ry: -Math.PI / 2 },
@@ -526,6 +535,19 @@ async function buildPlaza(game: Game, world: World, batch: Batch) {
     { x: 25, y: y - ROAD.curb, z: 13.5, r: 5.5 },
     { x: 25, y: y - ROAD.curb, z: 18.5, r: 5.5 },
   ], batch);
+}
+
+/** Low wooden stand in front of a cart (items sit on it at y + 0.35). */
+function displayStand(batch: Batch, world: World, x: number, y: number, z: number, accent: number) {
+  batch.add(
+    mergeColored([
+      { geo: new THREE.BoxGeometry(1.7, 0.3, 0.42), color: 0xb98d5a, matrix: T(0, 0.15, 0) },
+      { geo: new THREE.BoxGeometry(1.76, 0.05, 0.48), color: accent, matrix: T(0, 0.325, 0) },
+    ]),
+    trimMat(),
+    { matrix: T(x, y, z) },
+  );
+  world.collider(new THREE.Vector3(x, y + 0.175, z), new THREE.Vector3(1.76, 0.35, 0.48));
 }
 
 /** Vendor cart with a striped canopy and a sign. */

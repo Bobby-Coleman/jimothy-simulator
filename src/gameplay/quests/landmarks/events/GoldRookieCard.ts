@@ -157,7 +157,8 @@ export class GoldRookieCard extends Landmark {
     e.data.lmDevaluedAwarded = true;
     e.data.devalued = true;
     this.kit.shout('CARD DEVALUED', 'est. value: $3 (water damage). Worth it.', '#9aa3ad');
-    this.game.score(150, 'Mint Condition? Not Anymore.');
+    // the items system scores its own "Devalued" for its cards: only score our fallback card
+    if (!e.data.itemKind) this.game.score(150, 'Mint Condition? Not Anymore.');
     this.game.events.emit('rookieCardWashed', {});
     if (this.step !== 'devalued') this.setStep('devalued');
   }

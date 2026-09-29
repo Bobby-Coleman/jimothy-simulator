@@ -335,7 +335,8 @@ export abstract class Animal {
     this.pos.addScaledVector(this.vel, dt);
     if (this.spinRate) _q.setFromAxisAngle(this.spinAxis, this.spinRate * dt);
     if (this.spinRate) this.tumbleQ.premultiply(_q);
-    const g = this.groundAt(this.pos.x, this.pos.z, this.pos.y + 0.8);
+    // look for the floor just above our current height (catches it as we fall through, never a roof above)
+    const g = this.groundAt(this.pos.x, this.pos.z, this.pos.y + 0.3);
     if (this.pos.y <= g && this.vel.y <= 0) {
       this.pos.y = g;
       const impact = -this.vel.y;

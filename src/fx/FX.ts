@@ -1070,21 +1070,22 @@ export class FxSystem implements System {
 
   private burstRocket(r: Rocket) {
     const p = new THREE.Vector3(r.x, r.y, r.z);
-    const n = this.n(42);
+    const n = this.n(64);
     const c2 = Math.random() < 0.4 ? pick(BRIGHT) : r.color;
+    const speed = rand(6.5, 9.5);
     for (let i = 0; i < n; i++) {
       const s = this.sprite(SPR.streak, p, true);
       if (!s) break;
-      randDir(_w).multiplyScalar(rand(4.5, 7.5));
+      randDir(_w).multiplyScalar(speed * rand(0.8, 1.05));
       s.vx = _w.x + r.vx * 0.3;
       s.vy = _w.y + r.vy * 0.3;
       s.vz = _w.z + r.vz * 0.3;
       s.mode = MODE.stretch;
-      s.stretch = 0.03;
-      s.grav = 3.5;
-      s.drag = 1.7;
-      s.s0 = s.s1 = 0.07;
-      s.life = rand(0.9, 1.5);
+      s.stretch = 0.045;
+      s.grav = 3;
+      s.drag = 1.5;
+      s.s0 = s.s1 = 0.11;
+      s.life = rand(1.1, 1.8);
       s.ac = ALPHA.lateFlicker;
       const c = i % 3 === 0 ? c2 : r.color;
       // dominant channel HDR (blooms), others kept < 1 so the hue survives the post clamp
@@ -1093,11 +1094,32 @@ export class FxSystem implements System {
       s.g = c.g >= mx ? 2.4 : c.g * 0.9;
       s.b = c.b >= mx ? 2.4 : c.b * 0.9;
     }
+    // glittering twinkles that hang in the air a moment
+    const nt = this.n(14);
+    for (let i = 0; i < nt; i++) {
+      const t = this.sprite(SPR.sparkle, p, true);
+      if (!t) break;
+      randDir(_w).multiplyScalar(speed * rand(0.3, 0.9));
+      t.vx = _w.x;
+      t.vy = _w.y;
+      t.vz = _w.z;
+      t.drag = 2.2;
+      t.grav = 1.2;
+      t.s1 = rand(0.25, 0.4);
+      t.sc = SIZE.pulse;
+      t.s0 = t.s1;
+      t.spin = rand(-3, 3);
+      t.life = rand(1.2, 2);
+      t.ac = ALPHA.lateFlicker;
+      t.r = 1.4 + r.color.r;
+      t.g = 1.4 + r.color.g;
+      t.b = 1.4 + r.color.b;
+    }
     const f = this.sprite(SPR.flash, p, true);
     if (f) {
-      f.s1 = 2.4;
+      f.s1 = 4;
       f.sc = SIZE.easeOut;
-      f.life = 0.22;
+      f.life = 0.25;
       f.r = r.color.r * 2 + 0.6;
       f.g = r.color.g * 2 + 0.6;
       f.b = r.color.b * 2 + 0.6;
@@ -1631,9 +1653,9 @@ export class FxSystem implements System {
         t.vx = rand(-0.3, 0.3);
         t.vy = rand(-0.8, -0.2);
         t.vz = rand(-0.3, 0.3);
-        t.s0 = 0.08;
-        t.s1 = 0.02;
-        t.life = 0.35;
+        t.s0 = 0.13;
+        t.s1 = 0.03;
+        t.life = 0.4;
         t.r = 2.6;
         t.g = 1.6;
         t.b = 0.7;

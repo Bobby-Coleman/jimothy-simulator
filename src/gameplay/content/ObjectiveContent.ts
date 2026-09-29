@@ -20,25 +20,27 @@ import { OBJECTIVES } from './objectiveDefs';
  *   roundBoy            player.stats.rolled (cumulative, 500 m)      notACat         'notACat'
  *   cryptid             'filmed' {by} ×25 unique people              fiveFingerDisc. 'steal'/'grab' of a pizza
  *   stickyFingers       'steal' ×10                                  stickySituation 'gumWall'
- *   spaceNoodle         y > 60 near POI spaceNoodleTop               nocturnal       environment.isNight for 60 s
+ *   spaceNoodle         'noodleSummit' | y > 56 near POI spaceNoodleTop     nocturnal   environment.isNight for 60 s
  *   bathTime            swim in 4 water kinds (persisted set)        marathon        player.stats.distance 2 km
- *   catchOfTheDay       'fishCaught'                                 bobbleheadColl. 'collectible' {kind:'bobblehead'}
- *   washSlop            'slopDissolve' | 'slopWashed' ×10            touchGrass      'serverUnplugged'
- *   closeThisWindow     'slopbotDismissed' ×5                        mamasBoy        'momSnack' ×3 | questComplete /mom/
- *   familyReunion       'dannyReunion'                               kitCollector    'kitRescued' ×5
- *   crowDeals           'crowTrade' ×3                               teddyRescue     'teddyReturned'
- *   grandmasFavorite    'grandmaVisit'                               honoraryDegree  'degreeReceived'
- *   jimothySummer       'proclamation'                               salmonRun       'salmonRunWon'
- *   rookieCard          'collectible' {kind:'rookieCard'} | grab of the card
+ *   catchOfTheDay       'fishCaught'                                 bobbleheadColl. 'collectible' {kind:'bobblehead'} ×10
+ *   washSlop            'slopDissolve' {reason:'washed'} | 'slopWashed' ×10 (deduped per entity)
+ *   touchGrass          'serverUnplugged'                            closeThisWindow 'slopbotDismissed' ×5
+ *   countToFive         'billboardWashed'                            dragonRider     'rodeSlopDragon'
+ *   mamasBoy            'momSnack' {count} ×3                        familyReunion   'dannyReunion' | 'dannyHug'
+ *   kitCollector        'kitRescued' {count} ×5                      crowDeals       'crowTrade' {count} ×3
+ *   teddyRescue         'teddyReturned'                              grandmasFavorite 'grandmaVisit'
+ *   honoraryDegree      'degreeReceived'                             jimothySummer   'proclamation'
+ *   salmonRun           'salmonRunWon'                               rookieCard      'collectible' {kind:'rookieCard'} | grab
  *   awww                'chitter' near 15 unique NPCs                localCelebrity  score total 100k
  *   strike              'bonk' {rolling} on 5 NPCs in one roll       chainReaction   'npcRagdoll' ×10 in 5 s
  *   kaboom              'explosion'                                  carSurfer       'hanging' while moving, 10 s
- *   leapOfFaith         'land' {height ≥ 25}                         frequentFlyer   30 m rise while airborne
+ *   leapOfFaith         'land' | 'leapOfFaith' {height ≥ 25}         frequentFlyer   30 m rise while airborne
  *   jaywalker           'hitByCar' | playerRagdoll cause car         flopEra         'playerRagdoll' ×25
  *   officerScold        'officerScold' ×10
  *   secrets: humanMade (near POI *mural* | 'muralFound'), hydrophobic (swim 60 s), heNeverLearns (cotton candy ×3),
  *            backFromTheVoid (fall out of the world), spinMeRound (roll 60 s non-stop), mutantRaccoon (5 mutators on)
- * Also: 'questComplete' {id} completes an objective with that id (or a matching alias).
+ * Also: 'questComplete' {id} completes the objective with that id, or one matched by QUEST_ALIASES
+ * (landmark quests: noodle/catch/degree/summer/salmon/rookieCard; heart quests: mama/kits/crows/danny/teddy/grandma).
  */
 
 const STORE_KEY = 'jimothy.content.v1';
@@ -99,6 +101,7 @@ export class ObjectiveContent implements System {
   private ragdolls: { t: number; id: number | string }[] = [];
   private fly = { takeoffY: 0, peak: 0, airborne: false };
   private spin = 0;
+  private spinStall = 0;
   private recentTrash = new Map<number, number>();
   private slopKeys = new Map<string | number, number>();
   private pollT = 0;
@@ -241,7 +244,8 @@ export class ObjectiveContent implements System {
     on('billboardWashed', () => this.done('countToFive'));
 
     // heart
-    on('momSnack', () => this.add('mamasBoy'));
+    const counted = (id: string) => (p: any) => (typeof p.count === 'number' ? this.set(id, p.count) : this.add(id));
+    on('momSnack', counted('mamasBoy'));
     on('dannyReunion', () => this.done('familyReunion'));
     on('dannyHug', () => this.done('familyReunion'));
     on('noodleSummit', () => this.done('spaceNoodle'));
@@ -250,7 +254,7 @@ export class ObjectiveContent implements System {
       if (typeof p.count === 'number') this.set('kitCollector', p.count);
       else if (this.uniq('kitCollector', this.keyOf(p, 'kit'))) this.add('kitCollector');
     });
-    on('crowTrade', () => this.add('crowDeals'));
+    on('crowTrade', counted('crowDeals'));
     on('teddyReturned', () => this.done('teddyRescue'));
     on('grandmaVisit', () => this.done('grandmasFavorite'));
     on('degreeReceived', () => this.done('honoraryDegree'));
@@ -354,10 +358,10 @@ export class ObjectiveContent implements System {
 
     // cumulative distances (stats reset every session; objective progress is the persistent total)
     const rolled = p.stats.rolled;
-    if (this.lastRolled >= 0 && rolled > this.lastRolled) this.accum('roundBoy', rolled - this.lastRolled, 10);
+    if (this.lastRolled >= 0 && rolled > this.lastRolled) this.accum('roundBoy', rolled - this.lastRolled, 25);
     this.lastRolled = rolled;
     const walked = p.stats.distance;
-    if (this.lastWalked >= 0 && walked > this.lastWalked) this.accum('marathon', walked - this.lastWalked, 25);
+    if (this.lastWalked >= 0 && walked > this.lastWalked) this.accum('marathon', walked - this.lastWalked, 100);
     this.lastWalked = walked;
 
     // launches: height gained since leaving the ground (climbing/swimming/hanging reset the reference)
@@ -383,15 +387,20 @@ export class ObjectiveContent implements System {
       }
     }
 
-    // non-stop rolling
-    if (p.mode === 'roll' && p.speed > 1) {
-      this.spin += dt;
+    // non-stop rolling (bumps/stalls shorter than 2.5 s are forgiven)
+    if (p.mode === 'roll') {
+      this.spinStall = p.speed < 0.6 ? this.spinStall + dt : 0;
+      if (this.spinStall > 2.5) this.spin = 0;
+      else this.spin += dt;
       const s = Math.floor(this.spin / 5) * 5;
       if (s > 0) this.set('spinMeRound', Math.min(60, s));
-    } else this.spin = 0;
+    } else {
+      this.spin = 0;
+      this.spinStall = 0;
+    }
 
     // night owl
-    if (game.get<Environment>('environment')?.isNight && game.state === 'playing') this.accum('nocturnal', dt, 5);
+    if (game.get<Environment>('environment')?.isNight && game.state === 'playing') this.accum('nocturnal', dt, 10);
 
     // out of bounds (the player respawns at y < -40 in the same frame, so catch the fall on the way down)
     if (p.position.y < -25) this.done('backFromTheVoid');

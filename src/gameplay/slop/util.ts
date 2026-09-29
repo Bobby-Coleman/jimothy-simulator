@@ -82,6 +82,19 @@ export function terrainY(game: Game, x: number, z: number) {
 
 const _down = new THREE.Vector3(0, -1, 0);
 
+/**
+ * Rapier only rebuilds its scene-query structure during a step, so init-time raycasts / overlap tests can't see
+ * colliders created while the world was being built. A tiny empty step refreshes it (no events collected,
+ * sleeping bodies stay asleep, nothing visibly moves).
+ */
+export function refreshQueries(game: Game) {
+  const w = game.physics.world;
+  const dt = w.timestep;
+  w.timestep = 1e-6;
+  w.step();
+  w.timestep = dt;
+}
+
 /** Top surface (static world only) under (x, z), searching down from `fromY`. */
 export function surfaceY(game: Game, x: number, z: number, fromY?: number): number {
   const ty = terrainY(game, x, z);

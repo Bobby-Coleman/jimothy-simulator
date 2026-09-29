@@ -117,10 +117,14 @@ export class ImpactSystem implements System {
   /** Fragile & explosive reactions. */
   private special(e: Entity, s: number) {
     if (e.data.heldByPlayer) return;
+    // Ignore the settle right after spawning (a vase placed slightly inside a table shouldn't blow up).
+    const born = (e.data.spawnT as number | undefined) ?? 0;
+    if (this.game.time - born < 1.0) return;
     if (e.tags.has('fragile') && s > (e.data.shatterAt ?? 6.5)) {
       shatter(this.game, e);
     } else if (e.tags.has('explosive') && !e.data.exploded && !e.data.armed) {
-      if (s > 8.5) armExplosive(this.game, e, 0.05);
+      const thrown = e.data.yeet && this.game.time - e.data.yeet.t < 3;
+      if (s > 8.5 || (thrown && s > 4.5)) armExplosive(this.game, e, 0.05);
       else if (s > 4.5) {
         e.data.damage = (e.data.damage ?? 0) + 1;
         if (e.data.damage >= 2) armExplosive(this.game, e, 0.25);

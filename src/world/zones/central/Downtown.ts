@@ -36,6 +36,7 @@ export const Downtown: ZoneBuilder = {
     await loadFonts();
     const mats = await roadMaterials(game);
     const batch = new Batch('downtown', 120);
+    _game = game;
     const rng = new Rng(4242);
     world.areas.push({ name: 'Downtown', min: new THREE.Vector2(60, -60), max: new THREE.Vector2(180, 60) });
 
@@ -142,8 +143,15 @@ function buildFountain(game: Game, world: World, batch: Batch) {
   world.poi.set('kit:2', new THREE.Vector3(x + 0.5, y + 3.25, z));
 }
 
+let _game: Game | null = null;
+/** Civic stone (ashlar) — gently 'floodlit' at night via emissive. */
 function stoneMat() {
-  return cached('mat:stone', () => new THREE.MeshStandardMaterial({ map: ashlarTexture(), color: 0xf4efe4, roughness: 0.85 }));
+  return cached('mat:stone', () => {
+    const tex = ashlarTexture();
+    const m = new THREE.MeshStandardMaterial({ map: tex, color: 0xf4efe4, roughness: 0.85, emissive: 0xffd9a0, emissiveMap: tex, emissiveIntensity: 0 });
+    if (_game) glowAtNight(_game, m, 0, 0.16);
+    return m;
+  });
 }
 
 // ============================================================================================ statue
@@ -334,7 +342,7 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
     const a = (k / 16) * Math.PI * 2;
     batch.add(new THREE.PlaneGeometry(0.8, 2.2), glass, { matrix: T(dx + Math.cos(a) * 6.02, drumY + 1.75, dz + Math.sin(a) * 6.02, -a + Math.PI / 2), castShadow: false });
   }
-  const gold = cached('mat:domeGold', () => new THREE.MeshStandardMaterial({ color: 0xe0b04a, metalness: 0.75, roughness: 0.3, envMapIntensity: 2 }));
+  const gold = cached('mat:domeGold', () => glowAtNight(game, new THREE.MeshStandardMaterial({ color: 0xe0b04a, metalness: 0.75, roughness: 0.3, envMapIntensity: 2, emissive: 0xd99a2b, emissiveIntensity: 0 }), 0, 0.3));
   batch.add(new THREE.SphereGeometry(6.2, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), gold, { matrix: T(dx, drumY + 3.5, dz) });
   batch.add(new THREE.TorusGeometry(6.1, 0.18, 8, 48), trim, { matrix: TR(dx, drumY + 3.5, dz, Math.PI / 2, 0, 0), color: 0xefe8da });
   batch.add(
@@ -489,7 +497,7 @@ function towerMat(game: Game) {
       metalness: 0.55,
       envMapIntensity: 1.8,
     });
-    glowAtNight(game, m, 0.0, 1.3);
+    glowAtNight(game, m, 0.0, 0.85);
     return m;
   });
 }
@@ -580,8 +588,8 @@ function buildNoodle(game: Game, world: World, batch: Batch) {
   const { x: nx, z: nz } = NOODLE;
   const y0 = walkY(nx, nz);
   const trim = trimMat();
-  const pasta = cached('mat:pasta', () => new THREE.MeshStandardMaterial({ color: 0xf5d98a, roughness: 0.55, metalness: 0.05 }));
-  const strandMat = cached('mat:pastaStrand', () => new THREE.MeshStandardMaterial({ color: 0xe8b04a, roughness: 0.5, flatShading: true }));
+const pasta = cached('mat:pasta', () => glowAtNight(game, new THREE.MeshStandardMaterial({ color: 0xf5d98a, roughness: 0.55, metalness: 0.05, emissive: 0xffc96b, emissiveIntensity: 0 }), 0, 0.28));
+  const strandMat = cached('mat:pastaStrand', () => glowAtNight(game, new THREE.MeshStandardMaterial({ color: 0xe8b04a, roughness: 0.5, flatShading: true, emissive: 0xffa53a, emissiveIntensity: 0 }), 0, 0.35));
   const red = 0xd4312b;
   // core segments: [y0, y1, r] — each narrower than the one below; the step is a rest ledge
   const segs: [number, number, number][] = [
@@ -877,14 +885,14 @@ async function buildPlazaDecor(game: Game, world: World, batch: Batch, rng: Rng)
   // bunting over the plaza (triangle pennants on strings between lamp posts)
   const pennants: { geo: THREE.BufferGeometry; color: number; matrix: THREE.Matrix4 }[] = [];
   const tri = new THREE.BufferGeometry();
-  tri.setAttribute('position', new THREE.Float32BufferAttribute([-0.22, 0, 0, 0.22, 0, 0, 0, -0.5, 0], 3));
+  tri.setAttribute('position', new THREE.Float32BufferAttribute([-0.16, 0, 0, 0.16, 0, 0, 0, -0.34, 0], 3));
   tri.computeVertexNormals();
   for (let x = 72; x <= 114; x += 10.5) {
     if (x > 110) continue;
-    for (let k = 0; k <= 40; k++) {
-      const t = k / 40;
-      const p = new THREE.Vector3().lerpVectors(new THREE.Vector3(x, y + 4.4, -20.5), new THREE.Vector3(x, y + 4.4, 20.5), t);
-      p.y -= Math.sin(t * Math.PI) * 1.2;
+    for (let k = 0; k <= 56; k++) {
+      const t = k / 56;
+      const p = new THREE.Vector3().lerpVectors(new THREE.Vector3(x, y + 6.4, -20.5), new THREE.Vector3(x, y + 6.4, 20.5), t);
+      p.y -= Math.sin(t * Math.PI) * 0.9;
       pennants.push({ geo: tri, color: cols[k % cols.length], matrix: T(p.x, p.y, p.z, Math.PI / 2) });
     }
   }

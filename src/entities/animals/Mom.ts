@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import type { Entity } from '../../core/Entities';
-import { G } from '../../core/Physics';
+import { G, groups } from '../../core/Physics';
 import { destroyProp } from '../Props';
 import { RaccoonAnimal, wrapAngle } from './Animal';
 import { RIGS, type RigPose } from './RaccoonRig';
@@ -59,7 +59,8 @@ export class Mom extends RaccoonAnimal {
         colliderY: 0.36,
         mass: 16,
         tags: ['family', 'mom'],
-        filter: G.PLAYER | G.PROP | G.NPC | G.RAGDOLL,
+        // solid to Jimothy (while she stands still) but never bulldozes snacks / props around
+        filter: G.PLAYER | G.NPC | G.RAGDOLL,
         emoteY: 1.05,
         emoteSize: 0.42,
       },
@@ -120,16 +121,26 @@ export class Mom extends RaccoonAnimal {
     this.setState('welcome');
   }
 
-  /** Where kits should sit around Mom (i = 0..4). */
+  /** Where kits snuggle up to Mom (i = 0..4): along her flanks, the littlest one by her nose. */
   kitSpot(i: number, out = new THREE.Vector3()) {
-    const f = this.homeYaw;
-    // a little semicircle tucked against her side / in front of her
-    const angles = [0.55, -0.55, 1.25, -1.25, 0];
-    const radii = [0.95, 0.95, 1.05, 1.05, 1.25];
-    const a = f + (angles[i % 5] ?? 0);
-    const r = radii[i % 5] ?? 1;
-    out.set(this.home.x + Math.sin(a) * r, this.home.y, this.home.z + Math.cos(a) * r);
+    // (x = her left, z = forward) in Mom's frame
+    const spots: [number, number][] = [
+      [0.48, 0.22],
+      [-0.48, 0.22],
+      [0.52, -0.36],
+      [-0.52, -0.36],
+      [0.05, 1.02],
+    ];
+    const [x, z] = spots[i % spots.length];
+    const c = Math.cos(this.homeYaw);
+    const s = Math.sin(this.homeYaw);
+    out.set(this.home.x + x * c + z * s, this.home.y, this.home.z - x * s + z * c);
     return out;
+  }
+
+  /** Just outside the den entrance (in front of Mom's resting spot) — kits come in this way. */
+  entrance(out = new THREE.Vector3()) {
+    return out.set(this.home.x + Math.sin(this.homeYaw) * 2.0, this.home.y, this.home.z + Math.cos(this.homeYaw) * 2.0);
   }
 
   // ------------------------------------------------------------------------------------------- behaviour
@@ -214,8 +225,9 @@ export class Mom extends RaccoonAnimal {
           break;
         }
         const target = _v.set(t.x, 0, t.z);
-        const d = this.walkToward(target, 2.6, dt, 8, 0.55);
-        if (d < 0.62 || this.stateTime > 7) this.pickUp(f);
+        // stop with the snack at her mouth (her nose is ~0.8 m ahead of her middle)
+        const d = this.walkToward(target, 2.6, dt, 8, 0.72);
+        if (d < 0.8 || this.stateTime > 7) this.pickUp(f);
         break;
       }
       case 'eat': {
@@ -295,7 +307,15 @@ export class Mom extends RaccoonAnimal {
     }
     if (player && dPlayer < 9 && this.state !== 'sleep') this.lookYaw = wrapAngle(this.lookAngleTo(player.position));
     this.selfGroom = Math.max(0, this.selfGroom - dt);
+    // Kinematic bodies shove whatever they walk into: only be solid to Jimothy while standing still
+    const solid = this.speed < 0.05;
+    if (solid !== this.solid) {
+      this.solid = solid;
+      this.body.collider(0).setCollisionGroups(groups(G.ANIMAL, solid ? G.PLAYER | G.NPC | G.RAGDOLL : G.NPC | G.RAGDOLL));
+    }
   }
+
+  private solid = true;
 
   private pickUp(f: Entity) {
     const game = this.game;

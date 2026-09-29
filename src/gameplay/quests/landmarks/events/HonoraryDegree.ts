@@ -241,13 +241,15 @@ export class HonoraryDegree extends Landmark {
     e.data.soggy = true;
     const k = this.kit;
     const firstSoggy = this.step !== 'soggy';
+    // Items-system diplomas already score their own "Degree In Soggy": don't double-award.
+    const itemScored = !!e.data.itemKind;
     if (firstSoggy) {
-      this.game.score(300, 'Degree In Soggy');
+      if (!itemScored) this.game.score(300, 'Degree In Soggy');
       k.shout('DEGREE IN SOGGY', 'Your diploma is now a papier-mâché burrito.', '#4ac1ff');
       this.game.sfx('sad_trombone', undefined, 0.6);
       this.game.events.emit('degreeSoggy', {});
       this.setStep('soggy');
-    } else {
+    } else if (!itemScored) {
       this.game.score(40, 'Another Soggy Degree');
     }
     if (this.dean?.alive && this.flatDist(this.deanSpot) < 25) this.dean.say(firstSoggy ? 'Did he… did he just wash his diploma?' : '…we are not printing a fourth one.', 3);

@@ -21,6 +21,21 @@ export function spawn(game: Game, spec: PropSpec, x: number, y: number, z: numbe
   return spawnProp(game, spec, new THREE.Vector3(x, y, z), rotY);
 }
 
+/** Spawn resting on the highest terrain point under a small footprint, so props never start embedded on slopes. */
+export function spawnOnGround(game: Game, spec: PropSpec, x: number, z: number, rotY = 0, radius = 0.4, lift = 0.03): Entity {
+  const world = game.get<any>('world');
+  let y = -Infinity;
+  for (const [dx, dz] of [
+    [0, 0],
+    [radius, 0],
+    [-radius, 0],
+    [0, radius],
+    [0, -radius],
+  ])
+    y = Math.max(y, world.heightAt(x + dx, z + dz));
+  return spawn(game, spec, x, y + lift, z, rotY);
+}
+
 // ------------------------------------------------------------------ Residential props
 
 export function gnome(mats: MatSet, hat = 0xd8342c, shirt = 0x2f6fb5): PropSpec {

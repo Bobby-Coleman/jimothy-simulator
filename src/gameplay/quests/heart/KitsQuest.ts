@@ -97,7 +97,7 @@ export class KitsQuest implements HeartQuest {
     let slot = this.homeOrder.indexOf(k.index);
     if (slot < 0) slot = this.homeOrder.push(k.index) - 1;
     const spot = mom.kitSpot(slot);
-    k.goHome(spot, Math.atan2(mom.home.x - spot.x, mom.home.z - spot.z), mom.home);
+    k.goHome(spot, Math.atan2(mom.home.x - spot.x, mom.home.z - spot.z), mom.home, mom.entrance());
     k.say('heart', 1.5);
     this.ctx.game.sfx('kit_chirp', k.pos, 0.8, 1.1);
   }
@@ -129,12 +129,14 @@ export class KitsQuest implements HeartQuest {
     ctx.game.sfx('happy', mom.pos, 1, 1.0);
     ctx.onComplete('kits');
     ctx.hint('All five kits are home! Mom counts them twice. Everyone is accounted for.', 5);
-    // a little family portrait moment (unless something else has the camera)
+    // a little family portrait moment, looking in through the den entrance (unless something else has the camera)
     if (!ctx.inCutscene && !this.mama.grooming) {
-      const focus = () => mom.pos.clone().setY(mom.pos.y + 0.45);
-      const p = ctx.player?.position as THREE.Vector3 | undefined;
-      const a0 = p ? Math.atan2(p.x - mom.home.x, p.z - mom.home.z) : mom.homeYaw;
-      ctx.cutscene({ duration: 4, focus, camPos: ctx.orbit(focus, 3.4, 1.3, a0, 0.12), fov: 50 });
+      const fwd = new THREE.Vector3(Math.sin(mom.homeYaw), 0, Math.cos(mom.homeYaw));
+      const side = new THREE.Vector3(fwd.z, 0, -fwd.x);
+      const focus = () => mom.home.clone().setY(mom.home.y + 0.3);
+      const base = mom.home.clone().addScaledVector(fwd, 2.8).setY(mom.home.y + 1.15);
+      const cam = new THREE.Vector3();
+      ctx.cutscene({ duration: 4.5, focus, camPos: (t) => cam.copy(base).addScaledVector(side, Math.sin(t * 0.5) * 0.5), fov: 55 });
     }
   }
 

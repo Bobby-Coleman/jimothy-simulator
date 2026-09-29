@@ -151,9 +151,9 @@ export class HeartCtx {
    */
   clearOfTraffic(p: THREE.Vector3, clearance = 4.6): boolean {
     const lanes = (this.world?.lanes ?? []) as { points: THREE.Vector3[]; loop: boolean }[];
-    let moved = false;
-    for (let iter = 0; iter < 4; iter++) {
-      let pushed = false;
+    if (!lanes.length) return false;
+    const laneDist = (x: number, z: number) => {
+      let best = Infinity;
       for (const lane of lanes) {
         const pts = lane.points;
         const n = pts.length;
@@ -164,30 +164,28 @@ export class HeartCtx {
           const abz = b.z - a.z;
           const len2 = abx * abx + abz * abz;
           if (len2 < 1e-6) continue;
-          const t = THREE.MathUtils.clamp(((p.x - a.x) * abx + (p.z - a.z) * abz) / len2, 0, 1);
-          const cx = a.x + abx * t;
-          const cz = a.z + abz * t;
-          let dx = p.x - cx;
-          let dz = p.z - cz;
-          const d = Math.hypot(dx, dz);
-          if (d >= clearance) continue;
-          if (d < 1e-3) {
-            const l = Math.sqrt(len2);
-            dx = -abz / l;
-            dz = abx / l;
-          } else {
-            dx /= d;
-            dz /= d;
-          }
-          p.x = cx + dx * (clearance + 0.3);
-          p.z = cz + dz * (clearance + 0.3);
-          pushed = moved = true;
+          const t = THREE.MathUtils.clamp(((x - a.x) * abx + (z - a.z) * abz) / len2, 0, 1);
+          const d = Math.hypot(x - (a.x + abx * t), z - (a.z + abz * t));
+          if (d < best) best = d;
         }
       }
-      if (!pushed) break;
+      return best;
+    };
+    if (laneDist(p.x, p.z) >= clearance) return false;
+    // nearest clear spot on growing rings around the original point (bounded: never more than 14 m)
+    for (let r = 2; r <= 14; r += 1.5) {
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        const x = p.x + Math.cos(a) * r;
+        const z = p.z + Math.sin(a) * r;
+        if (laneDist(x, z) < clearance) continue;
+        const y = this.ground(x, z, p.y + 1.5, p.y);
+        if (Math.abs(y - p.y) > 1.2) continue;
+        p.set(x, y, z);
+        return true;
+      }
     }
-    if (moved) p.y = this.ground(p.x, p.z, p.y + 3, p.y);
-    return moved;
+    return false;
   }
 
   /** Horizontal distance from the player. */
@@ -428,13 +426,67 @@ export class HeartCtx {
     }
   }
 
-  /** Orbiting close-up camera helper: circle around `center` at radius r, height h, starting at angle a0. */
+  /**
+   * Orbiting close-up camera helper: circle around `center` at radius r, height h, starting at angle a0.
+   * The start angle is nudged (once) to the nearest angle with a clear view — physics colliders *and* visible
+   * meshes (signs, fences without colliders…).
+   */
   orbit(center: () => THREE.Vector3, r: number, h: number, a0: number, speed = 0.12) {
     const out = new THREE.Vector3();
+    const start = this.clearAngle(center().clone(), r, h, a0, speed);
     return (t: number) => {
       const c = center();
-      const a = a0 + t * speed;
+      const a = start + t * speed;
       return out.set(c.x + Math.sin(a) * r, c.y + h, c.z + Math.cos(a) * r);
     };
+  }
+
+  /** Angle nearest `a0` from which a camera at (radius r, height h) sees `focus` unobstructed. */
+  clearAngle(focus: THREE.Vector3, r: number, h: number, a0: number, speed = 0): number {
+    const rc = new THREE.Raycaster();
+    const player = this.player;
+    const skip = new Set<THREE.Object3D>();
+    if (player?.model?.root) skip.add(player.model.root);
+    for (const a of this.animals?.list ?? []) {
+      const root = (a as any).rig?.root ?? (a as any).parts?.root;
+      if (root) skip.add(root);
+    }
+    const isSkipped = (o: THREE.Object3D | null) => {
+      for (let p = o; p; p = p.parent) if (skip.has(p)) return true;
+      return false;
+    };
+    const targets = this.game.scene.children.filter((c) => !skip.has(c) && c.visible);
+    const blocked = (a: number) => {
+      // check where the camera starts and where it will be a few seconds later
+      for (const k of [0, 2.5]) {
+        const aa = a + k * speed;
+        const cam = new THREE.Vector3(focus.x + Math.sin(aa) * r, focus.y + h, focus.z + Math.cos(aa) * r);
+        const dir = cam.clone().sub(focus);
+        const len = dir.length();
+        if (this.game.physics.sphereCast(focus, dir, 0.15, len, groups(G.ALL, G.WORLD | G.VEHICLE))) return true;
+        rc.set(focus, dir.normalize());
+        rc.near = 0.9;
+        rc.far = len;
+        let hits: THREE.Intersection[] = [];
+        try {
+          hits = rc.intersectObjects(targets, true);
+        } catch {
+          return false;
+        }
+        for (const hit of hits) {
+          const o = hit.object as THREE.Mesh;
+          if ((o as any).isSprite || (o as any).isPoints || (o as any).isLine || isSkipped(o)) continue;
+          const mat = o.material as THREE.Material | undefined;
+          if (mat && !Array.isArray(mat) && mat.transparent && mat.opacity < 0.6) continue;
+          return true;
+        }
+      }
+      return false;
+    };
+    for (let i = 0; i < 12; i++) {
+      const a = a0 + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 6);
+      if (!blocked(a)) return a;
+    }
+    return a0;
   }
 }

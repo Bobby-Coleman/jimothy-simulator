@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Game } from '../../core/Game';
 import { disposeTree } from './fx';
 import { getPlayer, PLAYER_R, type MutatorImpl } from './types';
@@ -14,42 +15,65 @@ interface Crow {
   flap: number;
 }
 
+const _m4 = new THREE.Matrix4();
+const _q4 = new THREE.Quaternion();
+const _col = new THREE.Color();
+
+/** Transform + vertex-colour a primitive so several can be merged into one mesh (one draw call). */
+function part(geo: THREE.BufferGeometry, color: number, pos: [number, number, number], scale: [number, number, number] = [1, 1, 1], rot: [number, number, number] = [0, 0, 0]) {
+  _m4.compose(new THREE.Vector3(...pos), _q4.setFromEuler(new THREE.Euler(...rot)), new THREE.Vector3(...scale));
+  geo.applyMatrix4(_m4);
+  if (geo.index) geo = geo.toNonIndexed();
+  geo.deleteAttribute('uv');
+  const n = geo.getAttribute('position').count;
+  const arr = new Float32Array(n * 3);
+  _col.set(color);
+  for (let i = 0; i < n; i++) arr.set([_col.r, _col.g, _col.b], i * 3);
+  geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  return geo;
+}
+
+function merged(parts: THREE.BufferGeometry[], mat: THREE.Material) {
+  const geo = mergeGeometries(parts)!;
+  for (const p of parts) p.dispose();
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = true;
+  return m;
+}
+
+/** A Seattle crow in 4 draw calls: body (+head, beak, eyes, tail), two wings, legs. */
 function buildCrow(): Crow {
   const root = new THREE.Group();
-  root.name = 'Crow';
-  const black = new THREE.MeshStandardMaterial({ color: 0x17181f, roughness: 0.42, metalness: 0.15 });
-  const beakMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.5 });
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1 });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.1, 14, 10), black);
-  body.scale.set(0.85, 0.8, 1.45);
-  root.add(body);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.065, 12, 10), black);
-  head.position.set(0, 0.07, 0.14);
-  root.add(head);
-  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.085, 8), beakMat);
-  beak.rotation.x = Math.PI / 2;
-  beak.position.set(0, 0.06, 0.225);
-  root.add(beak);
-  for (const sx of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), eyeMat);
-    eye.position.set(sx * 0.04, 0.09, 0.18);
-    root.add(eye);
-  }
-  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.015, 0.16), black);
-  tail.position.set(0, 0.0, -0.2);
-  tail.rotation.x = -0.15;
-  root.add(tail);
+  root.name = 'CrowRiderCrow';
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.15 });
+  const BLACK = 0x17181f;
+  const BEAK = 0x2c2c31;
+  const EYE = 0x050505;
+  root.add(
+    merged(
+      [
+        part(new THREE.SphereGeometry(0.1, 14, 10), BLACK, [0, 0, 0], [0.85, 0.8, 1.45]),
+        part(new THREE.SphereGeometry(0.065, 12, 10), BLACK, [0, 0.07, 0.14]),
+        part(new THREE.ConeGeometry(0.022, 0.085, 8), BEAK, [0, 0.06, 0.225], [1, 1, 1], [Math.PI / 2, 0, 0]),
+        part(new THREE.SphereGeometry(0.012, 8, 6), EYE, [0.04, 0.09, 0.18]),
+        part(new THREE.SphereGeometry(0.012, 8, 6), EYE, [-0.04, 0.09, 0.18]),
+        part(new THREE.BoxGeometry(0.1, 0.015, 0.16), BLACK, [0, 0, -0.2], [1, 1, 1], [-0.15, 0, 0]),
+      ],
+      mat,
+    ),
+  );
   const wing = (sx: number) => {
     const pivot = new THREE.Group();
     pivot.position.set(sx * 0.07, 0.04, 0.02);
-    const w = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 6), black);
-    w.scale.set(1.9, 0.14, 0.95);
-    w.position.set(sx * 0.17, 0, -0.02);
-    pivot.add(w);
-    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.012, 0.09), black);
-    tip.position.set(sx * 0.34, 0, -0.05);
-    tip.rotation.y = sx * 0.3;
-    pivot.add(tip);
+    pivot.add(
+      merged(
+        [
+          part(new THREE.SphereGeometry(0.1, 10, 6), BLACK, [sx * 0.17, 0, -0.02], [1.9, 0.14, 0.95]),
+          part(new THREE.BoxGeometry(0.16, 0.012, 0.09), BLACK, [sx * 0.34, 0, -0.05], [1, 1, 1], [0, sx * 0.3, 0]),
+        ],
+        mat,
+      ),
+    );
     root.add(pivot);
     return pivot;
   };
@@ -57,19 +81,13 @@ function buildCrow(): Crow {
   const wingR = wing(-1);
   const legs = new THREE.Group();
   legs.position.set(0, -0.06, 0.02);
+  const legParts: THREE.BufferGeometry[] = [];
   for (const sx of [-1, 1]) {
-    const l = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.11, 5), beakMat);
-    l.position.set(sx * 0.03, -0.055, 0);
-    legs.add(l);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.008, 0.05), beakMat);
-    foot.position.set(sx * 0.03, -0.11, 0.015);
-    legs.add(foot);
+    legParts.push(part(new THREE.CylinderGeometry(0.006, 0.006, 0.11, 5), BEAK, [sx * 0.03, -0.055, 0]));
+    legParts.push(part(new THREE.BoxGeometry(0.035, 0.008, 0.05), BEAK, [sx * 0.03, -0.11, 0.015]));
   }
+  legs.add(merged(legParts, mat));
   root.add(legs);
-  root.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (m.isMesh) m.castShadow = true;
-  });
   root.scale.setScalar(1.35);
   return { root, wingL, wingR, legs, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, flap: Math.random() * 6 };
 }
@@ -135,8 +153,9 @@ export function crowRider(): MutatorImpl {
       glideTime += dt;
       const v = p.body.linvel();
       const f = p.forwardVec(_d);
-      const speed = 8.5 * Math.max(0.6, Math.min(2, p.speedMul));
-      const k = 1 - Math.exp(-dt * 2.2);
+      // Strong blend: the controller's air control pulls toward walking speed every frame before we run.
+      const speed = 9.5 * Math.max(0.6, Math.min(2, p.speedMul));
+      const k = 1 - Math.exp(-dt * 10);
       const vx = v.x + (f.x * speed - v.x) * k;
       const vz = v.z + (f.z * speed - v.z) * k;
       // The crows hold him up: cancel gravity for this step and ease into a gentle sink.
@@ -185,7 +204,7 @@ export function crowRider(): MutatorImpl {
       nextCaw -= dt;
       if (nextCaw <= 0) {
         nextCaw = 7 + Math.random() * 10;
-        game.sfx('crow_caw', crows[0].pos, 0.5);
+        game.sfx('crow_caw', crows[0].pos.clone(), 0.5);
       }
     },
   };

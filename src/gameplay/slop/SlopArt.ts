@@ -330,7 +330,7 @@ export function drawSlopBillboard(ctx: Ctx, w: number, h: number) {
   ctx.textAlign = 'right';
   ctx.font = `700 ${Math.round(h * 0.045)}px Nunito, system-ui, sans-serif`;
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('Generated in 0.3s · Why hire artists? (please do not wash)', w * 0.98, h * 0.955);
+  ctx.fillText('Generated in 0.3s · No raccoons were consulted (please do not wash)', w * 0.98, h * 0.955);
   // compression macroblocks
   for (let i = 0; i < 60; i++) {
     const bx = Math.floor(r() * (w / 16)) * 16;

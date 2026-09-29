@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import type { Entity } from '../../core/Entities';
 import { RAPIER, G } from '../../core/Physics';
-import { RaccoonAnimal, damp, dampAngle } from './Animal';
+import { RaccoonAnimal, damp, dampAngle, WORLD_ONLY } from './Animal';
 import { RIGS, type RigPose } from './RaccoonRig';
 
 /**
@@ -114,15 +114,31 @@ export class Kit extends RaccoonAnimal {
     this.say('exclaim', 0.9);
   }
 
-  /** Send home to Mom. */
-  goHome(spot: THREE.Vector3, yaw: number, look: THREE.Vector3) {
+  /** Send home to Mom (optionally through `via`, e.g. the den entrance, when the way in isn't straight). */
+  goHome(spot: THREE.Vector3, yaw: number, look: THREE.Vector3, via?: THREE.Vector3) {
     this.homeSpot.copy(spot);
     this.homeYaw = yaw;
     this.homeLook.copy(look);
+    this.via = via ? via.clone() : null;
+    this.progressT = 0;
+    this.bestD = Infinity;
     if (this.entity.data.heldByPlayer) this.player?.release(false);
     this.line?.remove(this);
     this.entity.name = `Kit (${this.kitName})`;
     this.setState('toMom');
+  }
+
+  private via: THREE.Vector3 | null = null;
+  private progressT = 0;
+  private bestD = Infinity;
+
+  /** Clear straight path (static world) from us to p? */
+  private canSee(p: THREE.Vector3) {
+    const from = new THREE.Vector3(this.pos.x, this.pos.y + 0.2, this.pos.z);
+    const dir = new THREE.Vector3(p.x - from.x, 0, p.z - from.z);
+    const len = dir.length();
+    if (len < 0.05) return true;
+    return !this.game.physics.raycast(from, dir, len, WORLD_ONLY);
   }
 
   /** Instantly at home (restored from a save). */
@@ -198,10 +214,23 @@ export class Kit extends RaccoonAnimal {
         this.setState(this.line ? 'regroup' : 'follow');
         break;
       case 'toMom': {
-        const d = this.walkToward(this.homeSpot, 4.2, dt, 10, 0.08);
+        // go round through the entrance if the way in isn't straight
+        if (this.via && (this.canSee(this.homeSpot) || Math.hypot(this.pos.x - this.via.x, this.pos.z - this.via.z) < 0.35)) this.via = null;
+        const goal = this.via ?? this.homeSpot;
+        const d = this.walkToward(goal, 4.2, dt, 10, 0.05);
         this.hopPh += dt * 13;
-        if (d < 0.15 || this.stateTime > 12) {
-          if (d > 2) this.place(this.homeSpot, this.homeYaw);
+        // stuck on something? hop the rest of the way (with a little sparkle)
+        const dh = Math.hypot(this.pos.x - this.homeSpot.x, this.pos.z - this.homeSpot.z);
+        if (dh < this.bestD - 0.05) {
+          this.bestD = dh;
+          this.progressT = 0;
+        } else this.progressT += dt;
+        const arrived = !this.via && d < 0.12;
+        if (arrived || this.progressT > 2.5 || this.stateTime > 12) {
+          if (!arrived) {
+            this.game.events.emit('sparkle', { position: this.pos.clone() });
+            this.place(this.homeSpot, this.homeYaw);
+          }
           this.setState('home');
           this.onArrivedHome?.(this);
         }
@@ -310,7 +339,7 @@ export class Kit extends RaccoonAnimal {
     if (night) {
       // playtime: little hops in a circle around the home spot, chasing each other
       const a = this.playT * 0.9 + this.index * ((Math.PI * 2) / 5);
-      const r = 0.45 + 0.25 * Math.sin(this.playT * 0.7 + this.index);
+      const r = 0.24 + 0.14 * Math.sin(this.playT * 0.7 + this.index);
       const target = _v.set(this.homeSpot.x + Math.cos(a) * r, this.homeSpot.y, this.homeSpot.z + Math.sin(a) * r);
       this.walkToward(target, 1.6, dt, 10, 0.02);
       this.hopPh += dt * 10;
