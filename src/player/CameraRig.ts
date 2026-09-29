@@ -77,7 +77,8 @@ export class CameraRig implements System {
     // Collision: pull the camera in front of walls
     let dist = this.targetDistance;
     const player = game.get<any>('player');
-    const hit = game.physics.sphereCast(this.pivot, _dir, 0.22, dist, groups(G.ALL, G.WORLD | G.VEHICLE), player?.body);
+    // Ignore thin things (lamp posts, poles, trunks) so the camera doesn't pump in and out on busy streets
+    const hit = game.physics.sphereCast(this.pivot, _dir, 0.22, dist, groups(G.ALL, G.WORLD | G.VEHICLE), player?.body, (c) => !game.physics.isThin(c));
     if (hit) dist = Math.max(0.5, hit.distance - 0.05);
     // Zoom out smoothly, snap in quickly
     this.distance = dist < this.distance ? dist : this.distance + (dist - this.distance) * (1 - Math.exp(-dt * 3));

@@ -254,6 +254,7 @@ export class Physics {
     maxDist: number,
     filter: number = groups(G.ALL, G.WORLD | G.PROP | G.VEHICLE),
     exclude?: RAPIER.RigidBody,
+    predicate?: (c: RAPIER.Collider) => boolean,
   ): { distance: number; normal: THREE.Vector3; point: THREE.Vector3; collider: RAPIER.Collider } | null {
     _v.copy(dir).normalize();
     const hit = this.world.castShape(
@@ -268,6 +269,7 @@ export class Physics {
       filter,
       undefined,
       exclude,
+      predicate,
     );
     if (!hit) return null;
     // Empirically (rapier 0.21) normal1 is the surface normal of the hit collider, pointing back toward the cast shape.
@@ -277,6 +279,23 @@ export class Physics {
       point: new THREE.Vector3(hit.witness1.x, hit.witness1.y, hit.witness1.z),
       collider: hit.collider,
     };
+  }
+
+  private thinCache = new Map<number, boolean>();
+  /** True for pole/trunk-like colliders (the camera looks straight through those). */
+  isThin(c: RAPIER.Collider): boolean {
+    let v = this.thinCache.get(c.handle);
+    if (v !== undefined) return v;
+    const sh: any = c.shape;
+    v = false;
+    if (sh?.halfExtents) {
+      const e = [sh.halfExtents.x, sh.halfExtents.y, sh.halfExtents.z].sort((a: number, b: number) => a - b);
+      v = e[1] < 0.45;
+    } else if (typeof sh?.radius === 'number' && !sh?.heights) {
+      v = sh.radius < 0.5;
+    }
+    this.thinCache.set(c.handle, v);
+    return v;
   }
 
   /** All colliders overlapping a sphere. */
