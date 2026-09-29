@@ -17,6 +17,8 @@ export class DebugStats implements System {
       }
     });
     game.debug.perf = () => this.snapshot(game);
+    // Accumulate stats over all composer passes; we reset once per frame in lateUpdate.
+    game.renderer.renderer.info.autoReset = false;
   }
 
   snapshot(game: Game) {
@@ -35,8 +37,8 @@ export class DebugStats implements System {
       fps: Math.round(game.fps),
       frameMsP50: +p(0.5).toFixed(2),
       frameMsP95: +p(0.95).toFixed(2),
-      drawCalls: info.render.calls,
-      triangles: info.render.triangles,
+      drawCalls: this.lastCalls,
+      triangles: this.lastTris,
       geometries: info.memory.geometries,
       textures: info.memory.textures,
       programs: info.programs?.length ?? 0,
@@ -49,7 +51,14 @@ export class DebugStats implements System {
     };
   }
 
+  private lastCalls = 0;
+  private lastTris = 0;
+
   lateUpdate(_dt: number, game: Game) {
+    const info = game.renderer.renderer.info;
+    this.lastCalls = info.render.calls;
+    this.lastTris = info.render.triangles;
+    info.reset();
     const now = performance.now();
     this.frameTimes.push(now - this.last);
     this.last = now;

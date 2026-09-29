@@ -1,5 +1,6 @@
 import { Game } from './core/Game';
 import { registerSystems } from './systems';
+import { furSettings } from './player/Fur';
 
 async function boot() {
   const bootEl = document.getElementById('boot');
@@ -7,6 +8,9 @@ async function boot() {
   // Handy for debugging from the console: jimothy.get('player') etc.
   (window as any).jimothy = game;
   await game.init(document.getElementById('app')!);
+  // Fluffiness scales with the quality preset (low = no shell fur)
+  const q = new URLSearchParams(location.search).get('quality') ?? game.renderer.quality;
+  furSettings.shells = q === 'low' ? 0 : q === 'medium' ? 6 : 10;
   registerSystems(game);
   await game.initSystems((name, i, n) => {
     if (bootEl) bootEl.textContent = `Loading Jimothy… (${Math.round((i / n) * 100)}%)`;
