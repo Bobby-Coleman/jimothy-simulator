@@ -116,8 +116,8 @@ export const OldBallard: ZoneBuilder = {
     buildPlaque(game, world, batch, gw);
     buildPorchAndDen(game, world, batch);
 
-    // ---------------------------------------------------------------- Grunge & Sons roof ladder (bobblehead:c1)
-    buildRoofLadder(world, batch, built.get(SHOPS.grunge.name)!);
+    // (bobblehead c1 on the Grunge & Sons roof has no ladder: its brick front is 16 m of bare wall. Sprint-climb the east
+    // end of the donut shop next door, rest on its roof, then climb the Grunge's side wall from there.)
 
     // ---------------------------------------------------------------- Jimothy Commons plaza
     await buildPlaza(game, world, batch);
@@ -214,44 +214,6 @@ function buildSurfaces(game: Game, batch: Batch, mats: Awaited<ReturnType<typeof
 }
 
 // ============================================================================================ mural & plaque
-
-/**
- * Fixed service ladder up the west end of a storefront (for the sign painters, and for raccoons): starts above the
- * awning, stands off the brick on brackets so it clears the cornices, and ends in a safety-yellow gooseneck over the
- * parapet. Bare walls tire Jimothy 4× faster than ladders, so the ladder volume is what gets him onto the roof.
- */
-function buildRoofLadder(world: World, batch: Batch, st: BuiltStore) {
-  const H = st.height - (st.spec.baseY ?? 0); // local roof height
-  const top = H + 0.95; // parapet top
-  const x = -st.width / 2 + 0.85; // between the corner pilaster and the first window column, west of the awning end
-  const z = 0.72; // in front of the cornice (which sticks out 0.61)
-  const y0 = 3.4; // clears the awning
-  const iron = 0x2d3035;
-  const safety = 0xf2c14e;
-  const parts: { geo: THREE.BufferGeometry; color: number; matrix: THREE.Matrix4 }[] = [];
-  const box = (w: number, h: number, d: number, px: number, py: number, pz: number, color: number) =>
-    parts.push({ geo: new THREE.BoxGeometry(w, h, d), color, matrix: T(px, py, pz) });
-  const railTop = top + 1.05;
-  for (const s of [-1, 1]) {
-    const rx = x + s * 0.3;
-    box(0.11, railTop - y0, 0.11, rx, (y0 + railTop) / 2, z, iron);
-    // wall brackets
-    for (let y = y0 + 0.4; y < H - 0.6; y += 2.6) box(0.08, 0.1, z, rx, y, z / 2, iron);
-    // gooseneck: over the parapet and down onto the roof
-    box(0.11, 0.11, z + 0.55, rx, railTop, (z - 0.55) / 2, safety);
-    box(0.11, railTop - H, 0.11, rx, (H + railTop) / 2, -0.55, safety);
-    box(0.14, 0.14, 0.14, rx, y0 - 0.02, z, safety); // end caps
-  }
-  for (let y = y0 + 0.25; y < top + 0.1; y += 0.36) box(0.6, 0.07, 0.08, x, y, z, iron);
-  // safety-yellow bottom rung so the start reads from the street
-  box(0.68, 0.1, 0.12, x, y0 + 0.02, z, safety);
-  batch.add(mergeColored(parts), trimMat(), { matrix: st.frame.clone(), castShadow: true });
-  // ladder volume: where Jimothy's body is while climbing the brick behind it (wall surface out to ~1.2 m),
-  // from the sidewalk (he scrambles up behind the awning to the first rung) to just over the parapet
-  const a = new THREE.Vector3(x - 0.8, 0, -0.3).applyMatrix4(st.frame);
-  const b = new THREE.Vector3(x + 0.8, railTop + 0.5, 1.3).applyMatrix4(st.frame);
-  world.addLadder(a.clone().min(b), a.clone().max(b));
-}
 
 function buildMural(game: Game, world: World, batch: Batch, gw: BuiltStore) {
   // Goodwheel's east wall (x = 18) faces the plaza.

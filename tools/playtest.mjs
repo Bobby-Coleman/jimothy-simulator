@@ -216,8 +216,11 @@ function installHelpers(full) {
       g.input.virtual.buttons.delete('sprint');
       return i >= pts.length;
     },
-    /** Climb a structure centred at (cx,cz) from (sx,sz): hold forward (+jump to grab the wall), rest on ledges. */
-    climbTo(cx, cz, sx, sz, target, maxSecs = 60, stop) {
+    /**
+     * Climb a structure centred at (cx,cz) from (sx,sz): hold forward (+jump to grab the wall), rest on ledges.
+     * `sprint`: sprint-climb (a bare wall is ~7 m of climbing at walking pace, ~11 m sprinting).
+     */
+    climbTo(cx, cz, sx, sz, target, maxSecs = 60, stop, { sprint = false } = {}) {
       const cam = g.get('camera');
       this.tp(sx, sz, Math.atan2(cx - sx, cz - sz));
       let t = 0;
@@ -228,6 +231,7 @@ function installHelpers(full) {
         if (p.mode === 'climb') {
           g.input.virtual.move.set(0, 1);
           g.input.virtual.buttons.delete('jump');
+          if (sprint) g.input.virtual.buttons.add('sprint');
         } else if (p.mode === 'walk') {
           if (p.grounded && p.stamina < 0.95 && P.y > 3 && !above) {
             g.input.virtual.move.set(0, 0);
@@ -878,7 +882,8 @@ const objScenarios = {
   },
   async obj_bobbleheadCollector() {
     // Reachability by climbing was checked by hand (see QA_OBJECTIVES.md); here: every placed statue can be walked
-    // into from its perch and the count/save/reward work. Plus one real climb (the relocated gasworks one).
+    // into from its perch and the count/save/reward work. Plus one real climb (the relocated gasworks one: no ladder,
+    // so sprint-climb the valve riser on the tower's east-northeast side, rest there, climb on to the cap).
     return ev(() => {
       T.resetObj('bobbleheadCollector');
       T.release();
@@ -889,7 +894,8 @@ const objScenarios = {
       let climbed = null;
       if (s1) {
         for (let k = 0; k < 3 && !s1.collected; k++) {
-          T.climbTo(-158, -25.5, -152.5, -25.5, s1.pos, 12, () => s1.collected || (T.p.grounded && T.p.position.y > 18.5));
+          const a = (40 * Math.PI) / 180; // = valveRiser in Park.ts
+          T.climbTo(-158, -25.5, -158 + Math.cos(a) * 5.5, -25.5 + Math.sin(a) * 5.5, s1.pos, 16, () => s1.collected || (T.p.grounded && T.p.position.y > 18.5), { sprint: true });
           if (s1.collected) break;
           T.g.get('camera').snapBehind(Math.atan2(s1.pos.x - T.p.position.x, s1.pos.z - T.p.position.z));
           T.g.input.virtual.move.set(0, 0.6);

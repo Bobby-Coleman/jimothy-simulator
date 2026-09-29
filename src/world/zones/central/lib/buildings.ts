@@ -371,27 +371,40 @@ function fireEscape(
   const c = '#2d3035';
   const col = (cx: number, cy: number, cz: number, sx: number, sy: number, sz: number) =>
     kit.world.collider(lp(cx, cy, cz), new THREE.Vector3(sx, sy, sz), yaw);
+  // Climb pass: each ladder stands 0.6 m off the wall, where Jimothy can stand in front of it (in the alley, or on the
+  // level below) and climb its outside face, up through a hatch in the platform's OUTER half; at the top his mantle
+  // carries him onto the solid strip along the wall. (It used to hang at the outer edge under a full-depth slot: the
+  // mantle threw him into the slot and he fell straight back down through it.)
+  const zIn = bz - 0.02,
+    zH = bz - 0.55,
+    zOut = bz - 1.22;
   for (let f = 1; f < floors; f++) {
     const y = gH + (f - 1) * fH;
     const lx = x + (f % 2 ? 1.05 : -1.05);
-    addBox(3.2, 0.07, 1.2, x, y + 0.03, bz - 0.62, c);
+    const g0 = lx - 0.5,
+      g1 = lx + 0.5;
+    // platform: strip along the wall + the outer half either side of the hatch (drawn and solid alike)
+    addBox(3.2, 0.07, zIn - zH, x, y + 0.03, (zIn + zH) / 2, c);
+    col(x, y + 0.03, (zIn + zH) / 2, 3.2, 0.1, zIn - zH);
+    for (const [a, b] of [[x - 1.6, g0], [g1, x + 1.6]]) {
+      if (b - a < 0.1) continue;
+      addBox(b - a, 0.07, zH - zOut, (a + b) / 2, y + 0.03, (zH + zOut) / 2, c);
+      col((a + b) / 2, y + 0.03, (zH + zOut) / 2, b - a, 0.1, zH - zOut);
+    }
     addBox(3.2, 0.05, 0.05, x, y + 1.0, bz - 1.2, c);
     addBox(0.05, 1.0, 0.05, x - 1.6, y + 0.5, bz - 1.2, c);
     addBox(0.05, 1.0, 0.05, x + 1.6, y + 0.5, bz - 1.2, c);
     addBox(0.05, 0.05, 1.2, x - 1.6, y + 1.0, bz - 0.62, c);
     addBox(0.05, 0.05, 1.2, x + 1.6, y + 1.0, bz - 0.62, c);
-    // platform collider with a hatch gap where the ladder comes up
-    const g0 = lx - 0.5,
-      g1 = lx + 0.5;
-    if (g0 - (x - 1.6) > 0.1) col((x - 1.6 + g0) / 2, y + 0.03, bz - 0.62, g0 - (x - 1.6), 0.1, 1.2);
-    if (x + 1.6 - g1 > 0.1) col((g1 + x + 1.6) / 2, y + 0.03, bz - 0.62, x + 1.6 - g1, 0.1, 1.2);
-    // ladder up to this level (the bottom one hangs 1.9 m above the alley)
+    // ladder up to this level (the bottom one is a raised drop ladder, 1.9 m up: out of reach from the alley, so the
+    // fire escape only helps once he is on the first landing)
+    const lz = bz - 0.6;
     const y0 = f === 1 ? 1.9 : y - fH + 0.1;
     const len = y + 0.05 - y0;
-    addBox(0.04, len, 0.04, lx - 0.24, y0 + len / 2, bz - 1.05, c);
-    addBox(0.04, len, 0.04, lx + 0.24, y0 + len / 2, bz - 1.05, c);
-    for (let r = 0.2; r < len; r += 0.3) addBox(0.48, 0.03, 0.03, lx, y0 + r, bz - 1.05, c);
-    col(lx, y0 + len / 2, bz - 1.02, 0.56, len, 0.1);
+    addBox(0.04, len, 0.04, lx - 0.24, y0 + len / 2, lz, c);
+    addBox(0.04, len, 0.04, lx + 0.24, y0 + len / 2, lz, c);
+    for (let r = 0.2; r < len; r += 0.3) addBox(0.48, 0.03, 0.03, lx, y0 + r, lz, c);
+    col(lx, y0 + len / 2, lz + 0.03, 0.56, len, 0.1);
   }
 }
 

@@ -1076,53 +1076,7 @@ function grandmasPorch(game: Game, world: World, mats: MatSet, b: Batch, info: H
     f.geo(b, 'plain', GEO.cyl, x, 0.2, info.d / 2 + info.porch.d - 0.75, 0.45, 0.4, 0.45, 0xb8643c);
     f.geo(b, 'leaves', GEO.ico, x, 0.6, info.d / 2 + info.porch.d - 0.75, 0.6, 0.5, 0.6, 0xe0568f);
   }
-  roseTrellis(game, world, b, info, left);
   void pz;
-}
-
-/**
- * Grandma Rosie's rose trellis on the porch's end: the easy way onto the porch roof (and from there up the shingles to
- * the ridge bobblehead). Climbing the house wall under the porch roof just bonks his head, and bare walls tire him 4×
- * faster than ladders, so the trellis is a ladder volume.
- */
-function roseTrellis(game: Game, world: World, b: Batch, info: HouseInfo, left: number) {
-  const f = info.frame;
-  const x = left - 0.1; // just outside the porch end; the porch-roof collider starts at `left`, so he mantles onto it
-  const z0 = info.d / 2 + 0.12, // the whole porch end, so there is no gap to climb up into under the roof
-    z1 = info.d / 2 + info.porch.d - 0.35; // up to the column line (where the porch-roof collider ends)
-  const zc = (z0 + z1) / 2,
-    zw = z1 - z0;
-  // local ground under the trellis (houses sit on slopes)
-  let gy = 0;
-  for (const z of [z0, zc, z1]) {
-    const p = f.p(x, 0, z);
-    gy = Math.min(gy, world.heightAt(p.x, p.z) - info.floorY);
-  }
-  const top = 2.78; // just under the porch-roof surface at the front, so the top of the climb mantles onto it
-  const h = top - gy;
-  const white = 0xf6f2e8;
-  for (let i = 0; i < 4; i++) f.box(b, 'trim', x, gy + h / 2, z0 + 0.05 + (i * (zw - 0.1)) / 3, 0.07, h, 0.07, white);
-  for (let y = gy + 0.35; y < top; y += 0.42) f.box(b, 'trim', x, y, zc, 0.06, 0.06, zw, white);
-  f.box(b, 'trim', x, top + 0.04, zc, 0.12, 0.08, zw + 0.2, white);
-  // climbing roses: leafy clumps with fat pink/red blooms, spilling over the top onto the porch roof
-  let s = 7;
-  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-  for (let k = 0; k < 22; k++) {
-    const y = gy + 0.3 + r() * (h - 0.1);
-    const z = z0 + 0.1 + r() * (zw - 0.2);
-    f.geo(b, 'leaves', GEO.ico, x - 0.08, y, z, 0.42, 0.36, 0.42, k % 3 ? 0x4f9a3c : 0x3f8a34);
-    f.geo(b, 'plain', GEO.ico, x - 0.2, y + 0.08, z + 0.1, 0.2, 0.2, 0.2, r() < 0.5 ? 0xff5d8f : 0xe0304f);
-  }
-  for (let k = 0; k < 4; k++) {
-    const z = z0 + 0.35 + k * 0.62;
-    f.geo(b, 'leaves', GEO.ico, x + 0.1, top + 0.12, z, 0.45, 0.3, 0.4, 0x4f9a3c);
-    f.geo(b, 'plain', GEO.ico, x + 0.05, top + 0.28, z + 0.08, 0.2, 0.18, 0.2, k % 2 ? 0xff5d8f : 0xe0304f);
-  }
-  f.collider(game, x, gy + h / 2, zc, 0.1, h, zw);
-  // ladder volume: his body while climbing it (from the lattice out to ~1.2 m), from the ground to just above the roof
-  const a = f.p(x - 1.3, gy - 0.5, z0 - 0.3);
-  const c = f.p(x + 0.3, top + 1.0, z1 + 0.3);
-  world.addLadder(a.clone().min(c), a.clone().max(c));
 }
 
 // ------------------------------------------------------------------ signs

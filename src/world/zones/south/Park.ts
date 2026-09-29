@@ -250,13 +250,6 @@ function gasworks(kit: Kit, b: Batch) {
     // red warning light on top
     warningLights.push([t.x, top + capH + 0.45, t.z]);
     b.cyl([t.x, top + capH + 0.3, t.z], 0.05, 0.3, IRON, { seg: 6, collide: false });
-    // service ladder (east side) on the towers without a catwalk ring: bare walls tire Jimothy quickly, ladders don't
-    if (!t.ring) {
-      const lx = t.x + t.r + 0.1;
-      for (const dz of [-0.28, 0.28]) b.box([lx, base + t.h / 2, t.z + dz], [0.06, t.h, 0.06], IRON, { collide: false, mat: 'metal', shadow: false });
-      for (let y = base + 0.3; y < top; y += 0.35) b.box([lx, y, t.z], [0.05, 0.04, 0.56], IRON, { collide: false, mat: 'metal', shadow: false });
-      kit.world.addLadder(new THREE.Vector3(t.x + t.r - 0.3, 0, t.z - 0.8), new THREE.Vector3(t.x + t.r + 1.2, top + capH + 1, t.z + 0.8));
-    }
     // vertical pipes hugging the tower (climbable)
     const na = t.r > 2 ? 2 : 1;
     for (let k = 0; k < na; k++) {
@@ -314,12 +307,41 @@ function gasworks(kit: Kit, b: Batch) {
   kit.root.add(im);
   warningLights.length = 0;
   // Bobblehead #1: top of the tallest tower without a catwalk (the catwalks block climbers from below, so the
-  // tallest tower's cap was unreachable). Tower 2 climbs straight up from the ground in ~7 s.
+  // tallest tower's cap was unreachable). Bare walls tire Jimothy after ~7 m (~11 m sprinting), so tower 2 (17 m) is
+  // climbed in two stages via a valve riser on its east-northeast side (see valveRiser).
   const tb = towers[2];
+  valveRiser(kit, b, tb.x, tb.z, tb.r, 0.5 + 9.7, (40 * Math.PI) / 180);
   kit.world.poi.set('bobblehead:s1', V(tb.x, 0.5 + tb.h + Math.min(1.6, tb.r * 0.5) + 0.25, tb.z));
   kit.world.poi.set('gasworks', V(-145, 0.5, -24));
 }
 const warningLights: V3[] = [];
+
+/**
+ * Valve riser: a fat gas main standing against a tower from the ground to a valve at `top`, where it elbows into the
+ * tower. The rest stop on the ladder-free climb to bobblehead s1: climb its outside face and mantle onto its flat
+ * flanged top (1.1 m across, right against the tower), get your breath back, then climb the last ~7.5 m to the cap.
+ * Its top is out of reach at walking pace from the ground, but a sprint-climb makes it. Nothing overhangs the climb
+ * (the flanges are drawn only), so neither Jimothy nor the camera gets wedged under anything.
+ */
+function valveRiser(kit: Kit, b: Batch, cx: number, cz: number, r: number, top: number, ang: number) {
+  const ux = Math.cos(ang),
+    uz = Math.sin(ang);
+  const pr = 0.55;
+  const d = r + pr + 0.02; // riser axis, 2 cm off the tower
+  const px = cx + ux * d,
+    pz = cz + uz * d;
+  const base = 0.5; // the tower's concrete plinth
+  b.cyl([px, (base + top) / 2, pz], pr, top - base, 0x5a3526, { seg: 14, mat: 'rust', collide: true });
+  // flanges (drawn only, 5 cm proud) + a grating disc on top
+  for (let y = base + 2.2; y < top - 1; y += 2.6) b.cyl([px, y, pz], pr + 0.05, 0.12, 0x3e2519, { seg: 14, mat: 'rust', collide: false });
+  b.cyl([px, top - 0.06, pz], pr + 0.05, 0.12, 0x3e2519, { seg: 14, mat: 'rust', collide: false });
+  b.cyl([px, top + 0.01, pz], pr - 0.05, 0.02, 0x2c2826, { seg: 14, mat: 'metal', collide: false, shadow: false });
+  // elbow into the tower just under the top, and the valve on the tower wall above it
+  const P = (u: number, y: number): V3 => [cx + ux * (r + u), y, cz + uz * (r + u)];
+  b.pipe(P(-0.1, top - 0.45), P(0.3, top - 0.45), 0.3, 0x5a3526, { seg: 10, collide: false, mat: 'rust' });
+  b.pipe(P(-0.1, top + 1.1), P(0.3, top + 1.1), 0.1, 0x5a3526, { seg: 8, collide: false, mat: 'rust' });
+  b.geo(new THREE.TorusGeometry(0.26, 0.045, 6, 16), P(0.33, top + 1.1), [0, Math.PI / 2 - ang, 0], 1, 0xd8342a, { mat: 'glossy' });
+}
 
 function catwalk(kit: Kit, b: Batch, x: number, y: number, z: number, r: number, w: number) {
   const prof = [new THREE.Vector2(r, 0), new THREE.Vector2(r + w, 0), new THREE.Vector2(r + w, 0.16), new THREE.Vector2(r, 0.16), new THREE.Vector2(r, 0)];
