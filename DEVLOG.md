@@ -115,3 +115,16 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * ~26 helper agents + the lead. ~200 TypeScript source files. 9 zones, ~60 NPCs, 54 Instincts, 12 mutators,
   10 golden bobbleheads, 6 heartwarming quests, 6 landmark events, 4 chaos toys, 2 raccoon cannons, 1 finale.
 * First load ≈ 13.6 MB, boots in ~6 s; ≤ 500 draw calls at street level on 'high'.
+* 05:15 — Lead's last catches: wandering AI-slop creatures were photobombing the finale (a glitchy rainbow blob in
+  front of Mom's big line) — heartfelt cutscenes now quietly relocate nearby Slopothys off-camera. Verified the
+  finale end-to-end, the live GitHub Pages build (boots in ~6 s, 13.7 MB, 0 errors, minimap OK) and phone portrait
+  play (touch controls, auto 'low' quality, 0 errors).
+
+## Morning notes for the human
+* Play: https://greenninjada.github.io/jimothy-simulator/ (desktop keyboard/mouse or gamepad; phones work too).
+* `QA_OBJECTIVES.md` is a spoiler-marked hint sheet for all 54 Instincts. Finish Mom + the 5 kits + Danny for the
+  fireworks finale. "I just want to play" (pause → Mutators) unlocks every mutator.
+* Known rough edges: the guide star points in a straight line (it'll happily lead you over a roof); sunsets are
+  peachy rather than deep red; rain has no splashes; the Strike objective test is a little flaky in automation
+  (the objective itself is easy with the tour group at the Space Noodle).
+* `tools/_downloads/` holds ~1.5 GB of regenerable scratch builds/downloads (gitignored) — safe to delete.
