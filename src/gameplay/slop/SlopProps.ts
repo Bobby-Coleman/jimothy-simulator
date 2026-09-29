@@ -182,14 +182,14 @@ export class SlopProps {
     led.position.y = 2.28;
     const screenTex = canvasTexture(512, 400, drawKioskScreen);
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 0.82), new THREE.MeshStandardMaterial({ map: screenTex, emissive: new THREE.Color(0xffffff), emissiveMap: screenTex, emissiveIntensity: 0.9 }));
-    screen.position.set(0, 1.65, 0.452);
+    screen.position.set(0, 1.65, 0.462); // 12 mm proud of the shell (2 mm risks z-fighting from afar)
     const tray = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 0.3), new THREE.MeshStandardMaterial({ color: 0x0d0d10, roughness: 0.4, metalness: 0.6 }));
     tray.position.set(0, 0.55, 0.55);
     const slot = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.02), trim);
     slot.position.set(0, 1.1, 0.46);
     const headerTex = canvasTexture(512, 96, (c, w, h) => drawLabel(c, w, h, ['NFT KIOSK · BONK TO MINT'], { bg: '#120c24', accent: '#ff5fd0' }));
     const header = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.24), new THREE.MeshStandardMaterial({ map: headerTex, emissive: new THREE.Color(0xffffff), emissiveMap: headerTex, emissiveIntensity: 0.8 }));
-    header.position.set(0, 2.42, 0.53);
+    header.position.set(0, 2.42, 0.537);
     g.add(bodyM, top, led, screen, tray, slot, header);
     g.position.copy(ground);
     g.quaternion.copy(q);

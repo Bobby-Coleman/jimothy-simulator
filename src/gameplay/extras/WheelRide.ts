@@ -211,7 +211,8 @@ export class WheelRide implements ExtrasFeature {
       game.scene.add(grp);
     };
     mk(board, this.cx - 2.3, this.cz + 4.35, 0);
-    mk(hint, this.cx - 3.2, this.cz - 4.65, Math.PI);
+    // beside (not overlapping) the Pretty Good Wheel name board, which stands centred on the wheel at this z
+    mk(hint, this.cx - 5.4, this.cz - 4.65, Math.PI);
 
     // boarding ramp from the lawn up onto the 0.4 m platform, right in front of the gondola
     const ramp = new THREE.Group();

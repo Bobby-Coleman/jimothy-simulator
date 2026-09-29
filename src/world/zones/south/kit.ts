@@ -5,6 +5,7 @@ import { RAPIER, G, groups } from '../../../core/Physics';
 import { assetUrl } from '../../../core/Assets';
 import type { World } from '../../World';
 import { southState, type Glow } from './state';
+import { registerSignYaw } from '../../signRegistry';
 
 /**
  * Shared building kit for the west/south zones (park, locks, waterfront, stadium).
@@ -100,6 +101,13 @@ export const FONT_TITLE = '"Luckiest Guy", "Arial Black", Impact, sans-serif';
 export const FONT_ROUND = '"Lilita One", "Arial Black", Impact, sans-serif';
 export const FONT_BODY = 'Nunito, "Segoe UI", Arial, sans-serif';
 
+/** Rendered width of `text` in the current font: the larger of the advance and the glyphs' ink box (display fonts overhang). */
+export function inkWidth(ctx: CanvasRenderingContext2D, text: string) {
+  const m = ctx.measureText(text);
+  const ink = (m.actualBoundingBoxLeft ?? 0) + (m.actualBoundingBoxRight ?? 0);
+  return Math.max(m.width, ink);
+}
+
 /** Draw text centred at (x, y), shrinking the font until it fits maxW. Returns the font px used. */
 export function fitText(
   ctx: CanvasRenderingContext2D,
@@ -111,11 +119,13 @@ export function fitText(
   family = FONT_TITLE,
   opts: { weight?: string; fill?: string; stroke?: string; strokeW?: number; glow?: string; glowBlur?: number; align?: CanvasTextAlign } = {},
 ) {
-  let size = px;
+  let size = Math.round(px);
   const w = opts.weight ? opts.weight + ' ' : '';
+  // measured width includes the outline stroke and glow so nothing pokes past maxW
+  const extra = (s: number) => (opts.stroke ? (opts.strokeW ?? s * 0.14) : 0) + (opts.glow ? Math.min(opts.glowBlur ?? s * 0.35, s * 0.35) : 0);
   ctx.font = `${w}${size}px ${family}`;
-  while (ctx.measureText(text).width > maxW && size > 8) {
-    size -= 2;
+  while (inkWidth(ctx, text) + extra(size) > maxW && size > 8) {
+    size -= size > 40 ? 2 : 1;
     ctx.font = `${w}${size}px ${family}`;
   }
   ctx.textAlign = opts.align ?? 'center';
@@ -698,6 +708,11 @@ export class Kit {
     const rotY = o.rotY ?? 0;
     const d = o.depth ?? 0.15;
     const border = o.border ?? 0.08;
+    {
+      const im = (o.tex as THREE.CanvasTexture).image as { width?: number; height?: number } | undefined;
+      const fo = new THREE.Vector3(0, 0, d / 2 + 0.012).applyAxisAngle(Y, rotY);
+      registerSignYaw('south.sign', [o.pos[0] + fo.x, o.pos[1], o.pos[2] + fo.z], rotY, o.w, o.h, im?.width && im.height ? im.width / im.height : undefined);
+    }
     if (o.frame != null) b.box(o.pos, [o.w + border * 2, o.h + border * 2, d], o.frame, { rotY, collide: o.collide ?? true });
     else if (o.collide) this.collider(o.pos, [o.w, o.h, d], rotY);
     // Plain painted signs go into a per-zone texture atlas → one draw call for all of them.
@@ -819,9 +834,13 @@ export class Kit {
     lines: { text: string; px: number; color?: string; font?: string; stroke?: string }[],
     o: { w: number; h: number; bg: string; border?: string; radius?: number; pxPerM?: number; bg2?: string },
   ) {
+    // Line px are authored at pxPerM (default 128 px/m); the canvas renders at up to 2× that (min ~180 px tall)
+    // so small lettering stays crisp, with every size scaled by the same factor R. Aspect = the sign's w/h.
     const ppm = o.pxPerM ?? 128;
-    const W = Math.min(2048, Math.round(o.w * ppm));
-    const H = Math.min(2048, Math.round(o.h * ppm));
+    const R = Math.min(2048 / (o.w * ppm), 1024 / (o.h * ppm), Math.max(o.pxPerM ? 1 : 2, 180 / (o.h * ppm)));
+    const W = Math.round(o.w * ppm * R);
+    const H = Math.round(o.h * ppm * R);
+    lines = lines.map((l) => ({ ...l, px: l.px * R }));
     return canvasTex(W, H, (ctx) => {
       if (o.bg2) {
         const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -836,12 +855,21 @@ export class Kit {
         roundRect(ctx, ctx.lineWidth, ctx.lineWidth, W - ctx.lineWidth * 2, H - ctx.lineWidth * 2, o.radius ?? H * 0.08);
         ctx.stroke();
       }
-      const total = lines.reduce((a, l) => a + l.px * 1.18, 0);
-      let y = H / 2 - total / 2;
+      // Text stays inside the border with a safe margin: the block shrinks as a whole to fit the inner height,
+      // then each line shrinks further to fit the inner width (stroke included).
+      const lw = o.border ? Math.max(4, H * 0.05) : 0;
+      const inset = lw * 2 + Math.max(4, Math.min(W, H) * 0.06);
+      const innerW = W - inset * 2 - (o.radius ?? H * 0.08) * 0.5;
+      const innerH = H - inset * 2;
+      const LH = 1.18;
+      const total = lines.reduce((a, l) => a + l.px * LH, 0);
+      const k = Math.min(1, innerH / total);
+      let y = H / 2 - (total * k) / 2;
       for (const l of lines) {
-        y += (l.px * 1.18) / 2;
-        fitText(ctx, l.text, W / 2, y, W * 0.9, l.px, l.font ?? FONT_TITLE, { fill: l.color ?? '#fff', stroke: l.stroke });
-        y += (l.px * 1.18) / 2;
+        const px = l.px * k;
+        y += (px * LH) / 2;
+        fitText(ctx, l.text, W / 2, y, innerW, px, l.font ?? FONT_TITLE, { fill: l.color ?? '#fff', stroke: l.stroke });
+        y += (px * LH) / 2;
       }
     });
   }

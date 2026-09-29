@@ -241,10 +241,14 @@ export function entityPos(e: Entity, out = new THREE.Vector3()) {
 
 /** Draw text that auto-shrinks to fit a width. */
 export function fitText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, size: number, font: string) {
-  let s = size;
+  let s = Math.round(size);
   ctx.font = `${font.replace('{s}', String(s))}`;
-  while (ctx.measureText(text).width > maxW && s > 8) {
-    s -= 2;
+  const width = () => {
+    const m = ctx.measureText(text); // ink box: display fonts overhang their advance
+    return Math.max(m.width, (m.actualBoundingBoxLeft ?? 0) + (m.actualBoundingBoxRight ?? 0));
+  };
+  while (width() > maxW && s > 8) {
+    s -= s > 40 ? 2 : 1;
     ctx.font = `${font.replace('{s}', String(s))}`;
   }
   ctx.fillText(text, x, y);

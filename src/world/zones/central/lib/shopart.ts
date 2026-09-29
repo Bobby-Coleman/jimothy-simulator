@@ -763,8 +763,11 @@ export function drawCommonsSign(ctx: Ctx, w: number, h: number) {
   roundRect(ctx, 8, 8, w - 16, h - 16, h * 0.16);
   ctx.stroke();
   drawRoundRaccoon(ctx, h * 0.55, h * 0.5, h * 0.28, { flat: true });
-  fitText(ctx, 'JIMOTHY COMMONS', w * 0.58, h * 0.42, w * 0.7, h * 0.34, FONT_SIGN, { fill: '#fdf3d7' });
-  fitText(ctx, 'A public plaza. Please do not approach the raccoon.', w * 0.58, h * 0.74, w * 0.72, h * 0.13, FONT_BODY, { fill: '#e8c25a', weight: '800' });
+  // lettering starts right of the raccoon doodle (incl. its tail), inside the gold border
+  const tx0 = h * 1.12,
+    tx1 = w - 26;
+  fitText(ctx, 'JIMOTHY COMMONS', (tx0 + tx1) / 2, h * 0.42, tx1 - tx0, h * 0.34, FONT_SIGN, { fill: '#fdf3d7' });
+  fitText(ctx, 'A public plaza. Please do not approach the raccoon.', (tx0 + tx1) / 2, h * 0.74, tx1 - tx0, h * 0.13, FONT_BODY, { fill: '#e8c25a', weight: '800' });
 }
 
 export function drawClockFace(ctx: Ctx, w: number, h: number) {

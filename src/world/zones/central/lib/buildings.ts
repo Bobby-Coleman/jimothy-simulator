@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Game } from '../../../../core/Game';
 import type { World } from '../../../World';
 import { Batch, mergeColored, T, TR } from './batch';
-import type { AtlasRect, SignAtlas } from './signs';
+import { fitRect, type AtlasRect, type SignAtlas } from './signs';
 import { applyStripeRow, cached, loadPBR, recoloredBrick, stripeMaterial, stripeTexture, windowTexture } from './textures';
 import { boxColliderEuler, glowAtNight, Rng } from './util';
 import { warmGlowMat } from './furniture';
@@ -177,12 +177,15 @@ export async function buildStore(kit: BuildingKit, s: StoreSpec): Promise<BuiltS
         mx = (a + b) / 2;
       addBox(w, gy0, 0.12, mx, gy0 / 2, 0.06, shade(accent, 1.0));
       if (s.shopArt) {
-        const q = atlas.quad(s.shopArt, w - 0.1, gy1 - gy0 - 0.05);
+        // window art keeps its aspect (unstretched text); any leftover width is plain glass behind it
+        const [qw, qh] = fitRect(s.shopArt, w - 0.1, gy1 - gy0 - 0.05);
+        add(new THREE.PlaneGeometry(w - 0.1, gy1 - gy0), glass, T(mx, (gy0 + gy1) / 2, 0.018), undefined, false);
+        const q = atlas.quad(s.shopArt, qw, qh);
         add(q, s.shopArt.page.glowMat, T(mx, (gy0 + gy1) / 2, 0.03), undefined, false);
       } else add(new THREE.PlaneGeometry(w - 0.1, gy1 - gy0), glass, T(mx, (gy0 + gy1) / 2, 0.03), undefined, false);
-      // mullions + frame
+      // mullions + frame (no inner mullions across window art: they'd cut through its lettering)
       addBox(w, 0.08, 0.1, mx, gy1 + 0.04, 0.06, accent);
-      const nm = Math.max(1, Math.round(w / 1.6));
+      const nm = s.shopArt ? 1 : Math.max(1, Math.round(w / 1.6));
       for (let k = 1; k < nm; k++) addBox(0.07, gy1 - gy0, 0.08, a + (w * k) / nm, (gy0 + gy1) / 2, 0.06, accent);
       // transom
       add(new THREE.PlaneGeometry(w - 0.1, 0.42), glass, T(mx, gy1 + 0.33, 0.025), undefined, false);
@@ -273,8 +276,9 @@ export async function buildStore(kit: BuildingKit, s: StoreSpec): Promise<BuiltS
     batch.add(bx(sw, 0.8, 0.34), wallMat, { matrix: M.clone().multiply(T(0, H + pH + 0.4, -0.17)), uv: 2.3, color: s.wall });
     addBox(sw + 0.1, 0.1, 0.44, 0, H + pH + 0.85, -0.17, shade(trimC, 0.95));
     world.collider(lp(0, H + pH + 0.4, -0.17), new THREE.Vector3(sw, 0.8, 0.34), yaw);
-    if (s.yearRect) add(atlas.quad(s.yearRect, sw * 0.8, 0.5), s.yearRect.page.mat, T(0, H + pH + 0.22, 0.005), undefined, false);
-  } else if (s.yearRect) add(atlas.quad(s.yearRect, Math.min(W * 0.5, 3.2), 0.45), s.yearRect.page.mat, T(0, H + pH * 0.5, 0.005), undefined, false);
+    // year plaques sit clear of the coping / cornice boxes that project in front of them (they covered the digits' bottoms)
+    if (s.yearRect) add(atlas.quad(s.yearRect, ...fitRect(s.yearRect, sw * 0.8, 0.5)), s.yearRect.page.mat, T(0, H + pH + 0.47, 0.005), undefined, false);
+  } else if (s.yearRect) add(atlas.quad(s.yearRect, ...fitRect(s.yearRect, Math.min(W * 0.5, 3.2), 0.45)), s.yearRect.page.mat, T(0, H + 0.61, 0.005), undefined, false);
 
   // ---------------------------------------------------------------- roof clutter
   const nRoof = s.roofStuff ?? rng.int(1, 3);

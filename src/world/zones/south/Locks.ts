@@ -478,7 +478,8 @@ function viewingRoom(kit: Kit, b: Batch) {
     ],
     { w: 3.2, h: 0.9, bg: '#12506a', border: '#9fe3ff' },
   );
-  kit.sign(b, { pos: [-173.8, 2.3, 155], rotY: Math.PI / 2, w: 3.2, h: 0.9, tex: t, depth: 0.04, back: false, collide: false });
+  // on the inner face of the west wall (x0 + 0.3); at -173.8 they were buried inside it
+  kit.sign(b, { pos: [x0 + 0.32, 2.3, 155], rotY: Math.PI / 2, w: 3.2, h: 0.9, tex: t, depth: 0.04, back: false, collide: false });
   const t2 = kit.textSign(
     [
       { text: 'PLEASE DO NOT', px: 44, color: '#1b1d24' },
@@ -487,7 +488,7 @@ function viewingRoom(kit: Kit, b: Batch) {
     ],
     { w: 1.6, h: 1.0, bg: '#fff8e6', border: '#c62828' },
   );
-  kit.sign(b, { pos: [-173.8, 1.5, 149.5], rotY: Math.PI / 2, w: 1.6, h: 1.0, tex: t2, depth: 0.04, back: false, collide: false });
+  kit.sign(b, { pos: [x0 + 0.32, 1.5, 149.5], rotY: Math.PI / 2, w: 1.6, h: 1.0, tex: t2, depth: 0.04, back: false, collide: false });
   // outside sign above the door
   const t3 = kit.textSign([{ text: 'FISH LADDER · VIEWING ROOM', px: 54, color: '#fff4dc', stroke: '#6b2a18' }], { w: 5.2, h: 0.6, bg: '#b5543a' });
   kit.sign(b, { pos: [(d0 + d1) / 2 + 1, H + 0.65, z0 - 0.1], rotY: Math.PI, w: 5.2, h: 0.6, tex: t3, depth: 0.08, back: false, collide: false });
@@ -817,7 +818,7 @@ function signs(kit: Kit, b: Batch) {
     fitText(ctx, "Ballard's Favorite Water Elevator", w / 2, h * 0.64, w * 0.84, 52, FONT_ROUND, { fill: '#ffd35a' });
     fitText(ctx, 'Boats go up. Boats go down. Salmon go up the ladder.', w / 2, h * 0.82, w * 0.84, 32, FONT_BODY, { fill: '#dfefff', weight: '800' });
   });
-  for (const dx of [-2.4, 2.4]) b.cyl([-106 + dx, 1.3, 151.5], 0.15, 2.6, 0x173a55, { seg: 8, collide: true });
+  for (const dx of [-2.4, 2.4]) b.cyl([-106 + dx, 1.3, 151.5 + 0.2], 0.15, 2.6, 0x173a55, { seg: 8, collide: true }); // behind the board
   kit.sign(b, { pos: [-106, 3.0, 151.5], rotY: Math.PI, w: 5.4, h: 2.2, tex, frame: 0x173a55 });
   // canal sign on the levee
   const t2 = kit.textSign(

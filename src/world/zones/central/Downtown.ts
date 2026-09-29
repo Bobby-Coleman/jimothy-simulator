@@ -375,7 +375,9 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
   // vertical banners flanking the door
   for (const [i, s] of [[0, -1], [1, 1]] as const) {
     const vb = atlas.draw(160, 448, (ctx, w, h) => drawVerticalBanner(ctx, w, h, i));
-    batch.add(atlas.quad(vb, 2.2, 6.2), vb.page.glowMat, { matrix: T(mbX0 - 0.04, baseTop + 7.2, s * 5.2, -Math.PI / 2), castShadow: false });
+    // centred in the gap between the portico columns at z ±4.5 / ±7.5 (a column used to stand right in front of
+    // each banner), sized to that gap and hung below the upper-row window sills (z ±3 / ±7, sill at +7.4)
+    batch.add(atlas.quad(vb, 1.8, 1.8 * (vb.h / vb.w)), vb.page.glowMat, { matrix: T(mbX0 - 0.04, baseTop + 4.75, s * 6.0, -Math.PI / 2), castShadow: false });
   }
   // dome: drum, dome, lantern
   const dx = mbCx + 1,
@@ -798,6 +800,8 @@ function buildTowers(game: Game, world: World, batch: Batch, rng: Rng) {
     for (let k = 0; k < 2; k++) {
       const ax = s.cx + rng.range(-w / 2 + 2, w / 2 - 2),
         az = s.cz + rng.range(-d / 2 + 2, d / 2 - 2);
+      // a helipad roof has no room for AC units (one used to sit right on top of the painted "H")
+      if (s.helipad) continue;
       batch.add(new THREE.BoxGeometry(2.2, 1.4, 1.8), trim, { matrix: T(ax, y + 0.9, az), color: 0xaeb4ba });
       world.collider(new THREE.Vector3(ax, y + 0.9, az), new THREE.Vector3(2.2, 1.4, 1.8));
     }
@@ -975,7 +979,9 @@ const pasta = cached('mat:pasta', () => glowAtNight(game, new THREE.MeshStandard
     const mid = p.clone().add(p2).multiplyScalar(0.5);
     const len = p.distanceTo(p2);
     const yaw = Math.atan2(p2.x - p.x, p2.z - p.z);
-    mull.push({ geo: new THREE.BoxGeometry(0.12, WALL_H, 0.12), color: 0xe8e8e8, matrix: T(p.x, WALL_H / 2, p.z) });
+    // no mullion in the middle of the doorway (it stood right through the NOODLE TOP CAFÉ sign above the door)
+    const prevDoor = Math.abs(Math.atan2(Math.sin(a - Math.PI / NW - Math.PI), Math.cos(a - Math.PI / NW - Math.PI))) < 0.14;
+    if (!(isDoor && prevDoor)) mull.push({ geo: new THREE.BoxGeometry(0.12, WALL_H, 0.12), color: 0xe8e8e8, matrix: T(p.x, WALL_H / 2, p.z) });
     if (isDoor) {
       mull.push({ geo: new THREE.BoxGeometry(0.14, 0.5, len), color: 0xe8e8e8, matrix: T(mid.x, WALL_H - 0.25, mid.z, yaw) });
       continue;
@@ -1032,15 +1038,16 @@ const pasta = cached('mat:pasta', () => glowAtNight(game, new THREE.MeshStandard
   }
   batch.add(mergeColored(tables), trim, { matrix: T(nx, DECK, nz) });
   const cafe = atlas.draw(512, 128, (ctx, w, h) => drawCafeSign(ctx, w, h));
-  batch.add(atlas.quad(cafe, 3.2, 0.8), cafe.page.glowMat, { matrix: T(nx - WALL_R - 0.05, DECK + WALL_H - 0.6, nz, -Math.PI / 2), castShadow: false });
+  batch.add(atlas.quad(cafe, 3.2, 0.8), cafe.page.glowMat, { matrix: T(nx - WALL_R - 0.12, DECK + WALL_H - 0.6, nz, -Math.PI / 2), castShadow: false });
   // entrance sign at the base
   const sign = atlas.draw(512, 320, (ctx, w, h) => drawNoodleSign(ctx, w, h));
   const sx = nx - 8.5,
     sz = nz + 2.8;
   const sy = walkY(sx, sz);
   batch.add(atlas.slab(sign, 3.0, 1.9, 0.08), sign.page.mat, { matrix: T(sx, sy + 1.9, sz, -Math.PI / 2) });
-  for (const d of [-1.3, 1.3]) batch.add(new THREE.CylinderGeometry(0.06, 0.06, 2.9, 8), furnMat(), { matrix: T(sx, sy + 1.45, sz + d), color: 0x274b7a });
-  world.collider(new THREE.Vector3(sx, sy + 1.6, sz), new THREE.Vector3(0.2, 3.2, 3.0));
+  // posts flank the board's edges (at ±1.3 they ran through its face, over the S and E of the title)
+  for (const d of [-1.56, 1.56]) batch.add(new THREE.CylinderGeometry(0.06, 0.06, 2.9, 8), furnMat(), { matrix: T(sx, sy + 1.45, sz + d), color: 0x274b7a });
+  world.collider(new THREE.Vector3(sx, sy + 1.6, sz), new THREE.Vector3(0.2, 3.2, 3.25));
 
   // flower ring around the plinth (kit:2 lives in the fountain; this is just pretty)
   placeBatched(world, batch, planter(3), [0, 1, 2, 3, 4, 5].map((k) => {

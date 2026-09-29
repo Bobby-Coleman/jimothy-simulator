@@ -277,10 +277,15 @@ export function fitText(
   font: string,
   o: { fill?: string; stroke?: string; strokeW?: number } = {},
 ) {
-  let size = px;
+  let size = Math.round(px);
   c.font = `${size}px ${font}`;
-  while (size > 8 && c.measureText(text).width > maxW) {
-    size -= 2;
+  // ink box (display fonts overhang their advance) + outline stroke must fit maxW
+  const width = () => {
+    const m = c.measureText(text);
+    return Math.max(m.width, (m.actualBoundingBoxLeft ?? 0) + (m.actualBoundingBoxRight ?? 0)) + (o.stroke ? (o.strokeW ?? size * 0.16) : 0);
+  };
+  while (size > 8 && width() > maxW) {
+    size -= size > 40 ? 2 : 1;
     c.font = `${size}px ${font}`;
   }
   c.textAlign = 'center';

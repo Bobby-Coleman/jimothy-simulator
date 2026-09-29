@@ -419,10 +419,10 @@ function sodaTex() {
     g.lineTo(w, h * 0.8);
     for (let x = w; x >= 0; x -= 8) g.lineTo(x, h * 0.8 + Math.sin(x / 20) * 8);
     g.fill();
-    g.font = `900 34px ${FONT}`;
+    g.font = `900 30px ${FONT}`;
     g.textAlign = 'center';
-    g.fillText('RACCOLA', w * 0.3, h * 0.55);
-    g.fillText('RACCOLA', w * 0.8, h * 0.55);
+    g.fillText('RACCOLA', w * 0.25, h * 0.55);
+    g.fillText('RACCOLA', w * 0.75, h * 0.55);
   });
 }
 
@@ -453,7 +453,7 @@ function newspaperTex() {
     g.fillRect(0, 0, w, h);
     g.fillStyle = '#222';
     g.textAlign = 'center';
-    g.font = `900 22px Georgia, serif`;
+    g.font = `900 19px Georgia, serif`; // (22 px ran off both edges)
     g.fillText('THE BALLARD BUGLE', w / 2, 32);
     g.fillRect(14, 40, w - 28, 3);
     g.font = `900 24px ${SANS}`;
@@ -601,7 +601,7 @@ function dumpsterSignTex() {
     g.fillStyle = '#f2f2ee';
     g.fillRect(0, 0, w, h);
     g.fillStyle = '#1f5130';
-    g.font = `900 20px ${SANS}`;
+    g.font = `900 16px ${SANS}`; // (20 px / 30 px ran off the right edge: the text is offset right of the icon)
     g.textAlign = 'center';
     g.fillText('BALLARD DISPOSAL', w / 2 + 34, 34);
     g.fillStyle = '#c62828';
