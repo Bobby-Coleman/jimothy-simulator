@@ -318,7 +318,7 @@ export class Intro {
     const k = smooth(T_SLAM - 0.2, T_END - 0.1, t);
     cam.position.set(phone.x + (gx - phone.x) * k, phone.y + (gy - phone.y) * k, phone.z + (gz - phone.z) * k);
     const look = phoneLook.lerp(gameLook, k);
-    if (this.shake > 0.01) {
+    if (this.shake > 0.01 && this.api.settings.flashes) {
       const s = this.shake * this.shake * 0.06;
       cam.position.x += (Math.random() - 0.5) * s;
       cam.position.y += (Math.random() - 0.5) * s;

@@ -748,6 +748,10 @@ export class NpcSystem implements System {
     this.projScreen.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projScreen);
     const cp = cam.position;
+    // perf: draw / shadow distance follow the quality preset (a 1.75 m person is ~10 px tall at 120 m)
+    const q = game.renderer.quality;
+    const visD = q === 'low' ? 75 : q === 'medium' ? 100 : 120;
+    const shadowD = q === 'low' ? 18 : q === 'medium' ? 26 : 34;
     for (const n of this.list) {
       const root = n.rig.root;
       _v.copy(root.position);
@@ -756,7 +760,7 @@ export class NpcSystem implements System {
       n.camDist = d;
       _sphere.center.copy(_v);
       _sphere.radius = n.ragdolled ? 1.6 : 1.3;
-      const vis = d < 140 && this.frustum.intersectsSphere(_sphere);
+      const vis = d < visD && this.frustum.intersectsSphere(_sphere);
       n.visible = vis;
       root.visible = vis;
       const io = n.held?.object;
@@ -772,7 +776,7 @@ export class NpcSystem implements System {
           io.userData.npcHidden = false;
         }
       }
-      n.rig.mesh.castShadow = d < 45;
+      n.rig.mesh.castShadow = d < shadowD;
     }
     // bubbles
     for (const [npc, b] of this.bubbles) {

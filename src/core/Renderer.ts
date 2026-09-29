@@ -107,7 +107,15 @@ export class Renderer {
     } catch {
       /* ignore */
     }
-    const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    // UX pass: also treat touch-only devices as mobile — iPadOS Safari reports a Mac user agent, and some
+    // Android browsers hide the model. A coarse primary pointer + a touch screen ≈ phone/tablet → 'low'.
+    let touchOnly = false;
+    try {
+      touchOnly = !!window.matchMedia?.('(pointer: coarse)').matches && (navigator.maxTouchPoints ?? 0) > 0;
+    } catch {
+      /* ignore */
+    }
+    const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || touchOnly;
     return mobile ? 'low' : 'high';
   }
 

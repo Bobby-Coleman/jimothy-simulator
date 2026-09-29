@@ -32,11 +32,12 @@ export class ItemsSystem implements System {
     this.scan();
     // Player interactions count as "disturbing" a prop (trash-can tips only score when disturbed).
     for (const ev of ['bonk', 'grab', 'release', 'steal']) game.events.on(ev, (p) => markDisturbed(game, p?.entity, true));
-    // Landing on top of a plain (non-hollow) dumpster prop counts as a dive.
+    // Landing on top of a plain (non-hollow) dumpster prop counts as a dive. (A jump from the street onto a
+    // 1.6 m dumpster only "falls" ~0.2 m at the end, so any real landing counts, just not walking onto it.)
     game.events.on('land', (p) => {
       const pl = playerOf(game);
       const e: Entity | undefined = pl?.groundEntity;
-      if (e?.alive && e.tags.has('dumpster') && !e.data.hollow && (p?.height ?? 0) > 0.6) dumpsterDive(game, e);
+      if (e?.alive && e.tags.has('dumpster') && !e.data.hollow && (p?.height ?? 0) > 0.12) dumpsterDive(game, e);
     });
   }
 

@@ -171,7 +171,9 @@ export class Jimothy implements System {
     }
     if (!wasGrounded && this.grounded) this.onLand();
     if (!this.grounded) {
-      this.airPeakY = Math.max(this.airPeakY, p.y);
+      // Climbing / hanging / swimming isn't falling: a fall is measured from where he lets go.
+      const held = this.mode === 'climb' || this.mode === 'hang' || this.mode === 'swim';
+      this.airPeakY = held ? p.y : Math.max(this.airPeakY, p.y);
       this.stats.airTime += this.game.dt;
     } else {
       this.airPeakY = p.y;
@@ -241,6 +243,7 @@ export class Jimothy implements System {
     this.body.setTranslation({ x: p.x, y: p.y, z: p.z }, true);
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.position.copy(p);
+    this.airPeakY = p.y; // a teleport is not a fall (else respawning mid-air "lands" a 60 m drop)
   }
 
   /** Move Jimothy (cutscenes, quests, tests). Unlike respawn(), he keeps holding what he carries. */

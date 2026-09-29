@@ -7,6 +7,7 @@ import { MAP } from '../../terrain';
 import { getKit, Batch, tree, bush, bench, picnicTable, rng, canvasTex, fitText, roundRect, FONT_TITLE, FONT_ROUND, GEO, bake, type Kit, type V3 } from './kit';
 import { lamps, BIRD, perched, flock, swanBoat, kite } from './decor';
 import * as P from './props';
+import { spawnItem } from '../../../gameplay/items';
 
 /**
  * W zone — "Gasworks-ish Park": rolling lawn, the park pond (stone rim, reeds, dock, swan boats, ducks),
@@ -305,8 +306,9 @@ function gasworks(kit: Kit, b: Batch) {
   im.computeBoundingSphere();
   kit.root.add(im);
   warningLights.length = 0;
-  // Bobblehead #1: top of the tallest tower
-  const tb = towers[0];
+  // Bobblehead #1: top of the tallest tower without a catwalk (the catwalks block climbers from below, so the
+  // tallest tower's cap was unreachable). Tower 2 climbs straight up from the ground in ~7 s.
+  const tb = towers[2];
   kit.world.poi.set('bobblehead:s1', V(tb.x, 0.5 + tb.h + Math.min(1.6, tb.r * 0.5) + 0.25, tb.z));
   kit.world.poi.set('gasworks', V(-145, 0.5, -24));
 }
@@ -732,6 +734,8 @@ function picnic(kit: Kit, b: Batch) {
   b.geo(new THREE.TorusGeometry(0.22, 0.03, 5, 12, Math.PI), [-100.1, 0.38, -9.4], [0, 0.4, 0], 1, 0x7a4f22, {});
   P.sandwich(game, -101.2, 0.04, -8.6, 0.8);
   P.cottonCandy(game, -100.8, 0.04, -9.9, 0x9fd8ff);
+  // a whole pizza for 'Five-Finger Discount' (otherwise pizzas only turn up by luck in bins / pedestrians' hands)
+  spawnItem(game, 'pizza', new THREE.Vector3(-99.6, 0.04, -8.3), 0.4);
 
   // Cotton candy cart
   const cx = -80.5;

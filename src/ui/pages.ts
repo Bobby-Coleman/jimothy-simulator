@@ -18,6 +18,10 @@ export interface MenuApi extends UiCtx {
   commitSettings(key: keyof Settings): void;
   resume(): void;
   resetProgress(): void;
+  /** Resume and send Jimothy back to the den (same as H). */
+  respawnHome(): void;
+  /** Resume straight into photo mode (same as V). */
+  photoFromMenu(): void;
   readonly isTouch: boolean;
 }
 
@@ -108,7 +112,13 @@ function buildPauseMain(api: MenuApi, host: MenuHost) {
       bigButton('Settings', ICONS.gear, () => host.push('settings')),
       bigButton('Controls', api.device === 'pad' ? ICONS.gamepad : ICONS.keyboard, () => host.push('controls')),
       bigButton('Credits', ICONS.star, () => host.push('credits')),
-      bigButton('Reset progress', ICONS.close, () => host.push('reset'), 'btn-small btn-danger'),
+      h(
+        'div',
+        { class: 'pause-small' },
+        bigButton('Back to the den', ICONS.home, () => api.respawnHome(), 'btn-small'),
+        bigButton('Photo mode', ICONS.camera, () => api.photoFromMenu(), 'btn-small'),
+        bigButton('Reset progress', ICONS.close, () => host.push('reset'), 'btn-small btn-danger'),
+      ),
     ),
   );
   const stat = (label: string, value: string) => h('div', { class: 'card-stat' }, h('span', { text: label }), h('b', { text: value }));
@@ -128,9 +138,9 @@ function buildPauseMain(api: MenuApi, host: MenuHost) {
   return h('div', { class: 'pause-main' }, left, card);
 }
 
-function buildObjectivesPage(api: MenuApi) {
+function buildObjectivesPage(api: MenuApi, host: MenuHost) {
   const box = h('div', { class: 'scroll obj-list' });
-  renderObjectives(api.game, box);
+  renderObjectives(api.game, box, { onChange: () => host.refresh() });
   return box;
 }
 
@@ -241,7 +251,7 @@ function buildSettings(api: MenuApi) {
   );
   wrap.append(section('Controls'));
   wrap.append(
-    sliderRow(api.isTouch ? 'Look sensitivity' : 'Mouse sensitivity', 0.2, 3, 0.1, s.sensitivity, (v) => `${v.toFixed(1)}x`, (v) => {
+    sliderRow('Look sensitivity', 0.2, 3, 0.1, s.sensitivity, (v) => `${v.toFixed(1)}x`, (v) => {
       s.sensitivity = Math.round(v * 10) / 10;
       api.commitSettings('sensitivity');
     }),
@@ -283,14 +293,21 @@ function buildSettings(api: MenuApi) {
       s.showHud = on;
       api.commitSettings('showHud');
     }, 'Turn off for screenshots. Jimothy is very photogenic.', api),
-    toggleRow('Camera flashes', s.flashes, (on) => {
-      s.flashes = on;
-      api.commitSettings('flashes');
-    }, 'White flash when fans take photos nearby.', api),
+    toggleRow('Goal tracker', s.showGuide, (on) => {
+      s.showGuide = on;
+      api.commitSettings('showGuide');
+    }, 'The ★ marker and pill pointing at a suggested Instinct.', api),
     toggleRow('Show FPS', s.showFps, (on) => {
       s.showFps = on;
       api.commitSettings('showFps');
     }, undefined, api),
+  );
+  wrap.append(section('Accessibility'));
+  wrap.append(
+    toggleRow('Reduce flashing & shake', !s.flashes, (on) => {
+      s.flashes = !on;
+      api.commitSettings('flashes');
+    }, 'No white camera-flash overlays, no screen shake.', api),
   );
   return wrap;
 }
@@ -306,10 +323,12 @@ const CONTROLS: [string, string[], string[]][] = [
   ['Tuck & Roll', ['Q'], ['B']],
   ['Flop (hold)', ['Z'], ['LB', 'D↓']],
   ['Chitter', ['C'], ['D↑']],
+  ['Photo mode (snap: click / A)', ['V'], ['R3']],
+  ['Map (click an icon to track it)', ['M'], []],
   ['Slow-mo', ['T'], []],
-  ['Back to the den', ['H'], []],
+  ['Back to the den (also in Pause)', ['H'], []],
   ['Zoom camera', ['Wheel'], []],
-  ['Instincts', ['Tab'], ['View']],
+  ['Instincts (★ Track a goal)', ['Tab'], ['View']],
   ['Pause', ['Esc', 'P'], ['Menu']],
 ];
 
@@ -329,7 +348,7 @@ function buildControls(api: MenuApi) {
     wrap.append(
       h('p', {
         class: 'ctl-note',
-        text: 'Touch: drag on the left side to move (push the stick all the way to sprint), drag on the right side to look, and use the round buttons for everything else.',
+        text: 'Touch: drag on the left side to move (push the stick all the way to sprint), drag on the right side to look, and use the round buttons for everything else. Top-right: Instincts, photo mode and pause. Tap the minimap for the big map; tap an icon there to track it.',
       }),
     );
   }
@@ -354,7 +373,9 @@ function buildCredits(_api: MenuApi) {
     row('3D models', 'Kenney — kenney.nl (CC0)'),
     row('Textures & sky', 'Poly Haven — polyhaven.com (CC0)'),
     row('Sound effects', 'Kenney (CC0), plus sounds synthesized from scratch in your browser'),
+    row('Music', 'OpenGameArt.org artists (CC0) — listed below'),
     row('Fonts', 'Luckiest Guy (Apache 2.0), Lilita One & Nunito (SIL OFL) via Google Fonts'),
+    row('Raccoons, Slopothys & hats', 'modelled for this game in Blender (by the AI, somehow)'),
     row('Engine', 'three.js, Rapier, postprocessing, Vite'),
   );
   const music = (SoundBank as any).MUSIC_BANK as Record<string, { files: { title: string; author: string }[] }> | undefined;
@@ -371,7 +392,7 @@ function buildCredits(_api: MenuApi) {
       }
     }
     if (tracks.length) {
-      wrap.append(h('h3', { class: 'set-section', text: 'Music' }));
+      wrap.append(h('h3', { class: 'set-section', text: 'Music (CC0, via OpenGameArt.org)' }));
       for (const t of tracks) wrap.append(h('div', { class: 'cred-track', text: t }));
     }
   }
@@ -409,7 +430,7 @@ function buildReset(api: MenuApi, host: MenuHost) {
 export function pausePages(api: MenuApi): Record<string, PageDef> {
   return {
     pause: { title: 'Paused', noBack: true, cls: 'wide', build: (host) => buildPauseMain(api, host) },
-    objectives: { title: 'Instincts', cls: 'wide', build: () => buildObjectivesPage(api) },
+    objectives: { title: 'Instincts', cls: 'wide', build: (host) => buildObjectivesPage(api, host) },
     mutators: { title: 'Mutators', build: (host) => buildMutators(api, host) },
     settings: { title: 'Settings', build: () => buildSettings(api) },
     controls: { title: 'Controls', cls: 'wide', build: () => buildControls(api) },
@@ -423,6 +444,6 @@ export function titlePages(api: MenuApi): Record<string, PageDef> {
     settings: { title: 'Settings', build: () => buildSettings(api) },
     controls: { title: 'Controls', cls: 'wide', build: () => buildControls(api) },
     credits: { title: 'Credits', build: () => buildCredits(api) },
-    objectives: { title: 'Instincts', cls: 'wide', build: () => buildObjectivesPage(api) },
+    objectives: { title: 'Instincts', cls: 'wide', build: (host) => buildObjectivesPage(api, host) },
   };
 }

@@ -15,7 +15,8 @@ import { TouchControls, type TouchApi } from './Touch';
 import { ObjectivesDrawer } from './Drawer';
 import { PadNav, navigate, ensureFocus, type NavKey } from './PadNav';
 import { loadSettings, saveSettings, applySettings, applyAudio, type Settings } from './settings';
-import { areaSubtitle, INTRO_HINTS } from './content';
+import { areaSubtitle } from './content';
+import { Guide } from './Guide';
 import { installBootTips, loadFonts } from './boot';
 import type { Device } from './glyphs';
 import type { DialogOptions, UIMode } from './types';
@@ -50,6 +51,8 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
   title!: TitleScreen;
   intro!: Intro;
   drawer!: ObjectivesDrawer;
+  /** Suggested Instincts, tracked goal (HUD pill + waypoint) and the first-time coach. */
+  guide!: Guide;
   touch: TouchControls | null = null;
   settings: Settings = loadSettings();
   mode: UIMode = 'play';
@@ -69,8 +72,6 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
   private areaStable = 0;
   private areaPoll = 1;
   private areaShownAt = new Map<string, number>();
-  private tutorial: string[] = [];
-  private tutorialT = 0;
   private firstFrame = true;
   private sawKeyboard = false;
   private _hudVisible = true;
@@ -96,6 +97,13 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     this.dialog = new DialogBox(this, this.root);
     this.slopBot = new SlopBot(this, this.root);
     this.drawer = new ObjectivesDrawer(this, this.root);
+    // Pill on the root (above the touch layer so it can be tapped); waypoint inside the HUD layer.
+    this.guide = new Guide(this, this.hud, this.root, this.hud.el, {
+      canShow: () =>
+        this.mode === 'play' && this.game.state === 'playing' && !this.photoMode && !this.dialog.open && !this.drawer.open && !this.mapOpen && this._hudVisible && this.settings.showHud,
+      canCoach: () => this.mode === 'play' && this.game.state === 'playing' && !this.photoMode && !this.dialog.open,
+      openPanel: () => this.toggleObjectives(),
+    });
     this.lockEl = h('button', {
       class: 'lockprompt',
       html: `<span class="kc kc-mouse kc-mouse-l"><i></i></span><span><b>Click to play</b><small>Esc pauses · Tab shows Instincts</small></span>`,
@@ -124,13 +132,21 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
 
     applySettings(game, this.settings, this.baseSens);
     this.hudVisible = true;
+    this.root.classList.toggle('calm', !this.settings.flashes);
 
     // Photo mode (gameplay/PhotoMode.ts) owns Esc while it's active; don't also open the pause menu.
     game.events.on('photoMode', (e: { active?: boolean }) => {
       this.photoMode = !!e?.active;
       if (!this.photoMode) this.pauseIgnoreUntil = nowSec() + 0.3;
       else this.drawer.hide();
+      this.root.classList.toggle('photo', this.photoMode);
     });
+    // Switching tabs / apps or alt-tabbing pauses (pointer-lock loss already does on desktop; this covers touch,
+    // gamepad and unlocked play). Photo mode keeps its own state (saving a photo can blur the window).
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.autoPause();
+    });
+    window.addEventListener('blur', () => this.autoPause());
     document.addEventListener('pointerlockchange', () => this.onLockChange());
     // Capture phase: runs before core/Input's window listener, so keys the UI consumes (dialog advance) never
     // reach gameplay. Esc/P/Tab are read here (not via input.pressed) so fast taps aren't lost between frames.
@@ -209,6 +225,7 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     const g = this.game;
     if (this.mode !== 'play' || (g.state !== 'playing' && g.state !== 'cutscene')) return;
     this.prevState = g.state === 'cutscene' ? 'cutscene' : 'playing';
+    this.closeMap();
     g.state = 'paused';
     this.setMode('pause');
     this.drawer.hide();
@@ -221,6 +238,46 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     if (page) this.pause.push(page);
     this.sfx('ui_open');
     g.events.emit('pauseMenu', { open: true });
+  }
+
+  /** Pause-menu "Back to the den" (same as H): resume, then press the respawn action for a moment. */
+  respawnHome() {
+    this.resume();
+    this.game.input.tap('respawn', 150);
+  }
+
+  /** Pause-menu "Photo mode" (same as V / the touch camera button). */
+  photoFromMenu() {
+    this.resume();
+    this.game.input.tap('camera', 150);
+  }
+
+  /** Free the mouse for a UI panel (Instincts drawer, big map) without opening the pause menu. */
+  releasePointer(): boolean {
+    if (!document.pointerLockElement) return false;
+    this.intentionalUnlock = true;
+    this.game.input.exitPointerLock();
+    return true;
+  }
+
+  /** Re-capture the mouse after such a panel closes (needs a user gesture; harmless if the browser refuses). */
+  relock() {
+    if (this.mode === 'play' && this.game.state === 'playing' && !this.photoMode) this.requestLock();
+  }
+
+  /** The big map (gameplay/MapSystem) is open. */
+  get mapOpen(): boolean {
+    return !!this.game.get<any>('map')?.bigOpen;
+  }
+
+  private closeMap() {
+    const map = this.game.get<any>('map');
+    if (map?.bigOpen) map.toggleBig();
+  }
+
+  /** Focus lost / tab hidden while playing: open the pause menu. */
+  private autoPause() {
+    if (this.mode === 'play' && !this.photoMode && (this.game.state === 'playing' || this.game.state === 'cutscene')) this.openPause();
   }
 
   resume() {
@@ -236,7 +293,9 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
   }
 
   toggleObjectives() {
-    if (this.mode === 'play' && this.game.state === 'playing') this.drawer.toggle();
+    if (this.mode !== 'play' || this.game.state !== 'playing' || this.photoMode || (this.dialog.open && !this.drawer.open)) return;
+    this.closeMap();
+    this.drawer.toggle();
   }
 
   // ================================================================== title / intro
@@ -285,10 +344,10 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     this.area = null;
     this.areaCandidate = null;
     this.areaPoll = 0.8;
-    if (tutorial) {
-      this.tutorial = [...INTRO_HINTS];
-      this.tutorialT = 1.0;
-    }
+    // First time: contextual control hints, then a nudge toward the first suggested Instinct (ui/Guide.ts).
+    // Returning players just get a reminder of what's tracked.
+    if (tutorial) this.guide.startCoach();
+    else this.guide.announceSoon(2.5);
     this.pauseIgnoreUntil = nowSec() + 0.3;
     this.blurUi();
   }
@@ -300,6 +359,7 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     saveSettings(this.settings);
     applySettings(this.game, this.settings, this.baseSens, key);
     this.hudVisible = this._hudVisible;
+    this.root.classList.toggle('calm', !this.settings.flashes);
     this.game.events.emit('settingsChanged', { key, settings: { ...this.settings } });
   }
 
@@ -355,7 +415,6 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
       case 'play':
         if (this.photoMode) break;
         this.updateArea(dt);
-        this.updateTutorial(dt);
         break;
     }
 
@@ -364,9 +423,13 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     this.speechLayer.update(dt, paused);
     this.dialog.update(dt, paused || this.mode !== 'play');
     this.drawer.update(dt);
+    this.guide.update(dt);
+    const mapOpen = this.mapOpen;
+    if (mapOpen !== this.root.classList.contains('map-open')) this.root.classList.toggle('map-open', mapOpen);
     const playing = this.mode === 'play' && game.state === 'playing' && !this.photoMode;
     this.slopBot.update(dt, playing && !this.dialog.open && !this.drawer.open && this._hudVisible && this.settings.showHud);
-    this.touch?.setVisible(this.mode === 'play' && game.state === 'playing' && !this.dialog.open);
+    // In photo mode only the look-drag area stays (CSS .jui.photo) so touch players can orbit the camera.
+    this.touch?.setVisible(this.mode === 'play' && game.state === 'playing' && !this.dialog.open && !this.mapOpen);
     this.updateLockPrompt(dt, playing);
   }
 
@@ -470,6 +533,12 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
         break;
       case 'play':
         if (this.photoMode || now < this.pauseIgnoreUntil) break;
+        // Esc closes the big map first (it sits above the whole UI), then pauses. (The Instincts drawer simply
+        // hides behind the pause menu.)
+        if (this.mapOpen) {
+          this.closeMap();
+          break;
+        }
         if (g.state === 'playing' || g.state === 'cutscene') this.openPause();
         break;
     }
@@ -477,7 +546,7 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
 
   /** "Objectives" command (Tab / gamepad View). */
   private cmdObjectives() {
-    if (this.mode === 'play' && this.game.state === 'playing' && !this.photoMode) this.drawer.toggle();
+    if (this.mode === 'play') this.toggleObjectives();
     else if (this.mode === 'pause') {
       if (this.pause.page === 'objectives') this.pause.back();
       else this.pause.push('objectives');
@@ -587,16 +656,9 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     this.game.events.emit('areaEnter', { name });
   }
 
-  private updateTutorial(dt: number) {
-    if (!this.tutorial.length || this.game.state !== 'playing') return;
-    this.tutorialT -= dt;
-    if (this.tutorialT > 0) return;
-    this.hud.hint(this.tutorial.shift()!, 3.3);
-    this.tutorialT = 3.6;
-  }
-
   private updateLockPrompt(dt: number, playing: boolean) {
-    const want = playing && !IS_TOUCH && !AUTOMATED && this.device !== 'pad' && !this.game.input.pointerLocked && !this.dialog.open;
+    // Not while a panel freed the mouse on purpose (Instincts drawer, big map).
+    const want = playing && !IS_TOUCH && !AUTOMATED && this.device !== 'pad' && !this.game.input.pointerLocked && !this.dialog.open && !this.drawer.open && !this.mapOpen;
     this.unlockedFor = want ? this.unlockedFor + dt : 0;
     const show = this.unlockedFor > 0.35;
     if (show !== this.lockEl.classList.contains('show')) this.lockEl.classList.toggle('show', show);

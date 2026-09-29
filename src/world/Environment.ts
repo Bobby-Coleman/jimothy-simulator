@@ -1,8 +1,19 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import type { Game, System } from '../core/Game';
+import { registerShadowLight } from './shadowOnly';
 
 const _v = new THREE.Vector3();
+
+/**
+ * perf: view distance per quality preset — fog (the DetailCuller also drops anything past fog.far) and the camera
+ * far plane. High keeps the original look.
+ */
+const VIEW = {
+  high: { near: 90, far: 620, cam: 1500 },
+  medium: { near: 80, far: 440, cam: 520 },
+  low: { near: 45, far: 250, cam: 300 },
+} as const;
 
 /**
  * Sky, sun/moon, hemisphere light, fog, stars and the day/night cycle.
@@ -64,6 +75,9 @@ export class Environment implements System {
     this.tameSky(this.envSky, 0.75);
     this.sky.scale.setScalar(1200);
     this.sky.frustumCulled = false;
+    // Always drawn first (it has depthWrite off): on lower presets the sky box shrinks to fit a nearer far plane and
+    // must never paint over distant geometry that happened to be drawn before it.
+    this.sky.renderOrder = -1000;
     const u = this.sky.material.uniforms;
     u.turbidity.value = 3.5;
     u.rayleigh.value = 1.3;
@@ -96,6 +110,7 @@ export class Environment implements System {
     sun.shadow.normalBias = 0.035;
     scene.add(sun);
     scene.add(sun.target);
+    registerShadowLight(sun); // shadow-only proxies (static batches, cars) render into the sun's shadow map
     scene.add(this.hemi);
 
     scene.fog = new THREE.Fog(0xbcd3e8, this.fogNear, this.fogFar);
@@ -142,7 +157,19 @@ export class Environment implements System {
     this.applyTime(true);
   }
 
+  private viewQuality = '';
+
   lateUpdate(dt: number) {
+    // perf: quality-dependent view distance (settings / AutoQuality can switch presets live)
+    const q = this.game.renderer.quality;
+    if (q !== this.viewQuality) {
+      this.viewQuality = q;
+      const v = VIEW[q] ?? VIEW.high;
+      this.fogNear = v.near;
+      this.fogFar = v.far;
+      this.game.camera.far = v.cam;
+      this.game.camera.updateProjectionMatrix();
+    }
     this.applyTime(false);
     // Shadow camera follows the player, snapped to texels to avoid shimmer
     const player = this.game.get<any>('player');
@@ -159,7 +186,13 @@ export class Environment implements System {
     const cam = this.game.camera;
     this.stars.position.copy(cam.position);
     this.sky.position.copy(cam.position);
-    this.moon.position.copy(cam.position).addScaledVector(_v.copy(this.sunDir).negate(), 900);
+    // keep the sky box (corners at 0.87 × scale), stars (r = 1000) and moon inside a shortened far plane
+    const fit = Math.min(1, cam.far / 1500);
+    this.sky.scale.setScalar(1200 * fit);
+    this.stars.scale.setScalar(Math.min(1, (cam.far * 0.9) / 1000));
+    const moonD = Math.min(900, cam.far * 0.85);
+    this.moon.scale.setScalar(moonD / 900);
+    this.moon.position.copy(cam.position).addScaledVector(_v.copy(this.sunDir).negate(), moonD);
     this.moon.lookAt(cam.position);
   }
 

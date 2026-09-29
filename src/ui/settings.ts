@@ -13,11 +13,24 @@ export interface Settings {
   freezeTime: boolean;
   showFps: boolean;
   showHud: boolean;
-  /** Camera-flash overlay when fans take photos. */
+  /**
+   * Full-screen flashes (fans' camera flashes, `ui.flash()`) and camera shake. Shown inverted in Settings as the
+   * accessibility toggle "Reduce flashing & shake". Defaults off when the OS asks for reduced motion.
+   */
   flashes: boolean;
   /** "I just want to play": every mutator can be toggled. */
   unlockAll: boolean;
+  /** Tracked-goal pill + world waypoint (ui/Guide.ts). */
+  showGuide: boolean;
 }
+
+const prefersReducedMotion = () => {
+  try {
+    return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+};
 
 export const DEFAULT_SETTINGS: Settings = {
   master: 0.8,
@@ -29,8 +42,9 @@ export const DEFAULT_SETTINGS: Settings = {
   freezeTime: false,
   showFps: false,
   showHud: true,
-  flashes: true,
+  flashes: !prefersReducedMotion(),
   unlockAll: false,
+  showGuide: true,
 };
 
 const KEY = 'jimothy.settings.v1';
@@ -73,11 +87,27 @@ export function applyAudio(game: Game, s: Settings) {
  * Without it (startup) everything is applied, but "off" states that other systems may own
  * (frozen time, unlock-all) are left alone.
  */
+let basePadLook: number | null = null;
+
 export function applySettings(game: Game, s: Settings, baseSens: number, changed?: keyof Settings) {
   const all = !changed;
   const inp = game.input;
-  if (all || changed === 'sensitivity') inp.mouseSensitivity = baseSens * s.sensitivity;
+  if (basePadLook == null) basePadLook = inp.padLookSpeed;
+  if (all || changed === 'sensitivity') {
+    // One "Look sensitivity" for mouse, gamepad right stick and touch drag (Touch.ts reads it directly).
+    inp.mouseSensitivity = baseSens * s.sensitivity;
+    inp.padLookSpeed = basePadLook * s.sensitivity;
+  }
   if (all || changed === 'invertY') inp.invertY = s.invertY;
+  if (all || changed === 'flashes') {
+    // "Reduce flashing & shake": swallow camera shake without touching the engine's CameraRig (an own property
+    // shadows CameraRig.prototype.shake; deleting it restores the original).
+    const rig = game.get<any>('camera');
+    if (rig) {
+      if (!s.flashes) rig.shake = () => {};
+      else if (Object.prototype.hasOwnProperty.call(rig, 'shake')) delete rig.shake;
+    }
+  }
   const env = game.get<any>('environment');
   if (env) {
     if (all || changed === 'dayLength') env.dayLengthMinutes = s.dayLength;

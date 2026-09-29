@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Game } from '../../core/Game';
 import type { Entity } from '../../core/Entities';
 import { G } from '../../core/Physics';
@@ -22,7 +23,12 @@ interface CrowParts {
   tail: THREE.Object3D;
   legs: THREE.Group;
   hold: THREE.Group;
+  /** perf: tiny bits (eyes, eye shines, jaw, legs) hidden on distant crows. */
+  small: THREE.Object3D[];
 }
+
+/** perf: crows farther than this from the camera drop their tiny parts (15 → 6 draw calls per crow). */
+const CROW_LOD_DIST = 22;
 
 let shared: {
   feather: THREE.MeshStandardMaterial;
@@ -40,7 +46,19 @@ let shared: {
   tailG: THREE.BufferGeometry;
   legG: THREE.BufferGeometry;
   toeG: THREE.BufferGeometry;
+  /** perf: pre-merged same-material parts (torso+chest, both eyes, both shines, legs+toes). */
+  torsoChestG: THREE.BufferGeometry;
+  eyesG: THREE.BufferGeometry;
+  shinesG: THREE.BufferGeometry;
+  legsG: THREE.BufferGeometry;
 } | null = null;
+
+/** Clone `g` with a scale/position baked in (for pre-merging static crow parts). */
+function placed(g: THREE.BufferGeometry, pos: [number, number, number], scale: [number, number, number] = [1, 1, 1]) {
+  const c = g.clone();
+  c.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion(), new THREE.Vector3(...scale)));
+  return c;
+}
 
 /** A wing: flat tapered blade, root at the origin, extending along +X, trailing edge toward -Z. */
 function wingGeometry(): THREE.BufferGeometry {
@@ -93,7 +111,17 @@ function crowShared() {
   const legG = new THREE.CylinderGeometry(0.009, 0.008, 0.1, 5);
   legG.translate(0, -0.05, 0);
   const toeG = new THREE.BoxGeometry(0.012, 0.008, 0.05);
-  shared = { feather, featherDark, beak, eye, shine, bodyG, headG, beakG, jawG, eyeG, shineG, wingG, tailG, legG, toeG };
+  // perf: merge parts that share a parent + material (was one draw call each)
+  const torsoChestG = mergeGeometries([placed(bodyG, [0, 0, 0], [0.1, 0.1, 0.18]), placed(bodyG, [0, 0.03, 0.09], [0.085, 0.09, 0.1])])!;
+  const eyesG = mergeGeometries([placed(eyeG, [-0.045, 0.018, 0.045]), placed(eyeG, [0.045, 0.018, 0.045])])!;
+  const shinesG = mergeGeometries([placed(shineG, [-0.052, 0.026, 0.056]), placed(shineG, [0.052, 0.026, 0.056])])!;
+  const legsG = mergeGeometries([
+    placed(legG, [-0.035, 0, 0]),
+    placed(legG, [0.035, 0, 0]),
+    placed(toeG, [-0.035, -0.1, 0.012]),
+    placed(toeG, [0.035, -0.1, 0.012]),
+  ].map((g) => (g.index ? g.toNonIndexed() : g)))!;
+  shared = { feather, featherDark, beak, eye, shine, bodyG, headG, beakG, jawG, eyeG, shineG, wingG, tailG, legG, toeG, torsoChestG, eyesG, shinesG, legsG };
   return shared;
 }
 
@@ -111,13 +139,9 @@ export function buildCrow(): CrowParts {
   const body = new THREE.Group();
   body.position.set(0, 0.2, 0);
   root.add(body);
-  const torso = mesh(S.bodyG, S.feather);
-  torso.scale.set(0.1, 0.1, 0.18);
+  // torso + chest (one pre-merged mesh)
+  const torso = mesh(S.torsoChestG, S.feather);
   body.add(torso);
-  const chest = mesh(S.bodyG, S.feather);
-  chest.scale.set(0.085, 0.09, 0.1);
-  chest.position.set(0, 0.03, 0.09);
-  body.add(chest);
   // head
   const head = new THREE.Group();
   head.position.set(0, 0.09, 0.15);
@@ -136,15 +160,12 @@ export function buildCrow(): CrowParts {
   const jawM = mesh(S.jawG, S.beak);
   jawM.castShadow = false;
   jaw.add(jawM);
-  for (const sx of [-1, 1]) {
-    const e = mesh(S.eyeG, S.eye);
-    e.castShadow = false;
-    e.position.set(sx * 0.045, 0.018, 0.045);
-    head.add(e);
-    const sh = new THREE.Mesh(S.shineG, S.shine);
-    sh.position.set(sx * 0.052, 0.026, 0.056);
-    head.add(sh);
-  }
+  // both eyes / both shines (pre-merged)
+  const eyes = mesh(S.eyesG, S.eye);
+  eyes.castShadow = false;
+  head.add(eyes);
+  const shines = new THREE.Mesh(S.shinesG, S.shine);
+  head.add(shines);
   // beak hold point (carried trinkets)
   const hold = new THREE.Group();
   hold.position.set(0, -0.03, 0.13);
@@ -170,17 +191,11 @@ export function buildCrow(): CrowParts {
   const legs = new THREE.Group();
   legs.position.set(0, 0.11, 0);
   root.add(legs);
-  for (const sx of [-1, 1]) {
-    const l = mesh(S.legG, S.beak);
-    l.castShadow = false;
-    l.position.set(sx * 0.035, 0, 0);
-    legs.add(l);
-    const toe = mesh(S.toeG, S.beak);
-    toe.castShadow = false;
-    toe.position.set(sx * 0.035, -0.1, 0.012);
-    legs.add(toe);
-  }
-  return { root, body, head, jaw, wingL, wingR, tail, legs, hold };
+  // legs + toes (pre-merged)
+  const legMesh = mesh(S.legsG, S.beak);
+  legMesh.castShadow = false;
+  legs.add(legMesh);
+  return { root, body, head, jaw, wingL, wingR, tail, legs, hold, small: [eyes, shines, jawM, legMesh] };
 }
 
 // ================================================================================================ crow
@@ -238,6 +253,7 @@ export class Crow extends Animal {
   private circleH = 6;
   private fleeFor = 5;
   private washCd = 0;
+  private lodFar = false;
 
   constructor(game: Game, pos: THREE.Vector3, yaw = Math.random() * Math.PI * 2) {
     super(game, {
@@ -655,6 +671,13 @@ export class Crow extends Animal {
     P.body.rotation.x = flying ? 0 : peckK * 0.35;
     P.legs.visible = !flying || this.vel.y < -1;
     P.tail.rotation.x = -0.2 + (flying ? 0.15 : Math.sin(t * 3 + this.flapPh) * 0.05);
+    // perf: far LOD (hysteresis) — eyes/shines/jaw/legs are sub-pixel at this range anyway
+    const lim = this.lodFar ? CROW_LOD_DIST - 2 : CROW_LOD_DIST + 2;
+    const far = this.game.camera.position.distanceToSquared(this.pos) > lim * lim;
+    if (far !== this.lodFar) {
+      this.lodFar = far;
+      for (const o of P.small) o.visible = !far;
+    }
     this.headYaw *= Math.exp(-dt * 0.3);
     this.emote.update(dt, t);
   }

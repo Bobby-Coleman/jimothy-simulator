@@ -163,12 +163,3 @@ export function areaSubtitle(name: string): string | undefined {
 /** Jimothy's chitter bubbles. */
 export const CHITTERS = ['chk chk chk!', '*trill*', 'hrrrm?', 'chirrr!', '*happy noises*', 'chk!'];
 
-/** Intro: post-cutscene control hints (tokens become key chips). */
-export const INTRO_HINTS = [
-  '{move} Waddle  ·  {look} Look around',
-  '{jump} Jump — hold it against walls to climb',
-  '{grab} Grabby Hands  ·  {bonk} Bonk',
-  'Hold {wash} near water to wash what you hold',
-  '{roll} Tuck & Roll  ·  {flop} Flop',
-  '{objectives} Instincts  ·  {pause} Pause. Go be round.',
-];

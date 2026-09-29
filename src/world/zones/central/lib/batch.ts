@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { makeShadowOnly } from '../../../shadowOnly';
 
 export interface BatchAddOpts {
   /** Transform applied to (a clone of) the geometry. */
@@ -160,6 +161,8 @@ export class Batch {
       proxy.receiveShadow = false;
       proxy.matrixAutoUpdate = false;
       proxy.renderOrder = -10;
+      // perf: only ever drawn by the sun's shadow pass (was also vertex-processed in the colour pass: ~200k tris/frame)
+      makeShadowOnly(proxy);
       parent.add(proxy);
     }
     this.buckets.clear();

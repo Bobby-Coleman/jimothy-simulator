@@ -65,9 +65,21 @@ export class TouchControls {
       'div',
       { class: 'touch-top' },
       h('button', { class: 'tbtn-top', 'aria-label': 'Instincts', html: ICONS.list, onclick: () => this.api.toggleObjectives() }),
+      // Photo mode (V on keyboard): gameplay/PhotoMode reads the 'camera' action.
+      h('button', { class: 'tbtn-top', 'aria-label': 'Photo mode', html: ICONS.camera, onclick: () => this.api.game.input.tap('camera', 150) }),
       h('button', { class: 'tbtn-top', 'aria-label': 'Pause', html: ICONS.pause, onclick: () => this.api.openPause() }),
     );
-    this.el = h('div', { class: 'touch' }, move, look, this.base, btns, top);
+    // The minimap (gameplay/MapSystem: a body-level canvas below the UI layer) sits inside the joystick zone in
+    // landscape, so taps never reached it: a transparent button over it opens the big map.
+    const mapBtn = h('button', {
+      class: 'touch-map',
+      'aria-label': 'Map',
+      onclick: () => {
+        const map = this.api.game.get<any>('map');
+        if (map && this.api.game.state === 'playing') map.toggleBig();
+      },
+    });
+    this.el = h('div', { class: 'touch' }, move, look, this.base, btns, top, mapBtn);
     parent.append(this.el);
 
     // Joystick (floating: appears where the thumb lands)

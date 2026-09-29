@@ -3,6 +3,8 @@ import type { Objective, ObjectivesSystem } from '../gameplay/Objectives';
 import type { MutatorSystem } from '../gameplay/Mutators';
 import { h, esc, fmt } from './dom';
 import { ICONS } from './icons';
+import type { Guide } from './Guide';
+import type { UiCtx } from './types';
 
 export interface CategoryInfo {
   id: string;
@@ -53,8 +55,67 @@ function row(o: Objective, cat: CategoryInfo, muts: MutatorSystem | undefined): 
   return r;
 }
 
+/**
+ * "Suggested next": up to 3 Instincts picked by ui/Guide.ts (curated early-game order + distance), each with a
+ * how-to line, where/how far, and a Track button. The tracked one drives the HUD pill + world waypoint.
+ */
+function renderSuggestions(game: Game, container: HTMLElement, onChange?: () => void) {
+  const guide = (game.get<any>('ui') as { guide?: Guide } | undefined)?.guide;
+  const sys = game.get<ObjectivesSystem>('objectives');
+  if (!guide || !sys) return;
+  guide.resolve();
+  const rows = [...guide.suggestions];
+  if (!rows.length) return;
+  const sec = h('section', { class: 'obj-cat obj-sugg', style: { '--cat': '#ffd23f' } as any });
+  sec.append(
+    h(
+      'header',
+      { class: 'obj-cat-head' },
+      h('span', { class: 'obj-cat-icon', html: ICONS.star }),
+      h('span', { class: 'obj-cat-label', text: 'Suggested next' }),
+      guide.manualId ? h('button', { class: 'sugg-auto', text: 'Auto-track', title: 'Always track the top suggestion', onclick: () => (guide.untrack(), onChange?.()) }) : null,
+    ),
+  );
+  for (const s of rows) {
+    const o = sys.get(s.id);
+    const cat = categoryInfo(s.category);
+    const tracked = guide.isTracked(s.id);
+    const d = guide.describe(s);
+    const r = h('div', { class: `obj-row sugg-row${tracked ? ' tracked' : ''}`, style: { '--cat': cat.color } as any });
+    r.append(h('div', { class: 'obj-check sugg-icon', html: cat.icon }));
+    const main = h('div', { class: 'obj-main' });
+    main.append(
+      h(
+        'div',
+        { class: 'obj-title' },
+        h('span', { class: 'obj-name', text: s.title }),
+        o?.points ? h('span', { class: 'obj-pts', text: `+${fmt(o.points)}` }) : null,
+      ),
+      h('div', { class: 'obj-desc', html: d.how }),
+    );
+    const meta = [s.progress, d.where].filter(Boolean).join('  ·  ');
+    if (meta) main.append(h('div', { class: 'sugg-where', html: `${ICONS.pin}<span>${esc(meta)}</span>` }));
+    r.append(main);
+    const btn = h('button', {
+      class: `sugg-track${tracked ? ' on' : ''}`,
+      'aria-pressed': String(tracked),
+      'aria-label': tracked ? `Tracking ${s.title}` : `Track ${s.title}`,
+      html: `${ICONS.star}<span>${tracked ? 'Tracking' : 'Track'}</span>`,
+      onclick: () => {
+        if (tracked && guide.manualId === s.id) guide.untrack();
+        else guide.track(s.id);
+        (game.get<any>('ui') as UiCtx | undefined)?.sfx('ui_toggle');
+        onChange?.();
+      },
+    });
+    r.append(btn);
+    sec.append(r);
+  }
+  container.append(sec);
+}
+
 /** Render the grouped objectives list into `container` (replacing its content). */
-export function renderObjectives(game: Game, container: HTMLElement, opts: { summary?: boolean } = {}) {
+export function renderObjectives(game: Game, container: HTMLElement, opts: { summary?: boolean; suggest?: boolean; onChange?: () => void } = {}) {
   container.textContent = '';
   const sys = game.get<ObjectivesSystem>('objectives');
   const muts = game.get<MutatorSystem>('mutators');
@@ -71,6 +132,7 @@ export function renderObjectives(game: Game, container: HTMLElement, opts: { sum
       ),
     );
   }
+  if (opts.suggest !== false) renderSuggestions(game, container, opts.onChange);
   if (!list.length) {
     container.append(h('div', { class: 'obj-empty', text: 'No Instincts yet. Jimothy is simply vibing. (The objectives system is still being written overnight.)' }));
     return;

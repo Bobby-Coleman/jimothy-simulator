@@ -3,6 +3,8 @@ import type { Game, System } from '../../core/Game';
 import type { Entity } from '../../core/Entities';
 import { RAPIER, G, groups } from '../../core/Physics';
 import type { World } from '../../world/World';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { makeShadowOnly, shadowOnlyMaterial } from '../../world/shadowOnly';
 import { audio, type SoundHandle } from '../../audio/AudioManager';
 
 /**
@@ -42,7 +44,14 @@ interface Car {
   model: string;
   prevPos: THREE.Vector3;
   engine?: SoundHandle | null;
+  /** perf: the detailed model (separate spinning wheels) and its merged far-LOD twin. */
+  inner?: THREE.Object3D;
+  lod?: THREE.Object3D | null;
+  far?: boolean;
 }
+
+/** perf: beyond this camera distance a car draws as one merged mesh (hysteresis ±3 m). */
+const CAR_LOD_DIST = 38;
 
 const _p = new THREE.Vector3();
 const _t = new THREE.Vector3();
@@ -133,9 +142,23 @@ export class VehicleSystem implements System {
     inner.traverse((o) => {
       if (/wheel/i.test(o.name)) wheels.push(o);
     });
+    // perf: far LOD — body + wheels baked into one mesh per material (Kenney cars: a single "colormap"
+    // material), so a distant car costs 1 draw instead of 5 in both the colour and the shadow pass.
+    const lod = buildCarLod(inner);
     const holder = new THREE.Group();
     holder.name = 'Car:' + model;
     holder.add(inner);
+    if (lod) {
+      lod.visible = false;
+      holder.add(lod);
+      // perf: the car's shadow is ONE shadow-only mesh (the merged LOD shape) instead of 5 per car; the wheel
+      // spin can't be seen in a shadow anyway.
+      const shadow = lod.userData.shadow as THREE.Mesh | undefined;
+      if (shadow) {
+        inner.traverse((o) => ((o as THREE.Mesh).isMesh ? ((o as THREE.Mesh).castShadow = false) : null));
+        holder.add(shadow);
+      }
+    }
     game.scene.add(holder);
     const box = new THREE.Box3().setFromObject(inner);
     const size = box.getSize(new THREE.Vector3());
@@ -186,6 +209,9 @@ export class VehicleSystem implements System {
       velocity: entity.data.velocity,
       model,
       prevPos: _p.clone(),
+      inner,
+      lod,
+      far: false,
     };
     entity.onBonk = (g, impulse) => {
       // Bonking a car: it honks at you. Goat-Sim tradition.
@@ -237,7 +263,18 @@ export class VehicleSystem implements System {
     const player = game.get<any>('player');
     const ppos: THREE.Vector3 | undefined = player?.position;
     this.updateEngines(dt, ppos);
+    const cam = game.camera.position;
     for (const car of this.cars) {
+      // perf: swap between the detailed car and its merged far-LOD mesh
+      if (car.lod && car.inner) {
+        const lim = car.far ? CAR_LOD_DIST - 3 : CAR_LOD_DIST + 3;
+        const far = car.object.position.distanceToSquared(cam) > lim * lim;
+        if (far !== car.far) {
+          car.far = far;
+          car.inner.visible = !far;
+          car.lod.visible = far;
+        }
+      }
       if (car.wrecked) {
         const t = car.body.translation();
         car.object.position.set(t.x, t.y, t.z);
@@ -275,9 +312,11 @@ export class VehicleSystem implements System {
       car.body.setNextKinematicTranslation({ x: _p.x, y: _p.y, z: _p.z });
       car.body.setNextKinematicRotation({ x: _q.x, y: _q.y, z: _q.z, w: _q.w });
       car.velocity.copy(_t).multiplyScalar(car.speed);
-      // Wheels spin
-      const spin = (car.speed * dt) / (0.3 * SCALE);
-      for (const w of car.wheels) w.rotation.x += spin;
+      // Wheels spin (not visible on the far LOD)
+      if (!car.far) {
+        const spin = (car.speed * dt) / (0.3 * SCALE);
+        for (const w of car.wheels) w.rotation.x += spin;
+      }
       // Hit things in front when moving
       if (car.speed > 3.5) this.checkHits(car, _p.clone(), _t.clone());
     }
@@ -378,6 +417,67 @@ function prettyName(model: string) {
     sedan: 'Sedan',
   };
   return map[model] ?? 'Car';
+}
+
+/**
+ * perf: bake every mesh of a car model (in its rest pose, incl. the model's own scale) into one mesh per material.
+ * Returns null if the model can't be merged (then the car just always draws in full detail).
+ */
+function buildCarLod(inner: THREE.Object3D): THREE.Object3D | null {
+  inner.updateMatrixWorld(true); // inner has no parent yet → matrixWorld = its local transform (incl. SCALE)
+  const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  let ok = true;
+  inner.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    if (Array.isArray(m.material) || (m as any).isSkinnedMesh) {
+      ok = false;
+      return;
+    }
+    const src = m.geometry;
+    const g = new THREE.BufferGeometry();
+    const n = src.attributes.position.count;
+    const copy = (a: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, size: number) => {
+      const out = new Float32Array(n * size);
+      for (let i = 0; i < n; i++) for (let c = 0; c < size; c++) out[i * size + c] = c < a.itemSize ? a.getComponent(i, c) : 0;
+      return new THREE.BufferAttribute(out, size);
+    };
+    g.setAttribute('position', copy(src.attributes.position, 3));
+    if (src.attributes.normal) g.setAttribute('normal', copy(src.attributes.normal, 3));
+    g.setAttribute('uv', src.attributes.uv ? copy(src.attributes.uv, 2) : new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+    if (src.index) g.setIndex(src.index.clone());
+    else g.setIndex([...Array(n).keys()]);
+    if (!g.attributes.normal) g.computeVertexNormals();
+    g.applyMatrix4(m.matrixWorld);
+    const list = byMat.get(m.material) ?? [];
+    list.push(g);
+    byMat.set(m.material, list);
+  });
+  if (!ok || !byMat.size) return null;
+  const group = new THREE.Group();
+  group.name = 'carLod';
+  const shadowGeos: THREE.BufferGeometry[] = [];
+  for (const [mat, geos] of byMat) {
+    const merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
+    if (!merged) return null;
+    merged.computeBoundingSphere();
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.castShadow = false; // the shadow-only proxy below casts for both LODs
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', merged.getAttribute('position'));
+    pg.setIndex(merged.getIndex());
+    shadowGeos.push(pg);
+  }
+  const sg = shadowGeos.length === 1 ? shadowGeos[0] : mergeGeometries(shadowGeos, false);
+  if (sg) {
+    sg.computeBoundingSphere();
+    const shadow = makeShadowOnly(new THREE.Mesh(sg, shadowOnlyMaterial()));
+    shadow.name = 'carShadow';
+    group.userData.shadow = shadow;
+  }
+  return group;
 }
 
 function fallbackCar(): THREE.Object3D {

@@ -7,6 +7,7 @@ import { getKit, Batch, tree, bush, bench, rng, canvasTex, fitText, roundRect, F
 import { lamps, BIRD, perched, flock } from './decor';
 import { seawall } from './Locks';
 import * as P from './props';
+import { spawnItem } from '../../../gameplay/items';
 
 /**
  * S zone — Waterfront + "Pike's Plaice Market": the market arcade with its big neon sign, fish stall with
@@ -298,6 +299,8 @@ function fishStall(kit: Kit, b: Batch, water: WaterSystem) {
   P.crab(game, -1.3, 0.985, 90.8, 0.3);
   P.crab(game, 2.7, 0.985, 90.85, -0.4);
   P.crab(game, 6.3, 0.985, 90.8, 1.2);
+  // somebody's forgotten wad of cash by the till ('Money Laundering': the stall sink is right behind the counter)
+  spawnItem(game, 'cash', V(-6.35, 0.985, 90.85), 0.3);
   // price cards
   const cards = ['WILD KING $24.99', 'COHO $18.99', 'DUNGENESS $12/lb', 'COD $9.99', 'SNAPPER $14.99'];
   cards.forEach((t, i) => {

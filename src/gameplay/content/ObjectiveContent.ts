@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Game, System } from '../../core/Game';
 import type { Entity } from '../../core/Entities';
+import { G, groups } from '../../core/Physics';
 import type { ObjectivesSystem } from '../Objectives';
 import type { MutatorSystem } from '../Mutators';
 import type { ScoreSystem } from '../Score';
@@ -14,12 +15,12 @@ import { OBJECTIVES } from './objectiveDefs';
  * Registers every objective and progresses them from gameplay events / polled player state.
  *
  * Trigger table (event payloads are read defensively; other systems may omit fields):
- *   wash10              'wash' (kind != 'hands')                     cottonCandy     'cottonCandyGone' | wash/itemWashed of cotton candy
+ *   wash10              'wash' (kind != 'hands') ×10 unique things   cottonCandy     'cottonCandyGone' | wash/itemWashed of cotton candy
  *   moneyLaundering     wash/itemWashed of cash                      deepClean       wash/itemWashed of a phone
- *   dumpsterDiver       'dumpsterDive' ×5 (unique dumpsters)         trashTornado    'trashTipped' ×20
+ *   dumpsterDiver       'dumpsterDive' ×5 (items: 15 s cooldown/bin) trashTornado    'trashTipped' ×20
  *   roundBoy            player.stats.rolled (cumulative, 500 m)      notACat         'notACat'
- *   cryptid             'filmed' {by} ×25 unique people              fiveFingerDisc. 'steal'/'grab' of a pizza
- *   stickyFingers       'steal' ×10                                  stickySituation 'gumWall'
+ *   cryptid             'filmed' {by} ×15 unique people              fiveFingerDisc. 'steal'/'grab' of a pizza
+ *   stickyFingers       'steal' ×10 unique items                     stickySituation 'gumWall'
  *   spaceNoodle         'noodleSummit' | y > 56 near POI spaceNoodleTop     nocturnal   environment.isNight for 60 s
  *   bathTime            swim in 4 water kinds (persisted set)        marathon        player.stats.distance 2 km
  *   catchOfTheDay       'fishCaught'                                 bobbleheadColl. 'collectible' {kind:'bobblehead'} ×10
@@ -32,13 +33,16 @@ import { OBJECTIVES } from './objectiveDefs';
  *   honoraryDegree      'degreeReceived'                             jimothySummer   'proclamation'
  *   salmonRun           'salmonRunWon'                               rookieCard      'collectible' {kind:'rookieCard'} | grab
  *   awww                'chitter' near 15 unique NPCs                localCelebrity  score total 100k
- *   strike              'bonk' {rolling} on 5 NPCs in one roll       chainReaction   'npcRagdoll' ×10 in 5 s
+ *   strike              'bonk' {rolling} | 'npcRagdoll' {cause:'roll'} on 5 NPCs in one roll
+ *   chainReaction       'npcRagdoll' (not byPlayer:false) ×N unique in 5 s
  *   kaboom              'explosion'                                  carSurfer       'hanging' while moving, 10 s
- *   leapOfFaith         'land' | 'leapOfFaith' {height ≥ 25}         frequentFlyer   30 m rise while airborne
+ *   leapOfFaith         'land' | 'leapOfFaith' {height ≥ 25}         frequentFlyer   8 m rise while airborne (live; teleports reset)
  *   jaywalker           'hitByCar' | playerRagdoll cause car         flopEra         'playerRagdoll' ×25
  *   officerScold        'officerScold' ×10
- *   secrets: humanMade (near POI *mural* | 'muralFound'), hydrophobic (swim 60 s), heNeverLearns (cotton candy ×3),
- *            backFromTheVoid (fall out of the world), spinMeRound (roll 60 s non-stop), mutantRaccoon (5 mutators on)
+ *   secrets: humanMade (stand still near a POI *mural* looking at the wall 1.5 s | photo of it | 'muralFound'),
+ *            hydrophobic (swim 60 s), heNeverLearns (cotton candy ×3), backFromTheVoid (fall out of the world),
+ *            spinMeRound (roll 60 s non-stop), mutantRaccoon (5 mutators on)
+ * Saved progress that already meets a (rebalanced) target completes on the first frame.
  * Also: 'questComplete' {id} completes the objective with that id, or one matched by QUEST_ALIASES
  * (landmark quests: noodle/catch/degree/summer/salmon/rookieCard; heart quests: mama/kits/crows/danny/teddy/grandma).
  */
@@ -100,6 +104,10 @@ export class ObjectiveContent implements System {
   private rollHits = new Set<number>();
   private ragdolls: { t: number; id: number | string }[] = [];
   private fly = { takeoffY: 0, peak: 0, airborne: false };
+  private lastPos = new THREE.Vector3();
+  private hasLastPos = false;
+  private admire = 0;
+  private migrated = false;
   private spin = 0;
   private spinStall = 0;
   private recentTrash = new Map<number, number>();
@@ -107,7 +115,8 @@ export class ObjectiveContent implements System {
   private pollT = 0;
   private lastCandy = -10;
   private scanT = 0;
-  private murals: THREE.Vector3[] = [];
+  /** Mural POIs + the point on the painted wall to look at (found once per scan). */
+  private murals: { pos: THREE.Vector3; look: THREE.Vector3; found: boolean }[] = [];
   private noodle: THREE.Vector3 | null | undefined = undefined;
 
   init(game: Game) {
@@ -180,8 +189,9 @@ export class ObjectiveContent implements System {
 
     on('wash', (p) => {
       if (p.kind === 'hands') return;
-      this.add('wash10');
       const e: Entity | undefined = p.entity;
+      // "10 things": scrubbing the same thing again doesn't count twice
+      if (e?.id == null || this.uniq('wash10', e.id)) this.add('wash10');
       if (isThing(e, /cotton ?candy/i, 'cottoncandy')) this.cottonCandy(e);
       if (isThing(e, /\bcash\b|money|dollar|\bbills?\b|wallet/i, 'cash', 'money')) this.done('moneyLaundering');
       if (isThing(e, /phone/i, 'phone')) this.done('deepClean');
@@ -193,9 +203,9 @@ export class ObjectiveContent implements System {
       if (/phone/i.test(k)) this.done('deepClean');
     });
     on('cottonCandyGone', (p) => this.cottonCandy(p.entity));
-    on('dumpsterDive', (p) => {
-      if (this.uniq('dumpsterDiver', this.keyOf(p, 'dive'))) this.add('dumpsterDiver');
-    });
+    // Every scoring dive counts (the items system already allows one per dumpster per 15 s). There are only a
+    // handful of dumpsters in town, so "5 different dumpsters" was impossible.
+    on('dumpsterDive', () => this.add('dumpsterDiver'));
     on('trashTipped', (p) => {
       const id: number | undefined = p.entity?.id;
       if (id != null) {
@@ -210,7 +220,9 @@ export class ObjectiveContent implements System {
       if (this.uniq('cryptid', p.by?.id ?? p.entity?.id ?? this.keyOf(p, 'film'))) this.add('cryptid');
     });
     on('steal', (p) => {
-      this.add('stickyFingers');
+      // 10 different things: stealing the same phone back after returning it doesn't count again
+      const id = p.entity?.id;
+      if (id == null || this.uniq('stickyFingers', id)) this.add('stickyFingers');
       if (isThing(p.entity, /pizza/i, 'pizza')) this.done('fiveFingerDiscount');
     });
     on('grab', (p) => {
@@ -262,6 +274,17 @@ export class ObjectiveContent implements System {
     on('salmonRunWon', () => this.done('salmonRun'));
     on('muralFound', () => this.done('humanMade'));
     on('muralVisited', () => this.done('humanMade'));
+    // a photo (photo mode) of the mural counts as admiring it
+    on('photoTaken', () => {
+      if (!this.has('humanMade')) return;
+      const cam = this.game.camera;
+      const dir = cam.getWorldDirection(new THREE.Vector3());
+      for (const m of this.murals) {
+        const to = m.look.clone().sub(cam.position);
+        const d = to.length();
+        if (d < 25 && to.divideScalar(d || 1).dot(dir) > 0.5) return this.done('humanMade');
+      }
+    });
     on('questComplete', (p) => {
       const id = String(p.id ?? '');
       if (!id) return;
@@ -295,6 +318,13 @@ export class ObjectiveContent implements System {
       if (p.prev === 'roll' && p.mode !== 'roll') this.rollHits.clear();
     });
     on('npcRagdoll', (p) => {
+      // bowled over by a rolling Jimothy (slow rolls knock people down without a 'bonk' event)
+      if (p.cause === 'roll' && p.entity?.id != null && this.game.get<Jimothy>('player')?.mode === 'roll') {
+        this.rollHits.add(p.entity.id);
+        this.set('strike', this.rollHits.size);
+      }
+      // Jimothy's chaos only (traffic knocking people over across town isn't his chain reaction)
+      if (p.byPlayer === false) return;
       const t = this.game.time;
       this.ragdolls.push({ t, id: p.entity?.id ?? `r${t}` });
       while (this.ragdolls.length && t - this.ragdolls[0].t > 5) this.ragdolls.shift();
@@ -310,9 +340,9 @@ export class ObjectiveContent implements System {
       if (speed > 1.5) this.accum('carSurfer', Number(p.dt) || this.game.dt, 1);
     });
     on('land', (p) => {
+      // fall height from the player controller (measured from where he let go of walls/cars, see Jimothy.checkGround)
       const h = Number(p.height) || 0;
       if (h >= 3) this.set('leapOfFaith', Math.floor(Math.min(h, 25)));
-      this.finishFlight();
     });
     on('hitByCar', () => this.done('jaywalker'));
     on('playerRagdoll', (p) => {
@@ -347,10 +377,31 @@ export class ObjectiveContent implements System {
     this.add('washSlop');
   }
 
-  private finishFlight() {
-    if (this.fly.airborne && this.fly.peak >= 4) this.set('frequentFlyer', Math.floor(Math.min(this.fly.peak, 30)));
-    this.fly.airborne = false;
-    this.fly.peak = 0;
+  /** Launch height: rise above the take-off point while airborne (progress updates live, e.g. while bouncing). */
+  private trackFlight(p: Jimothy, dt: number) {
+    const pos = p.position;
+    // Teleports (respawn, quest cutscenes, debug) are neither launches nor falls: restart from here.
+    const expected = p.velocity.length() * dt + 1.5;
+    if (this.hasLastPos && pos.distanceTo(this.lastPos) > Math.max(5, expected * 2)) {
+      this.fly.airborne = false;
+      this.fly.peak = 0;
+      this.fly.takeoffY = pos.y;
+    }
+    this.lastPos.copy(pos);
+    this.hasLastPos = true;
+    const air = !p.grounded && (p.mode === 'walk' || p.mode === 'roll' || p.mode === 'ragdoll');
+    if (!air) {
+      this.fly.airborne = false;
+      this.fly.peak = 0;
+      this.fly.takeoffY = pos.y;
+      return;
+    }
+    this.fly.airborne = true;
+    const rise = pos.y - this.fly.takeoffY;
+    if (rise > this.fly.peak + 0.2) {
+      this.fly.peak = rise;
+      if (rise >= 3) this.set('frequentFlyer', Math.floor(rise)); // (a plain jump is ~2.5 m)
+    }
   }
 
   // ------------------------------------------------------------------ polling
@@ -358,6 +409,12 @@ export class ObjectiveContent implements System {
     if (!this.obj) return;
     const p = game.get<Jimothy>('player');
     if (!p) return;
+    if (!this.migrated && game.state === 'playing') {
+      // Targets get rebalanced between versions: a save that already meets the new target completes now
+      // (ObjectivesSystem.set() never lowers progress, so it would otherwise be stuck at e.g. 20/15 forever).
+      this.migrated = true;
+      for (const o of this.obj.list) if (!o.done && o.progress >= (o.target ?? 1)) this.obj.complete(o.id);
+    }
 
     // cumulative distances (stats reset every session; objective progress is the persistent total)
     const rolled = p.stats.rolled;
@@ -368,15 +425,7 @@ export class ObjectiveContent implements System {
     this.lastWalked = walked;
 
     // launches: height gained since leaving the ground (climbing/swimming/hanging reset the reference)
-    const air = !p.grounded && (p.mode === 'walk' || p.mode === 'roll' || p.mode === 'ragdoll');
-    if (!air) {
-      if (this.fly.airborne) this.finishFlight();
-      this.fly.takeoffY = p.position.y;
-    } else {
-      this.fly.airborne = true;
-      this.fly.peak = Math.max(this.fly.peak, p.position.y - this.fly.takeoffY);
-      if (this.fly.peak >= 30) this.set('frequentFlyer', 30);
-    }
+    this.trackFlight(p, dt);
 
     // swimming
     if (p.mode === 'swim') {
@@ -424,7 +473,20 @@ export class ObjectiveContent implements System {
         if (Math.hypot(pos.x - top.x, pos.z - top.z) < 18 && pos.y > Math.min(60, top.y - 4)) this.done('spaceNoodle');
       } else if (pos.y > 60 && (p.grounded || p.mode === 'climb')) this.done('spaceNoodle');
     }
-    if (this.has('humanMade')) for (const m of this.murals) if (m.distanceToSquared(p.position) < 30) this.done('humanMade');
+    // "Admire" the mural: stand still near it looking at the painted wall for ~1.5 s (walking past doesn't count)
+    if (this.has('humanMade') && this.murals.length) {
+      const cam = game.camera;
+      const dir = cam.getWorldDirection(new THREE.Vector3());
+      const still = p.speed < 0.8 && (p.mode === 'walk' || p.mode === 'climb');
+      let looking = false;
+      for (const m of this.murals) {
+        if (m.look.distanceTo(p.position) > 9) continue;
+        const to = m.look.clone().sub(cam.position).normalize();
+        if (to.dot(dir) > 0.8) looking = true;
+      }
+      this.admire = looking && still ? this.admire + 0.25 : 0;
+      if (this.admire >= 1.5) this.done('humanMade');
+    }
     const total = game.get<ScoreSystem>('score')?.total ?? 0;
     if (total > 0) this.set('localCelebrity', total >= 100000 ? 100000 : Math.floor(total / 5000) * 5000);
     const coll = game.get<any>('collectibles');
@@ -433,13 +495,32 @@ export class ObjectiveContent implements System {
 
   private scanPois(world: World | undefined) {
     this.noodle = null;
-    this.murals = [];
     if (!world) return;
     const direct = world.poi.get('spaceNoodleTop');
+    const murals: THREE.Vector3[] = [];
     for (const [k, v] of world.poi) {
       if (!direct && /space.?noodle/i.test(k) && (!this.noodle || v.y > this.noodle.y)) this.noodle = v;
-      if (/mural/i.test(k)) this.murals.push(v);
+      if (/mural/i.test(k)) murals.push(v);
     }
     if (direct) this.noodle = direct;
+    // keep already-resolved murals (the wall raycast only needs doing once per POI)
+    this.murals = murals.map((v) => this.murals.find((m) => m.found && m.pos.equals(v)) ?? this.muralWall(v));
+  }
+
+  /** The painted wall behind a mural POI (nearest vertical surface within 8 m), else the POI itself. */
+  private muralWall(poi: THREE.Vector3) {
+    const from = poi.clone().add(new THREE.Vector3(0, 1, 0));
+    let best: THREE.Vector3 | null = null;
+    let bestD = Infinity;
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const hit = this.game.physics.raycast(from, new THREE.Vector3(Math.sin(a), 0, Math.cos(a)), 8, groups(G.ALL, G.WORLD));
+      if (hit && Math.abs(hit.normal.y) < 0.3 && hit.distance < bestD) {
+        bestD = hit.distance;
+        best = hit.point.clone();
+      }
+    }
+    const look = best ? best.add(new THREE.Vector3(0, 0.8, 0)) : poi.clone().add(new THREE.Vector3(0, 1.5, 0));
+    return { pos: poi.clone(), look, found: !!best };
   }
 }

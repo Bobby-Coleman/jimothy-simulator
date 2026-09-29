@@ -77,21 +77,31 @@ export class Input {
   private mouseButtons = new Set<number>();
   private mouseDelta = new THREE.Vector2();
   private padButtons = new Set<Action>();
+  /**
+   * UX pass: keys / mouse buttons pressed since the last update(). A tap that starts and ends between two frames
+   * (fast fingers, low fps, automated tests) still counts as held for one frame instead of being lost.
+   */
+  private tapKeys = new Set<string>();
+  private tapButtons = new Set<number>();
 
   constructor(private canvas: HTMLElement) {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Tab') e.preventDefault();
       if (e.code === 'Space' && e.target === document.body) e.preventDefault();
       this.keys.add(e.code);
+      this.tapKeys.add(e.code);
       this.usingGamepad = false;
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => {
       this.keys.clear();
       this.mouseButtons.clear();
+      this.tapKeys.clear();
+      this.tapButtons.clear();
     });
     canvas.addEventListener('mousedown', (e) => {
       this.mouseButtons.add(e.button);
+      this.tapButtons.add(e.button);
       this.usingGamepad = false;
     });
     window.addEventListener('mouseup', (e) => this.mouseButtons.delete(e.button));
@@ -154,6 +164,11 @@ export class Input {
       break;
     }
 
+    const tapKeys = [...this.tapKeys];
+    const tapButtons = [...this.tapButtons];
+    this.tapKeys.clear();
+    this.tapButtons.clear();
+
     if (!this.enabled) {
       this.mouseDelta.set(0, 0);
       this.wheel = 0;
@@ -178,8 +193,12 @@ export class Input {
       const a = KEYMAP[code];
       if (a) this.down.add(a);
     }
-    if (this.mouseButtons.has(0)) this.down.add('grab');
-    if (this.mouseButtons.has(2)) this.down.add('bonk');
+    for (const code of tapKeys) {
+      const a = KEYMAP[code];
+      if (a) this.down.add(a);
+    }
+    if (this.mouseButtons.has(0) || tapButtons.includes(0)) this.down.add('grab');
+    if (this.mouseButtons.has(2) || tapButtons.includes(2)) this.down.add('bonk');
     for (const a of this.padButtons) this.down.add(a);
     for (const a of this.virtual.buttons) this.down.add(a);
 

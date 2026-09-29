@@ -2328,3 +2328,227 @@
     animation-iteration-count: 1 !important;
   }
 }
+
+/* =====================================================================================
+   UX pass: tracked goal (ui/Guide.ts), "Suggested next", pause extras, touch sizing,
+   photo-mode touch layout, reduce-flashing, small-screen fixes.
+   ===================================================================================== */
+
+/* ------------------------------------------------------------------ tracked-goal pill (top centre) */
+.guide-pill {
+  --cat: var(--gold);
+  position: absolute;
+  top: calc(0.9em + env(safe-area-inset-top));
+  left: 50%;
+  max-width: min(24em, 46vw);
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  padding: 0.25em 0.55em 0.25em 0.3em;
+  border-radius: 2em;
+  border: 0.14em solid var(--ink);
+  background: var(--ink-soft);
+  box-shadow: 0 0.16em 0 rgba(0, 0, 0, 0.35);
+  color: var(--cream);
+  font-family: var(--f-bold);
+  font-size: 0.95em;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -0.4em);
+  transition: opacity 0.25s, transform 0.25s, visibility 0s 0.25s;
+}
+.guide-pill.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity 0.25s, transform 0.25s; }
+.jui.is-touch .guide-pill.show { pointer-events: auto; }
+.guide-pill.pop .gp-icon { animation: jui-bump 0.45s ease-out; }
+.gp-icon {
+  flex: none;
+  width: 1.75em;
+  height: 1.75em;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 0.12em solid var(--ink);
+  background: var(--cat);
+  color: #fff;
+}
+.gp-icon svg { width: 62%; height: 62%; fill: currentColor; }
+.gp-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.gp-title i { font-style: normal; color: var(--gold); }
+.gp-dist { flex: none; color: var(--gold); }
+.gp-arrow { flex: none; width: 1.15em; height: 1.15em; transition: transform 0.12s linear; }
+.gp-arrow svg { width: 100%; height: 100%; fill: var(--gold); stroke: var(--ink); stroke-width: 1.5; }
+
+/* ------------------------------------------------------------------ world waypoint (star over the tracked goal) */
+@keyframes jui-wp-bob {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -0.3em; }
+}
+.waypoint {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  transition: opacity 0.3s;
+  will-change: transform;
+}
+.waypoint.show { opacity: 1; }
+.wp-pin {
+  position: absolute;
+  left: -1.15em;
+  top: -2.5em;
+  width: 2.3em;
+  height: 2.3em;
+  color: var(--gold);
+  scale: var(--wp-scale, 1);
+  filter: drop-shadow(0 0.12em 0 var(--ink)) drop-shadow(0 0 0.4em rgba(0, 0, 0, 0.45));
+  animation: jui-wp-bob 1.4s ease-in-out infinite;
+}
+.wp-pin svg { width: 100%; height: 100%; fill: currentColor; stroke: var(--ink); stroke-width: 1.4; }
+.wp-dist {
+  position: absolute;
+  left: -3em;
+  top: 0.05em;
+  width: 6em;
+  text-align: center;
+  font-family: var(--f-bold);
+  font-size: 0.85em;
+  color: var(--cream);
+  text-shadow: var(--ol);
+}
+.wp-arrow { display: none; }
+.waypoint.edge .wp-pin { top: -1.15em; animation: none; }
+.waypoint.edge .wp-dist { top: 1.35em; }
+.waypoint.edge .wp-arrow {
+  display: block;
+  position: absolute;
+  left: -0.6em;
+  top: -0.6em;
+  width: 1.2em;
+  height: 1.2em;
+  background: var(--gold);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  transform: rotate(var(--ang, 0deg)) translateY(-2.1em);
+  filter: drop-shadow(0 0 0.15em var(--ink));
+}
+
+/* ------------------------------------------------------------------ "Suggested next" (Instincts drawer + pause page) */
+.obj-sugg { margin-bottom: 1.1em; }
+.obj-sugg .obj-cat-icon { color: var(--ink); }
+.sugg-auto {
+  flex: none;
+  padding: 0.15em 0.6em;
+  border-radius: 1em;
+  border: 0.12em solid var(--ink);
+  background: #fff;
+  color: var(--ink);
+  font-family: var(--f-bold);
+  font-size: 0.78em;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.sugg-auto:hover, .sugg-auto:focus-visible { background: var(--gold); outline: none; }
+.sugg-row { align-items: flex-start; border-radius: 0.8em; }
+.sugg-row.tracked { background: rgba(255, 210, 63, 0.2); box-shadow: inset 0 0 0 0.14em var(--gold); }
+.sugg-icon { background: var(--cat) !important; color: #fff !important; }
+.sugg-row .obj-desc .kc { font-size: 0.8em; }
+.sugg-where {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-top: 0.3em;
+  font-size: 0.8em;
+  font-weight: 800;
+  color: var(--teal-2);
+}
+.sugg-where svg { flex: none; width: 1.1em; height: 1.1em; fill: currentColor; }
+.sugg-track {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  min-height: 2.3em;
+  padding: 0.25em 0.7em 0.2em 0.5em;
+  border-radius: 1.2em;
+  border: 0.13em solid var(--ink);
+  background: #fff;
+  box-shadow: 0 0.13em 0 var(--ink);
+  color: var(--ink);
+  font-family: var(--f-bold);
+  font-size: 0.85em;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.sugg-track svg { width: 1.1em; height: 1.1em; fill: #d8cfbd; stroke: var(--ink); stroke-width: 1.5; }
+.sugg-track.on { background: var(--gold); }
+.sugg-track.on svg { fill: #fff; }
+.sugg-track:hover, .sugg-track:focus-visible, .jui.kbd-nav .sugg-track:focus { background: var(--gold); outline: none; }
+
+/* ------------------------------------------------------------------ pause extras */
+.pause-small { display: flex; flex-wrap: wrap; gap: 0.5em; margin-top: 0.3em; }
+.pause-small .btn-small { width: auto; margin-top: 0; }
+/* The pause root page can be taller than a phone: let it scroll instead of cutting off Controls/Credits/Reset. */
+.menu-body > .pause-main { min-height: 0; overflow-y: auto; overscroll-behavior: contain; pointer-events: auto; margin-right: -0.6em; padding-right: 0.6em; }
+
+/* ------------------------------------------------------------------ touch sizing (44 px minimum targets) */
+.jui.is-touch .tbtn-top { width: max(2.9em, 44px); height: max(2.9em, 44px); }
+.jui.is-touch .hud-right { top: calc(max(4.4em, 60px) + env(safe-area-inset-top)); }
+.jui.is-touch .drawer { top: calc(max(4.4em, 60px) + env(safe-area-inset-top)); }
+.jui.is-touch .tbtn { min-width: 46px; min-height: 46px; }
+.jui.is-touch .guide-pill { top: calc(0.7em + env(safe-area-inset-top)); max-width: min(22em, calc(100vw - 25em)); }
+
+/* ------------------------------------------------------------------ photo mode: keep only the look-drag area on touch */
+.jui.photo .touch .tbtn,
+.jui.photo .touch .touch-top,
+.jui.photo .touch .touch-move,
+.jui.photo .touch .stick-base { display: none; }
+.jui.photo .touch .touch-look { width: 100%; }
+.jui.photo .guide-pill,
+.jui.photo .waypoint { display: none; }
+
+/* ------------------------------------------------------------------ reduce flashing & shake */
+.jui.calm .vf-frame.shake { animation: none; }
+.jui.calm .hud-flash { display: none; }
+
+/* ------------------------------------------------------------------ small screens */
+@media (max-width: 820px) {
+  /* buttons first, report card underneath (the old column-reverse pushed Resume off-screen on phones) */
+  .pause-main { flex-direction: column; }
+}
+@media (orientation: portrait) {
+  .jui.is-touch .guide-pill { top: calc(max(4.2em, 58px) + env(safe-area-inset-top)); max-width: 64vw; }
+  .jui.is-touch .hud-right { top: calc(max(7.6em, 100px) + env(safe-area-inset-top)); }
+}
+/* pill lives on the UI root (above the touch layer, below the drawer/menus) */
+.guide-pill { z-index: 4; }
+.jui[data-mode='title'] .guide-pill,
+.jui[data-mode='intro'] .guide-pill { display: none; }
+/* the big map (MapSystem, above the UI) carries its own legend: hide hints/prompts behind it */
+.jui.map-open .hud-bottom,
+.jui.map-open .guide-pill { visibility: hidden; }
+/* portrait phones: the pill sits right-aligned under the top buttons, clear of the score/combo column */
+@media (orientation: portrait) {
+  .jui.is-touch .guide-pill { left: auto; right: calc(0.8em + env(safe-area-inset-right)); transform: translateY(-0.4em); max-width: min(64vw, calc(100vw - 13.5em)); }
+  .jui.is-touch .guide-pill.show { transform: none; }
+}
+/* tap target over the minimap (MapSystem puts it at left 12px / top 92px, 104px + 4px border on touch) */
+.touch-map {
+  position: absolute;
+  left: max(12px, env(safe-area-inset-left));
+  top: calc(92px + env(safe-area-inset-top));
+  width: 112px;
+  height: 112px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+}
+.jui.photo .touch .touch-map,
+.jui.hud-off .touch .touch-map { display: none; }

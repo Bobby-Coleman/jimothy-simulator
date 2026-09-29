@@ -32,6 +32,8 @@ export class MutatorSystem implements System {
   private game!: Game;
   /** Set true to unlock everything (dev / "I just want to play" toggle). */
   allUnlocked = false;
+  /** Saved-as-enabled mutators, switched back on at the first frame (see register). */
+  private pendingEnable: string[] = [];
 
   init(game: Game) {
     this.game = game;
@@ -47,8 +49,10 @@ export class MutatorSystem implements System {
     const m: Mutator = { ...def, unlocked: s?.u ?? false, enabled: false };
     this.list.push(m);
     this.byId.set(m.id, m);
-    // Re-enable after load (deferred so every system is ready)
-    if (s?.e && s.u) setTimeout(() => this.setEnabled(m.id, true), 0);
+    // Re-enable after load. UX pass: deferred to the first frame (lateUpdate, which also runs on the title screen)
+    // instead of a 0 ms timeout, so every system — including the UI, which restores the "I just want to play"
+    // unlock-all setting — is initialised; otherwise mutators enabled via unlock-all silently switched off on reload.
+    if (s?.e) this.pendingEnable.push(m.id);
     return m;
   }
 
@@ -82,6 +86,13 @@ export class MutatorSystem implements System {
   toggle(id: string) {
     const m = this.byId.get(id);
     if (m) this.setEnabled(id, !m.enabled);
+  }
+
+  lateUpdate() {
+    if (this.pendingEnable.length) {
+      const ids = this.pendingEnable.splice(0);
+      for (const id of ids) this.setEnabled(id, true); // no-op unless unlocked (or unlock-all is on)
+    }
   }
 
   update(dt: number) {

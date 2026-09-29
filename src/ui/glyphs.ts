@@ -30,6 +30,8 @@ export const GLYPHS: Record<string, GlyphDef> = {
   pause: { kbm: 'Esc', pad: 'Menu', touch: 'II' },
   slowmo: { kbm: 'T', pad: '', touch: '' },
   respawn: { kbm: 'H', pad: '', touch: '' },
+  map: { kbm: 'M', pad: '', touch: 'Minimap' },
+  photo: { kbm: 'V', pad: 'R3', touch: 'Photo' },
   click: { kbm: 'Click', pad: 'A', touch: 'Tap' },
   lmb: { kbm: 'LMB', pad: 'X', touch: 'Grab' },
   rmb: { kbm: 'RMB', pad: 'RB', touch: 'Bonk' },

@@ -351,10 +351,17 @@ export class Hud {
   }
 
   hint(text: string, duration = 2.5) {
+    this.hintRaw = text;
     this.hintEl.innerHTML = fillTokens(text, this.ctx.device);
     this.hintEl.classList.add('show');
     replay(this.hintEl, 'pulse');
     this.hintT = duration;
+  }
+
+  /** Raw text of the latest hint and the seconds it stays up (the onboarding coach waits for a free line). */
+  hintRaw = '';
+  get hintLeft() {
+    return this.hintT;
   }
 
   /** Custom context prompt from gameplay (tokens like {grab} become key chips). `null` clears it. */
@@ -365,6 +372,7 @@ export class Hud {
 
   // ------------------------------------------------------------------ flash
   flash(strength = 0.3) {
+    if (!this.ctx.settings.flashes) return; // Settings › Reduce flashing & shake
     this.flashA = Math.max(this.flashA, clamp(strength, 0, 1));
   }
 

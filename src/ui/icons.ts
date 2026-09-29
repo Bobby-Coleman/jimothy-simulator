@@ -47,6 +47,8 @@ export const ICONS = {
   camera: s('<path fill-rule="evenodd" d="M8.5 4h7l1.4 2.2H20a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.2a2 2 0 0 1 2-2h3.1zM12 9a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/>'),
   info: s('<path fill-rule="evenodd" d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm-1.3 8.2v7.6h2.6v-7.6zM12 5.6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/>'),
   dice: s('<path fill-rule="evenodd" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2.8 3a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6zm8.4 0a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6zM12 10.2a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6zm-4.2 4.2a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6zm8.4 0a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6z"/>'),
+  home: s('<path d="M12 2.8l10 8.6h-2.9v9.4h-5v-6.2H9.9v6.2h-5v-9.4H2z"/>'),
+  map: s('<path fill-rule="evenodd" d="M2.5 5.4l6-2.4 7 2.6 6-2.4v15.4l-6 2.4-7-2.6-6 2.4zm7 .1v12.6l5 1.9V7.4z"/>'),
 } as const;
 
 export type IconName = keyof typeof ICONS;
