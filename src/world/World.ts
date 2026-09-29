@@ -30,6 +30,21 @@ export class World implements System {
   readonly poi = new Map<string, THREE.Vector3>();
   /** Areas for zone-name HUD display. */
   readonly areas: { name: string; min: THREE.Vector2; max: THREE.Vector2 }[] = [];
+  /**
+   * Where the NPC system should populate humans. Zone builders push entries.
+   * `walkable` rectangles/circles NPCs wander in; `types` e.g. ['pedestrian','tourist','fan','jogger'].
+   */
+  readonly npcSpawns: {
+    zone: string;
+    center: THREE.Vector3;
+    radius: number;
+    count: number;
+    types?: string[];
+    /** Optional polyline NPCs stroll along (sidewalks). */
+    path?: THREE.Vector3[];
+  }[] = [];
+  /** Driveable lanes for the vehicle system: polylines (closed loops preferred), y = road surface. */
+  readonly lanes: { points: THREE.Vector3[]; loop: boolean; speed?: number }[] = [];
   private matCache = new Map<string, THREE.MeshStandardMaterial>();
 
   heightAt(x: number, z: number) {

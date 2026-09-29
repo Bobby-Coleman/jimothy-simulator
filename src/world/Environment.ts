@@ -37,9 +37,25 @@ export class Environment implements System {
     return this.timeOfDay < 5.5 || this.timeOfDay > 20.5;
   }
 
+  /** The stock Sky shader can output values beyond half-float range (Inf) which bloom smears
+   *  across the whole screen. Clamp + scale it, and kill NaNs. */
+  private tameSky(sky: Sky, exposure: number) {
+    const mat = sky.material as THREE.ShaderMaterial;
+    mat.uniforms.skyExposure = { value: exposure };
+    mat.fragmentShader = mat.fragmentShader
+      .replace('void main() {', 'uniform float skyExposure;\nvoid main() {')
+      .replace(
+        'gl_FragColor = vec4( texColor, 1.0 );',
+        'texColor = max(texColor, vec3(0.0));\n\t\t\tif (any(isnan(texColor)) || any(isinf(texColor))) texColor = vec3(0.0);\n\t\t\tgl_FragColor = vec4( min( texColor * skyExposure, vec3( 12.0 ) ), 1.0 );',
+      );
+    mat.needsUpdate = true;
+  }
+
   init(game: Game) {
     this.game = game;
     const scene = game.scene;
+    this.tameSky(this.sky, 0.75);
+    this.tameSky(this.envSky, 0.75);
     this.sky.scale.setScalar(1200);
     this.sky.frustumCulled = false;
     const u = this.sky.material.uniforms;
