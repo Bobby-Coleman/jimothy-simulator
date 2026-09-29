@@ -153,14 +153,34 @@ export class Intro {
     game.events.emit('introStart', {});
   }
 
-  /** Pick a facing so the phone (behind Jimothy) and the final gameplay camera aren't inside a wall. */
+  /**
+   * Pick a facing so the phone (behind Jimothy) and the final gameplay camera aren't inside a wall. Playtest: the
+   * spawn facing points straight at Mom's den, so the phone clip had Mom right behind "the cat", which confused
+   * people. Start 90° to the side instead (the den alley: brick wall + fence, a clean readable background), and
+   * skip any facing that would put Mom in the shot.
+   */
   private chooseFacing(p: any) {
     const game = this.api.game;
     const from = _a.copy(p.position);
     from.y += 0.6;
-    let best = p.facing ?? 0;
-    for (let i = 0; i < 8; i++) {
-      const f = (p.facing ?? 0) + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 4);
+    const base = (p.facing ?? 0) - Math.PI / 2;
+    let mom: THREE.Vector3 | null = null;
+    try {
+      const m = game.entities.withTag('mom')[0];
+      const mp = m?.object?.position;
+      if (mp && Math.hypot(mp.x - from.x, mp.z - from.z) < 30) mom = mp.clone();
+    } catch {
+      mom = null;
+    }
+    // Mom inside ~45° of the phone's look direction (Jimothy's facing) = in the background
+    const momYaw = mom ? Math.atan2(mom.x - from.x, mom.z - from.z) : 0;
+    const momInShot = (f: number) => !!mom && Math.abs(Math.atan2(Math.sin(momYaw - f), Math.cos(momYaw - f))) < Math.PI / 4;
+    let best = momInShot(base) ? base + Math.PI : base;
+    // the base, the opposite 90° side, then 45° steps around it
+    const offs = [0, Math.PI, -Math.PI / 4, Math.PI / 4, (-3 * Math.PI) / 4, (3 * Math.PI) / 4, Math.PI / 2, -Math.PI / 2];
+    for (const off of offs) {
+      const f = base + off;
+      if (momInShot(f)) continue;
       const dir = _b.set(-Math.sin(f), 0, -Math.cos(f));
       let clear = true;
       try {

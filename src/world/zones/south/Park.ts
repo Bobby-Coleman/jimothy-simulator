@@ -136,7 +136,8 @@ function pond(kit: Kit, b: Batch, water: WaterSystem) {
     kit.collider([PX + Math.cos(a) * 16.95, -0.62, PZ + Math.sin(a) * 16.95], [2.45, 0.9, 0.95], -a + Math.PI / 2);
   }
   // Beach: sand fan into the water
-  b.patch(PX, PZ, 21, 21, 0xe8d7a6, { mat: 'sand', a0: deg(100), a1: deg(140), r0: 0.62, rings: 5, seg: 10, lift: 0.03 });
+  // (a touch wider than the rim-stone gap and finely ringed: it hugs the eased beach slope from terrain.ts)
+  b.patch(PX, PZ, 21, 21, 0xe8d7a6, { mat: 'sand', a0: deg(97), a1: deg(143), r0: 0.5, rings: 12, seg: 14, lift: 0.05 });
 
   // Reeds & cattails
   const reedCols = [0x5f8f3a, 0x6f9c3f, 0x86a04a, 0x4f7f34];

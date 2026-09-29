@@ -52,11 +52,27 @@ export function terrainHeight(x: number, z: number): number {
   // Park pond depression
   const p = MAP.pond;
   const dp = Math.hypot(x - p.x, z - p.z);
-  if (dp < p.r + 5) {
+  if (dp < p.r + 6) {
     const k = smooth01((p.r + 5 - dp) / 8);
-    h -= k * p.depth;
+    let d = k * p.depth;
+    // The little sandy beach (south-west shore, the gap in the rim stones at ~100°..140°): a long, eased shelf instead
+    // of the 8 m drop. It meets the pond surface right at the water disc's edge (r + 1.5; the old slope dipped
+    // below the surface ~1.5 m outside the disc, a dry step at the waterline) and eases down to the bed over ~14 m.
+    const bw = pondBeachWeight(x - p.x, z - p.z);
+    if (bw > 0) {
+      const u = clamp01((p.r + 6 - dp) / 14);
+      const s = u * u * (3 - 2 * u);
+      d = d * (1 - bw) + Math.pow(s, 1.35) * p.depth * bw;
+    }
+    h -= d;
   }
   return h;
+}
+
+/** 0..1: how much (dx, dz) from the pond centre is on the pond's sandy beach (full 110°..130°, fading out by 99°/141°). */
+function pondBeachWeight(dx: number, dz: number): number {
+  const deg = (Math.atan2(dz, dx) * 180) / Math.PI;
+  return smooth01((deg - 99) / 11) * smooth01((141 - deg) / 11);
 }
 
 /** True if (x, z) is on one of the main avenue road strips (flat & driveable). */

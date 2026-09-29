@@ -541,7 +541,10 @@ export class Npc {
   // ================================================================== update (walker)
 
   update(dt: number) {
-    if (this.removed || this.ragdollState) return;
+    if (this.removed) return;
+    // an item destroyed while in our hand (eaten, washed away, despawned...) is gone: drop the dangling reference
+    if (this.held && !this.held.alive) this.held = null;
+    if (this.ragdollState) return;
     const game = this.game;
     this.stateTime += dt;
     this.timer -= dt;
@@ -1232,6 +1235,7 @@ export class Npc {
   /** Jimothy dropped our item next to us. */
   receiveItem(item: Entity) {
     if (this.held || this.ragdollState || this.removed) return false;
+    if (!item.alive || !item.body || item.data.consumed || item.data.heldByPlayer) return false;
     attachItem(this.game, item, this.rig.handR);
     this.held = item;
     this.dropped = null;
@@ -1317,6 +1321,7 @@ export class Npc {
     const game = this.game;
     if (this.onInteract?.('grab') === true) return false;
     if (this.ragdollState) return true; // drag the body (entity.body is the chest while ragdolled)
+    if (this.held && !this.held.alive) this.held = null; // consumed / destroyed elsewhere: never hand over a dead entity
     if (this.held) {
       const item = this.held;
       this.held = null;

@@ -138,7 +138,16 @@ export class Game {
       this.time += dt;
       for (const s of this.systems) this.safe(s, 'update', dt);
       this.entities.update(this, dt);
-      if (dt > 0) this.physics.step(dt);
+      // a throwing physics step must not abort the frame (render + input.endFrame would never run again)
+      if (dt > 0) {
+        try {
+          this.physics.step(dt);
+        } catch (err) {
+          const n = (this.errorCounts.get('physics.step') ?? 0) + 1;
+          this.errorCounts.set('physics.step', n);
+          if (n <= 3) console.error('[game] physics.step threw', err);
+        }
+      }
       for (const s of this.systems) this.safe(s, 'postPhysics', dt);
     }
     for (const s of this.systems) this.safe(s, 'lateUpdate', rawDt);

@@ -594,6 +594,15 @@ export class NpcSystem implements System {
     if (count >= 3) this.game.score(30, 'Crowd Pleaser', p.clone());
   }
 
+  /**
+   * Items Jimothy set down this frame. The hand-back check runs at the start of the NEXT npcs update, not inside the
+   * 'release' event: many systems release-then-consume an item synchronously (chug the stolen espresso, wash away the
+   * cotton candy, Mom eats it, a crow takes it...). Handing it back inside the event gave the owner an entity that was
+   * destroyed a line later: he "got it back" AND it was consumed, and grabbing him again touched the freed Rapier
+   * body, which poisons the physics world (the whole game froze).
+   */
+  private pendingReleases: Entity[] = [];
+
   private onRelease(e: { entity: Entity; thrown: boolean }) {
     const ent = e?.entity;
     const pl = this.player;
@@ -602,8 +611,25 @@ export class NpcSystem implements System {
       if (pl) this.alarm(pl.position, 7, 'throw');
       return;
     }
-    if (!ent.body || !ent.alive) return;
-    const t = ent.body.translation();
+    if (ent.data?.consumed || !ent.body || !ent.alive) return;
+    if (!this.pendingReleases.includes(ent)) this.pendingReleases.push(ent);
+  }
+
+  private flushReleases() {
+    if (!this.pendingReleases.length) return;
+    const list = this.pendingReleases;
+    this.pendingReleases = [];
+    for (const ent of list) {
+      // consumed / destroyed / picked straight back up / already in someone's hand since: nothing to return
+      if (!ent.alive || !ent.body || ent.data?.consumed || ent.data?.heldByPlayer || ent.data?.heldByNpc) continue;
+      if (this.player?.held?.entity === ent) continue;
+      if (!this.game.physics.world.getRigidBody(ent.body.handle)) continue;
+      this.returnItem(ent);
+    }
+  }
+
+  private returnItem(ent: Entity) {
+    const t = ent.body!.translation();
     const owner = ent.data?.owner;
     if (owner instanceof Npc && !owner.removed && !owner.ragdolled && !owner.held) {
       if (Math.hypot(owner.position.x - t.x, owner.position.z - t.z) < 2.6 && owner.receiveItem(ent)) {
@@ -696,7 +722,8 @@ export class NpcSystem implements System {
   update(dt: number, game: Game) {
     if (!this.populated) return;
     this.player = game.get<Jimothy>('player') ?? null;
-    this.friendly = !!game.get<any>('mutators')?.get?.('grandmaHat')?.enabled;
+    this.flushReleases();
+    this.friendly =!!game.get<any>('mutators')?.get?.('grandmaHat')?.enabled;
     this.computeSeparation();
     this.officerTimer -= dt;
     if (this.officerTimer <= 0) {

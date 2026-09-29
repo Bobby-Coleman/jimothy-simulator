@@ -767,6 +767,14 @@ export class Jimothy implements System {
       this.setMode('walk');
       return;
     }
+    // Wade out: walkable ground shallow enough to stand on (standing height clears the walk→swim threshold of
+    // surface - 0.12 with a few cm of hysteresis). Without this, a gentle beach held him floating at the swim height
+    // with the slope pushing up from below, never rising past the surface to switch back to walking.
+    const floor = game.physics.raycast(this.position, _a.set(0, -1, 0), R + 0.6, CLIMB_FILTER, this.body);
+    if (floor && floor.normal.y > 0.6 && floor.point.y + R > vol.surfaceY - 0.05) {
+      this.setMode('walk');
+      return;
+    }
     const wish = this.wishDir(new THREE.Vector3());
     const max = (inp.held('sprint') ? SWIM_SPEED * 1.6 : SWIM_SPEED) * this.speedMul;
     const v = this.body.linvel();
@@ -873,6 +881,9 @@ export class Jimothy implements System {
     const res = best.onGrab?.(game);
     if (res === false) return;
     if (res && typeof res === 'object' && 'kind' in res) {
+      // never pick up a destroyed entity: touching its freed Rapier body poisons the whole physics world
+      const r = res as Entity;
+      if (!r.alive || !r.body || !game.physics.world.getRigidBody(r.body.handle)) return;
       // stole something
       target = res as Entity;
       game.events.emit('steal', { entity: target, from: best });

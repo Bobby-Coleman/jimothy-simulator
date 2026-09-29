@@ -230,7 +230,7 @@ export const GRIP: Record<HoldingKind, { offset: THREE.Vector3 }> = {
 export function attachItem(game: Game, item: Entity, hand: THREE.Object3D) {
   const body = item.body;
   const obj = item.object;
-  if (!body || !obj) return;
+  if (!body || !obj || !item.alive) return;
   game.physics.unlink(body);
   body.setLinvel({ x: 0, y: 0, z: 0 }, false);
   body.setAngvel({ x: 0, y: 0, z: 0 }, false);

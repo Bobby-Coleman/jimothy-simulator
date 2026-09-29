@@ -275,8 +275,13 @@ export class EspressoFeature implements ChaosFeature {
     const pl = playerOf(game);
     if (!pl) return false;
     const ent = e ?? pl.held?.entity;
-    if (!ent || !ent.alive) return false;
+    if (!ent || !ent.alive || ent.data.consumed || ent.data.heldByNpc) return false;
     const pos = pl.position.clone();
+    // consumed BEFORE the release: nobody (the owner it was stolen from, a quest NPC) may be handed it back
+    ent.data.consumed = true;
+    ent.data.owner = null;
+    this.heldId = -1;
+    this.heldFor = 0;
     if (pl.held?.entity === ent) pl.release(false);
     try {
       destroyProp(game, ent);
