@@ -225,7 +225,7 @@ export class BigRollSystem implements System {
     this.held = true;
     this.pin();
     this.game.get<any>('camera')?.snapBehind?.(START.facing);
-    this.game.get<any>('ui')?.banner?.('THE BIG ROLL', '7 checkpoints · then bowl the pins', 'Hilltop Lanes');
+    // (no big title banner: it held the GO! shout back and sat over the road for the first seconds of the race)
     this.game.sfx('crowd_ooh', undefined, 0.5);
     this.renderHud(p);
   }

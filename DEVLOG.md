@@ -198,3 +198,12 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
   Routes are stamina puzzles now (rest ledges, stepped piers, a valve pipe, the donut shop roof); careful play
   succeeds, a naive walking climb fails. Coves/lips fixed so climbers don't snag under cornices and eaves; fire
   escapes land you on their platforms.
+
+## Playtest batch 6 (from the human)
+* **Return From Whence You Came**: three scowling, grabbable seagulls by the bay (promenade railing, Pier A,
+  a marina bollard). Throw or bonk one into the bay → splash, an indignant (original) complaint, a lap, home.
+  Mom/kits/Danny don't count and their quests are safe.
+* **THE BIG ROLL**: a rooftop bowling-ball race from Hilltop Lanes (new retro alley at the top of Tumble St):
+  kicker jump, 7 checkpoints through town, finish by bowling ten giant pins by City Hall. Bronze (finish) /
+  Silver < 0:52 / Gold < 0:40 / Platinum Pin < 0:34 — the scripted ideal line's best is 32.9 s. Boosts cap at Bronze.
+* Crow's nest: rope ladder removed (trunk + branch climb).
