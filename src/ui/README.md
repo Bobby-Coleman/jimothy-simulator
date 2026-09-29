@@ -13,6 +13,7 @@ FontFace API (`boot.ts`), with system fallbacks.
 | `SlopBot.ts` | SlopBot™ popup assistant |
 | `Drawer.ts` + `ObjectivesView.ts` | Tab "Instincts" panel (and the pause-menu page), with a "Suggested next" section + Track buttons |
 | `Guide.ts` | Suggested Instincts, the tracked goal (top pill + world waypoint star; the big map/minimap draw it too) and the first-time onboarding coach |
+| `NearHints.ts` | Proximity hints: linger ~2 s near where an unfinished Instinct happens and its hint hangs under the goal pill (data: `Guide.ts` `DEFS[].near` → `guide.nearby()`; own system `nearHints`, registered after `UI`) |
 | `MenuHost.ts` + `pages.ts` | Pause menu + title sub-pages (Instincts, Mutators, Settings, Controls, Credits, Reset) |
 | `Title.ts` / `Intro.ts` | Title screen (orbit camera, tips) / viral-video intro cutscene |
 | `Touch.ts` | Phone/tablet controls (only when `(pointer: coarse)`) |
