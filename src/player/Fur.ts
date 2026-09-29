@@ -58,7 +58,11 @@ function addBaseRim(base: THREE.MeshStandardMaterial) {
 /** Quality knob: 0 disables fur for newly furred models. */
 export const furSettings = { shells: DEFAULT_SHELLS };
 
-function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number): THREE.MeshStandardMaterial {
+/**
+ * `clip` (optional): matrix from the fur mesh's object space into a hat's "footprint" space; shells whose root lies
+ * under the hat (y > 0 and x² + z² < 1) are discarded, so fur doesn't poke through beanies.
+ */
+function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number, clip?: { value: THREE.Matrix4 }): THREE.MeshStandardMaterial {
   const m = base.clone();
   m.name = base.name + '_shell';
   m.transparent = false;
@@ -72,18 +76,21 @@ function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number): TH
     shader.uniforms.uFurTime = furUniforms.uFurTime;
     shader.uniforms.uFurScale = furUniforms.uFurScale;
     shader.uniforms.uFurRim = furUniforms.uFurRim;
+    if (clip) shader.uniforms.uFurClip = clip;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
         `#include <common>
          uniform float uShells; uniform float uFurLen; uniform vec3 uFurWind; uniform float uFurTime; uniform float uFurScale;
-         varying vec3 vFurObjPos; varying float vShellH;`,
+         varying vec3 vFurObjPos; varying float vShellH;
+         ${clip ? 'uniform mat4 uFurClip; varying vec3 vFurClip;' : ''}`,
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
          float shellH = (float(gl_InstanceID) + 1.0) / uShells;
          vFurObjPos = position;
+         ${clip ? 'vFurClip = (uFurClip * vec4(position, 1.0)).xyz;' : ''}
          vShellH = shellH;
          float furLen = uFurLen * uFurScale;
          transformed += normalize(objectNormal) * shellH * furLen;
@@ -94,11 +101,13 @@ function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number): TH
       .replace(
         '#include <common>',
         `#include <common>
-         uniform sampler2D uNoise; uniform vec3 uFurRim; varying vec3 vFurObjPos; varying float vShellH;`,
+         uniform sampler2D uNoise; uniform vec3 uFurRim; varying vec3 vFurObjPos; varying float vShellH;
+         ${clip ? 'varying vec3 vFurClip;' : ''}`,
       )
       .replace(
         '#include <alphatest_fragment>',
-        `vec3 fp = vFurObjPos * 260.0;
+        `${clip ? 'if (vFurClip.y > 0.0 && dot(vFurClip.xz, vFurClip.xz) < 1.0) discard;' : ''}
+         vec3 fp = vFurObjPos * 260.0;
          float n1 = texture2D(uNoise, fp.xy / 128.0).r;
          float n2 = texture2D(uNoise, fp.yz / 128.0 + 0.37).r;
          float n3 = texture2D(uNoise, fp.zx / 128.0 + 0.71).r;
@@ -115,7 +124,7 @@ function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number): TH
          #include <opaque_fragment>`,
       );
   };
-  m.customProgramCacheKey = () => 'fur_instanced_' + shells;
+  m.customProgramCacheKey = () => 'fur_instanced_' + shells + (clip ? '_clip' : '');
   return m;
 }
 
@@ -147,6 +156,9 @@ export function applyFur(root: THREE.Object3D, enabled = true) {
     for (let i = 0; i < shells; i++) inst.setMatrixAt(i, _ident);
     inst.instanceMatrix.needsUpdate = true;
     inst.userData.furShell = true;
+    inst.userData.furBase = base;
+    inst.userData.furShells = shells;
+    inst.userData.furMat = sm;
     inst.castShadow = false;
     inst.receiveShadow = true;
     inst.frustumCulled = false; // bounding sphere of instanced mesh isn't updated for skinned-ish parts
@@ -154,3 +166,26 @@ export function applyFur(root: THREE.Object3D, enabled = true) {
     mesh.add(inst);
   }
 }
+
+/**
+ * Hide the shell fur of `mesh` under a hat: `clip` maps the mesh's object space into the hat's footprint space
+ * (see makeShellMaterial). Pass null to restore. No-op for meshes without shells (low quality).
+ */
+export function setFurClip(mesh: THREE.Object3D, clip: THREE.Matrix4 | null) {
+  const inst = mesh.children.find((c) => c.userData.furShell) as THREE.InstancedMesh | undefined;
+  if (!inst) return;
+  const u = inst.userData;
+  if (!clip) {
+    if (u.furMat) inst.material = u.furMat;
+    return;
+  }
+  if (!u.clipMat) {
+    u.clipU = { value: new THREE.Matrix4() };
+    u.clipMat = makeShellMaterial(u.furBase, u.furShells, u.clipU);
+  }
+  u.clipU.value.copy(clip);
+  inst.material = u.clipMat;
+}
+
+/** True if this mesh has instanced shell fur. */
+export const hasFurShells = (mesh: THREE.Object3D) => mesh.children.some((c) => c.userData.furShell);

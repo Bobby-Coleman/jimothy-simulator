@@ -1025,7 +1025,7 @@ async function buildPlazaDecor(game: Game, world: World, batch: Batch, rng: Rng)
     );
   }
   const tripod = mergeColored([
-    ...[0, 1, 2].map((k) => ({ geo: new THREE.CylinderGeometry(0.02, 0.025, 1.6, 5), color: 0x222222, matrix: TR(Math.cos(k * 2.1) * 0.3, 0.75, Math.sin(k * 2.1) * 0.3, Math.sin(k * 2.1) * 0.35, 0, -Math.cos(k * 2.1) * 0.35) })),
+    ...[0, 1, 2].map((k) => ({ geo: new THREE.CylinderGeometry(0.02, 0.025, 1.6, 5), color: 0x222222, matrix: TR(Math.cos(k * 2.1) * 0.3, 0.75, Math.sin(k * 2.1) * 0.3, -Math.sin(k * 2.1) * 0.35, 0, Math.cos(k * 2.1) * 0.35) })),
     { geo: new THREE.BoxGeometry(0.55, 0.35, 0.3), color: 0x2d3035, matrix: T(0, 1.65, 0) },
     { geo: new THREE.CylinderGeometry(0.1, 0.12, 0.3, 10), color: 0x111111, matrix: TR(0.4, 1.65, 0, 0, 0, Math.PI / 2) },
     { geo: new THREE.BoxGeometry(0.2, 0.12, 0.2), color: 0xc62f2f, matrix: T(-0.15, 1.88, 0) },

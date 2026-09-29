@@ -282,6 +282,8 @@ export class Physics {
   }
 
   private thinCache = new Map<number, boolean>();
+  /** Collider handles that can't be climbed (invisible map-boundary walls). */
+  readonly noClimb = new Set<number>();
   /** True for pole/trunk-like colliders (the camera looks straight through those). */
   isThin(c: RAPIER.Collider): boolean {
     let v = this.thinCache.get(c.handle);

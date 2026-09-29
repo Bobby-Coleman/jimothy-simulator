@@ -128,3 +128,14 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
   peachy rather than deep red; rain has no splashes; the Strike objective test is a little flaky in automation
   (the objective itself is easy with the tour group at the Space Noodle).
 * `tools/_downloads/` holds ~1.5 GB of regenerable scratch builds/downloads (gitignored) — safe to delete.
+
+## Morning playtest fixes (from the human)
+* **Hats vs fur**: shell fur poked through Grandma's beanie (mostly the round body's fur). Hats now hide the head and
+  body fur under their footprint, so only the ears poke out; same for the grad cap and the Rookie cap.
+* **Invisible walls**: the invisible map-edge walls were climbable (60 m of air); they're now marked unclimbable. An
+  audit of every static collider against the visible geometry also found SlopCorp's cooling towers wrapped in one
+  fat cylinder (an invisible wall around the pinched waist); they now use stacked colliders that follow the shape.
+* **Slopes**: a 0.5 m/s "keep feet planted" cap stalled Jimothy on inclines (sprinting up 45° gained 3.5 m in 4 s,
+  62° was neither walkable nor climbable). He now follows the ground: anything up to ~60° is runnable at normal
+  speed along the slope (45° sprint: 21 m in 4 s) and anything steeper is climbable.
+* **News-van tripod**: legs were tilted the wrong way (converging at the feet); they now splay out.

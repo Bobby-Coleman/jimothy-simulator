@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import type { JimothyModel } from '../../player/JimothyModel';
 import { disposeTree } from './fx';
+import { setFurClip, hasFurShells } from '../../player/Fur';
 
 /**
  * Head accessories for mutators (grad cap, sunglasses, baseball cap, beanie, bubble helmet, …).
@@ -50,6 +51,7 @@ export function markOurs(obj: THREE.Object3D) {
 
 const _v = new THREE.Vector3();
 const _m = new THREE.Matrix4();
+const _clip = new THREE.Matrix4();
 
 function localPos(part: THREE.Object3D | undefined, frame: THREE.Object3D): THREE.Vector3 | null {
   if (!part) return null;
@@ -243,10 +245,15 @@ export class Attachment {
   obj: THREE.Object3D | null = null;
   private parent: THREE.Object3D | null = null;
   private fromGlb = false;
+  /** Hats: part-local → footprint space (see setFurClip), and the furry meshes it clips. */
+  private footprint: THREE.Matrix4 | null = null;
+  private clipped: THREE.Object3D[] = [];
   constructor(
     private partName: string,
     private build: (a: HeadAnchors, model: JimothyModel) => { obj: THREE.Object3D; glb: boolean } | null,
     private glbNames: string[] = [],
+    /** Hide the head's shell fur under this accessory (hats), so only the ears poke through. */
+    private clipFur = false,
   ) {}
 
   /** Call every frame while enabled. Returns the attached object (or null if the model isn't ready). */
@@ -254,7 +261,10 @@ export class Attachment {
     const part = modelParts(model)[this.partName];
     if (!part) return null;
     const upgrade = !this.fromGlb && !accessoryDebug.forcePrimitive && this.glbNames.length > 0 && hasGlbAccessory(this.glbNames);
-    if (this.obj && this.parent === part && !upgrade) return this.obj;
+    if (this.obj && this.parent === part && !upgrade) {
+      this.updateClip(part);
+      return this.obj;
+    }
     this.remove();
     const a = headAnchors(model);
     if (!a) return null;
@@ -266,10 +276,70 @@ export class Attachment {
     this.obj = r.obj;
     this.parent = part;
     this.fromGlb = r.glb;
+    if (this.clipFur) this.setupClip(model, part, r.obj);
     return r.obj;
   }
 
+  /**
+   * Footprint of the hat where it sits on the head: the bounds (in the part's space) of the hat's lowest 45 %, as an
+   * ellipse in x/z with its floor at the hat's bottom edge. Fur rooted inside that column is hidden; the ears
+   * (separate parts) are never clipped, so they poke out.
+   */
+  private setupClip(model: JimothyModel, part: THREE.Object3D, obj: THREE.Object3D) {
+    part.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(part.matrixWorld).invert();
+    const pts: THREE.Vector3[] = [];
+    obj.traverse((o) => {
+      const m = o as THREE.Mesh;
+      const pos = m.isMesh ? m.geometry?.getAttribute('position') : null;
+      if (!pos) return;
+      _m.multiplyMatrices(inv, m.matrixWorld);
+      const step = Math.max(1, Math.floor(pos.count / 800));
+      for (let i = 0; i < pos.count; i += step) pts.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(_m));
+    });
+    if (!pts.length) return;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const p of pts) {
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+    const band = new THREE.Box3();
+    for (const p of pts) if (p.y <= minY + (maxY - minY) * 0.45) band.expandByPoint(p);
+    const c = band.getCenter(new THREE.Vector3());
+    const size = band.getSize(new THREE.Vector3());
+    const rx = Math.max(0.01, size.x * 0.5 * 1.04);
+    const rz = Math.max(0.01, size.z * 0.5 * 1.04);
+    const floor = minY + (maxY - minY) * 0.04;
+    this.footprint = new THREE.Matrix4().makeScale(1 / rx, 1, 1 / rz).multiply(new THREE.Matrix4().makeTranslation(-c.x, -floor, -c.z));
+    const parts = modelParts(model);
+    const skip = new Set([parts.EarL, parts.EarR, obj].filter(Boolean) as THREE.Object3D[]);
+    this.clipped = [];
+    const visit = (o: THREE.Object3D) => {
+      if (skip.has(o) || o.userData.furShell) return;
+      if (hasFurShells(o)) this.clipped.push(o);
+      for (const ch of o.children) visit(ch);
+    };
+    visit(part);
+    // Jimothy is mostly one round body: its fur reaches up around the head and would poke through the hat too
+    if (parts.Body && hasFurShells(parts.Body) && !this.clipped.includes(parts.Body)) this.clipped.push(parts.Body);
+    this.updateClip(part);
+  }
+
+  private updateClip(part: THREE.Object3D) {
+    if (!this.footprint || !this.clipped.length) return;
+    const inv = _m.copy(part.matrixWorld).invert();
+    for (const mesh of this.clipped) {
+      // mesh object space → part space → footprint space (a relative transform, so a stale matrixWorld can't lag)
+      _clip.multiplyMatrices(inv, mesh.matrixWorld).premultiply(this.footprint);
+      setFurClip(mesh, _clip);
+    }
+  }
+
   remove() {
+    for (const mesh of this.clipped) setFurClip(mesh, null);
+    this.clipped = [];
+    this.footprint = null;
     if (!this.obj) return;
     this.obj.removeFromParent();
     if (this.obj.userData.ownsResources) disposeTree(this.obj);

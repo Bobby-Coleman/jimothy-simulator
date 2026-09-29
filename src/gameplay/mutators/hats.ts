@@ -63,7 +63,7 @@ function buildDiploma(): THREE.Object3D {
 
 export function honoraryGrad(): MutatorImpl {
   const names = ['GradCap', 'MortarBoard', 'Mortarboard'];
-  const cap = new Attachment('Head', (a) => glbOr(names, 'hat', a, () => buildGradCap(a)), names);
+  const cap = new Attachment('Head', (a) => glbOr(names, 'hat', a, () => buildGradCap(a)), names, true);
   const tassel = new Dangle();
   const diplomas: Entity[] = [];
   let off: (() => void) | null = null;
@@ -216,7 +216,7 @@ function buildBat(): THREE.Object3D {
 
 export function rookie(): MutatorImpl {
   const names = ['BaseballCap', 'RookieCap', 'Cap'];
-  const cap = new Attachment('Head', (a) => glbOr(names, 'hat', a, () => buildBaseballCap(a)), names);
+  const cap = new Attachment('Head', (a) => glbOr(names, 'hat', a, () => buildBaseballCap(a)), names, true);
   const bat = new Attachment('HandR', (a) => {
     const b = buildBat();
     b.scale.setScalar(a.scale);
@@ -294,7 +294,7 @@ export function rookie(): MutatorImpl {
 
 export function grandmaHat(): MutatorImpl {
   const names = ['Beanie', 'KnitHat', 'GrandmaHat'];
-  const hat = new Attachment('Head', (a) => glbOr(names, 'hat', a, () => buildBeanie(a)), names);
+  const hat = new Attachment('Head', (a) => glbOr(names, 'hat', a, () => buildBeanie(a)), names, true);
   let off: (() => void) | null = null;
   return {
     def: {

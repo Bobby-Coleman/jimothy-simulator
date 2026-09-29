@@ -772,7 +772,11 @@ function coolingTowers(game: Game, world: World, b: Batch, x: number, zc: number
     const z = zc + dz;
     const g = Math.min(world.heightAt(x - 3, z), world.heightAt(x + 3, z)) - 0.3;
     b.add('concrete', lathe, trs(x, g, z), 0xdfe3e7, { uvTile: 0 });
-    colliderCyl(game, x, g + 4.5, z, 2.9, 9);
+    // collider follows the pinched profile (one fat cylinder left an invisible wall around the waist)
+    for (let k = 0; k < 6; k++) {
+      const t = (k + 0.5) / 6;
+      colliderCyl(game, x, g + t * 9, z, 3.2 - Math.sin(t * Math.PI) * 0.9 - t * 0.4 - 0.05, 1.5);
+    }
     // fan deck + grille + a spinning fan
     b.add('metal', GEO.cyl, trs(x, g + 9.05, z, 5.0, 0.1, 5.0), 0x5b636b);
     colliderCyl(game, x, g + 9.05, z, 2.5, 0.1);

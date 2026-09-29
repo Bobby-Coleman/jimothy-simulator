@@ -485,8 +485,16 @@ export class Jimothy implements System {
     let vy = v.y;
     // Ride moving platforms (cars, boats): desired velocity is relative to what we stand on
     const plat = this.grounded ? (this.groundEntity?.data?.velocity as THREE.Vector3 | undefined) : undefined;
-    const tx = wish.x * max + (plat?.x ?? 0);
-    const tz = wish.z * max + (plat?.z ?? 0);
+    // Uphill: aim for the same speed *along* the incline as on flat ground (the vertical part is added below)
+    let slopeK = 1;
+    if (this.grounded && !plat) {
+      const n = this.groundNormal;
+      const hn = Math.hypot(n.x, n.z);
+      const into = hn > 0.02 ? -(n.x * wish.x + n.z * wish.z) / hn : 0;
+      if (into > 0) slopeK = THREE.MathUtils.lerp(1, Math.max(0.45, n.y), Math.min(1, into));
+    }
+    const tx = wish.x * max * slopeK + (plat?.x ?? 0);
+    const tz = wish.z * max * slopeK + (plat?.z ?? 0);
     let accel = this.grounded ? (wish.lengthSq() > 0.01 ? 42 : 34) : 11;
     // Feel pass: turning back against your momentum bites harder (snappier reversals, no ice-skating)
     if (this.grounded && wish.lengthSq() > 0.01 && wish.x * (vx - (plat?.x ?? 0)) + wish.z * (vz - (plat?.z ?? 0)) < 0) accel *= 1.45;
@@ -516,9 +524,14 @@ export class Jimothy implements System {
       game.sfx('jump', this.position, 0.6);
       game.events.emit('jump', {});
       this.model.squash(-0.22);
-    } else if (this.grounded && vy > 0 && game.time - this.lastJump > 0.3) {
-      // keep feet planted when walking down slopes / off small bumps
-      vy = Math.min(vy, 0.5);
+    } else if (this.grounded && game.time - this.lastJump > 0.3) {
+      // Follow the ground up inclines: walking into a slope needs matching upward speed (a flat 0.5 m/s cap used to
+      // stall him on anything steep, so 45° hills were harder than climbing a wall). Everything walkable (up to ~63°,
+      // see checkGround) can be run up; steeper faces are climbable. Otherwise keep feet planted over bumps/crests.
+      const n = this.groundNormal;
+      const up = plat ? 0 : -(n.x * vx + n.z * vz) / Math.max(0.45, n.y);
+      if (up > 0.05) vy = Math.min(up, 12);
+      else if (vy > 0) vy = Math.min(vy, 0.5);
     }
 
     this.body.setLinvel({ x: vx, y: vy, z: vz }, true);
@@ -530,8 +543,8 @@ export class Jimothy implements System {
     if (!this.frozen && this.climbCooldown <= 0 && wish.lengthSq() > 0.2 && (!this.grounded || inp.held('jump'))) {
       const dir = _a.copy(wish).normalize();
       // Feel pass: a little more reach so pressing into a wall at an angle + jump reliably grabs on
-      const hit = game.physics.raycast(this.position, dir, R + 0.36, CLIMB_FILTER, this.body);
-      if (hit && Math.abs(hit.normal.y) < 0.4 && !game.entities.fromCollider(hit.collider)?.tags.has('noclimb')) {
+      const hit = game.physics.raycast(this.position, dir, R + 0.36, CLIMB_FILTER, this.body, this.climbable);
+      if (hit && Math.abs(hit.normal.y) < 0.5 && !game.entities.fromCollider(hit.collider)?.tags.has('noclimb')) {
         // Feel pass: a low wall / ledge he can almost reach: vault straight onto it instead of climbing 20 cm
         if (!this.tryVault(hit.point, hit.normal)) this.enterClimb(hit.normal);
       }
@@ -575,6 +588,9 @@ export class Jimothy implements System {
     return true;
   }
 
+  /** Raycast predicate: invisible map-boundary walls can't be climbed. */
+  private climbable = (c: { handle: number }) => !this.game.physics.noClimb.has(c.handle);
+
   private enterClimb(normal: THREE.Vector3) {
     if (this.stamina < 0.08) {
       this.game.hint('Jimothy is too tired to climb. Rest a sec.', 1.5);
@@ -591,7 +607,7 @@ export class Jimothy implements System {
     const game = this.game;
     const inp = game.input;
     const into = _a.copy(this.climbNormal).negate();
-    const hit = game.physics.raycast(this.position, into, R + 0.55, CLIMB_FILTER, this.body);
+    const hit = game.physics.raycast(this.position, into, R + 0.55, CLIMB_FILTER, this.body, this.climbable);
     this.facing = Math.atan2(into.x, into.z);
     if (!hit || Math.abs(hit.normal.y) > 0.65) {
       // Ran out of wall: mantle over the top if climbing upward

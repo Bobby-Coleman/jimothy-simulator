@@ -246,10 +246,14 @@ export class World implements System {
     const H = 60;
     const L = MAP.half + 18;
     // invisible walls around the playable area (the bay side is further out so you can swim)
-    ph.staticBox(new THREE.Vector3(-L - 1, H / 2, 40), new THREE.Vector3(1, H, 260));
-    ph.staticBox(new THREE.Vector3(L + 1, H / 2, 40), new THREE.Vector3(1, H, 260));
-    ph.staticBox(new THREE.Vector3(0, H / 2, -L - 1), new THREE.Vector3(L + 2, H, 1));
-    ph.staticBox(new THREE.Vector3(0, H / 2, MAP.seawallZ + 70), new THREE.Vector3(L + 2, H, 1));
+    // (unclimbable: scaling an invisible 60 m wall looks like a bug, not a raccoon)
+    for (const c of [
+      ph.staticBox(new THREE.Vector3(-L - 1, H / 2, 40), new THREE.Vector3(1, H, 260)),
+      ph.staticBox(new THREE.Vector3(L + 1, H / 2, 40), new THREE.Vector3(1, H, 260)),
+      ph.staticBox(new THREE.Vector3(0, H / 2, -L - 1), new THREE.Vector3(L + 2, H, 1)),
+      ph.staticBox(new THREE.Vector3(0, H / 2, MAP.seawallZ + 70), new THREE.Vector3(L + 2, H, 1)),
+    ])
+      ph.noClimb.add(c.handle);
   }
 
   // ------------------------------------------------------------------ helpers for zone builders

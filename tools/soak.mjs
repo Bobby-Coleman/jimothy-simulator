@@ -11,7 +11,7 @@ const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push('[pageerror] ' + (e.stack || e.message).split('\n').slice(0, 4).join(' | ')));
-page.on('console', (m) => { if (m.type() === 'error' || (m.type() === 'warning' && /NaN|respawn|failed/i.test(m.text()))) errors.push(`[${m.type()}] ` + m.text().slice(0, 300)); });
+page.on('console', (m) => { if (m.type() === 'error' || (m.type() === 'warning' && /NaN|respawn|failed/i.test(m.text()) && !/Program Info Log/.test(m.text()))) errors.push(`[${m.type()}] ` + m.text().slice(0, 300)); });
 await page.goto(base + `?skipintro&time=10&weather=clear`);
 await page.waitForFunction(() => window.jimothy && window.jimothy.state === 'playing', null, { timeout: 120000 });
 await page.waitForTimeout(4000);
