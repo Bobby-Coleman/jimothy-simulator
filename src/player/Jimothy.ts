@@ -243,8 +243,12 @@ export class Jimothy implements System {
     this.position.copy(p);
   }
 
+  /** Move Jimothy (cutscenes, quests, tests). Unlike respawn(), he keeps holding what he carries. */
   teleport(p: THREE.Vector3, facing?: number) {
+    const keep = this.held && this.held.kind === 'carry' ? this.held : null;
+    if (keep) this.held = null;
     this.respawn(p);
+    if (keep) this.held = keep;
     if (facing != null) {
       this.facing = facing;
       this.game.get<CameraRig>('camera')?.snapBehind(facing);
