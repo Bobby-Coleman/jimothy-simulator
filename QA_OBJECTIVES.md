@@ -65,7 +65,7 @@ so it gets 3 tries). Build + serve first:
 | 19 | **Wash Away The Slop** — 10 Slopothys | ✅ | Grab a Slopothy and wash it, bonk/throw it into water, or wash it where it stands next to water. Say **"Generate"** (3) to SlopBot for 12 tiny ones around you. Washing SlopCorp's slop signs also counts. | 3 min | Description now mentions the slop signs (they always counted). |
 | 20 | **Touch Grass** — unplug SlopCorp | ✅ | SlopCorp campus: grab the giant plug (it's heavy — you drag it) and walk backwards. | 1 min | Unlocks **AI Enhanced**. Reward popup was shaved by anti-spam (see *Feedback*); fixed. |
 | 21 | **Don't Show This Again** — dismiss SlopBot ×5 | ✅ | SlopBot pops in ~90 s into a session and then every ~4 min: press 1/2/× or Bonk him. Ignoring him doesn't count. | ~18 min of play | Timer-gated by design. |
-| 22 | **Count To Five** — wash the six-fingered billboard | ✅ | SlopCorp: climb the posts/ladder to the window-washer catwalk under the billboard (buckets of water up there), hold Wash 3×. | 1 min | |
+| 22 | **Count To Five** — wash the six-fingered billboard | ✅ | SlopCorp billboard: at the uphill (+x, east-ish) end, jump onto the yellow ladder on the grey service mast (sign on it) and hold forward (~2.5 s, ladder rate) — he mantles onto the catwalk landing. Anywhere on the catwalk, face the billboard and hold Wash 3× (water in the gutter along the face's foot; buckets hang off the rail). Check: walking the catwalk never auto-climbs the rails/face, camera stays ~5 m back. | 1 min | |
 | 23 | **Seven-Legged Steed** — ride the Slop Dragon | ✅ | Wait at the dragon pad (SlopCorp) until it lands, then grab it. | 0–3 min | Doesn't count as car surfing (checked). |
 
 ### Heartwarming

@@ -602,6 +602,26 @@ function drawAIJimothy(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillText('SlopCorp ImageGen v0.3 · generated in 0.2 s · 11 fingers verified', 40, h - 34);
 }
 
+/**
+ * The billboard + its window-washer access, all in one frame (local x = along the face, +z = toward the viewer,
+ * y = up from the ground under the billboard's centre; the ground slopes ~2.7 m from the low −x end to the high +x
+ * end, so every foot is dropped to the real terrain).
+ *
+ *  - Face: x∈[−9, 9], y∈[9, 16.9], z∈[−0.55, 0.15]; back frame behind it; two steel columns at x = ±5.
+ *  - Base beam ("skirt") under the face, flush with its front, down to below the catwalk, so the catwalk's back
+ *    edge is a solid wall (no slot under the face to wedge into, nothing overhead: the camera's low-ceiling
+ *    handler never triggers up here).
+ *  - Catwalk: deck top at y = 8.4 (0.6 below the face), z∈[0.15, 2.0] (1.85 deep, ~1.75 m clear between the face
+ *    and the rail), x∈[−9.6, 11.2]. Along the back edge, a water gutter under a bar grate runs the full length
+ *    (the slop system fills it + hangs the buckets), so he can wash from anywhere on the catwalk.
+ *  - Railings: visual posts/rails; their colliders are a 0.86 m-tall, 6 cm panel + a top-rail bar per run — "thin"
+ *    (the camera looks through them) and in `physics.noClimb` (walking/jumping into them never auto-climbs or
+ *    vaults; a deliberate jump can still clear the 0.95 m rail). The base beam is noClimb too (see there).
+ *  - Access: a steel service mast under the +x end (the uphill end: shortest climb), with a wide yellow ladder on
+ *    its outer (+x) face and a goose-neck over the top. He climbs facing −x and mantles straight onto the landing
+ *    and down the catwalk. The ladder volume covers only where his body is while on that ladder.
+ * The face mesh carries `userData.catwalk` (see below) so Billboard.ts can find the deck, gutter and ladder.
+ */
 function buildBillboard(game: Game, world: World, b: Batch) {
   const toward = new THREE.Vector3(-BILL.x, 0, -BILL.z).normalize();
   const yaw = Math.atan2(toward.x, toward.z);
@@ -610,31 +630,171 @@ function buildBillboard(game: Game, world: World, b: Batch) {
     Hh = 7.9;
   const bottom = 9; // frame-local height of the face bottom (the frame origin already sits on the ground)
   const f = new Frame(BILL.x, g, BILL.z, yaw);
-  // two big steel columns + truss + service ladder
+  const gl = (lx: number, lz: number) => {
+    const p = f.p(lx, 0, lz);
+    return world.heightAt(p.x, p.z) - g;
+  };
+  const STEEL = 0x9aa3ad,
+    DARK = 0x3a4048,
+    GRATE = 0x6d737c,
+    RAIL = 0xf2c230;
+  const noClimb = (c: { handle: number }) => game.physics.noClimb.add(c.handle);
+
+  // ---- two big steel columns (on real footings) + truss
   for (const s of [-1, 1]) {
-    f.geo(b, 'metal', GEO.cyl8, s * 5, bottom / 2 + 0.5, -0.7, 0.8, bottom + 1, 0.8, 0x9aa3ad);
-    f.collider(game, s * 5, bottom / 2 + 0.5, -0.7, 0.8, bottom + 1, 0.8);
-    f.box(b, 'concrete', s * 5, 0.3, -0.7, 1.6, 0.6, 1.6, 0xc9ccd0);
+    const gy = gl(s * 5, -0.7);
+    const y0 = gy - 0.3,
+      y1 = bottom + 1;
+    f.geo(b, 'metal', GEO.cyl8, s * 5, (y0 + y1) / 2, -0.7, 0.8, y1 - y0, 0.8, STEEL);
+    f.collider(game, s * 5, (y0 + y1) / 2, -0.7, 0.8, y1 - y0, 0.8);
+    f.box(b, 'concrete', s * 5, gy + 0.15, -0.7, 1.6, 0.9, 1.6, 0xc9ccd0);
+    f.collider(game, s * 5, gy + 0.15, -0.7, 1.6, 0.9, 1.6);
   }
-  for (let i = 0; i < 4; i++) f.box(b, 'metal', 0, bottom - 0.9 - i * 2.1, -0.7, 10, 0.14, 0.14, 0x8a929a, 0, 0, i % 2 ? 0.35 : -0.35);
+  for (let i = 0; i < 4; i++) {
+    const rz = i % 2 ? 0.35 : -0.35;
+    f.box(b, 'metal', 0, bottom - 1.4 - i * 2.0, -0.7, 10, 0.14, 0.14, 0x8a929a, 0, 0, rz);
+    f.collider(game, 0, bottom - 1.4 - i * 2.0, -0.7, 10, 0.14, 0.14, 0, 0, rz);
+  }
+  // back frame (solid: it's climbable from behind, so it needs its collider)
   f.box(b, 'metal', 0, bottom + Hh / 2, -0.75, W + 0.4, Hh + 0.4, 0.3, 0x6f7780);
+  f.collider(game, 0, bottom + Hh / 2, -0.75, W + 0.4, Hh + 0.4, 0.3);
   // the face: a BoxGeometry (front = material index 4) named "SlopBillboard" — the slop system hooks into it
   const tex = canvasTexture(2048, 896, drawAIJimothy);
   const faceCenter = f.p(0, bottom + Hh / 2, -0.2);
   const face = signPanel(world, tex, faceCenter.x, faceCenter.y, faceCenter.z, W, Hh, yaw, { asBox: true, depth: 0.7, back: 0x3a4048, lit: true, game, name: 'SlopBillboard' });
   face.userData.noMerge = true;
-  // floodlights on the truss, well below the window-washer catwalk the slop system adds at the bottom edge
+
+  // ---- catwalk
+  const FLOOR = bottom - 0.6;
+  const Z0 = 0.15,
+    Z1 = 2.0,
+    X0 = -9.6,
+    X1 = 11.2;
+  const GUT = Z0 + 0.4; // gutter: z∈[Z0, GUT]
+  const len = X1 - X0,
+    xc = (X0 + X1) / 2;
+  // base beam under the face, flush with its front (the catwalk's back wall; the cantilevers hang off it)
+  const beamY0 = FLOOR - 0.45;
+  // (unclimbable: his centre is at beam height on the deck, so walking/pressing into the face to scrub it never
+  // grabs on; a JUMP into the face reaches the face itself above it and climbs, e.g. for the bobblehead on top)
+  f.box(b, 'metal', 0, (beamY0 + bottom) / 2, -0.35, W, bottom - beamY0, 1.0, DARK);
+  noClimb(f.collider(game, 0, (beamY0 + bottom) / 2, -0.35, W, bottom - beamY0, 1.0));
+  f.box(b, 'paint', 0, FLOOR + 0.45, Z0 + 0.005, W, 0.1, 0.01, RAIL); // yellow "scrub line" along the face bottom
+  // deck: one flat collider over the grating + gutter grate
+  f.collider(game, xc, FLOOR - 0.08, (Z0 + Z1) / 2, len, 0.16, Z1 - Z0);
+  f.box(b, 'metal', xc, FLOOR - 0.06, (GUT + Z1) / 2, len, 0.12, Z1 - GUT, GRATE);
+  f.box(b, 'metal', xc, FLOOR - 0.18, (Z0 + GUT) / 2, len, 0.04, GUT - Z0, 0x2b3038); // gutter trough floor
+  for (let x = X0 + 0.15; x < X1; x += 0.3) f.box(b, 'metal', x, FLOOR - 0.02, (Z0 + GUT) / 2, 0.04, 0.04, GUT - Z0, 0xb8c0c8);
+  f.box(b, 'metal', xc, FLOOR - 0.02, GUT, len, 0.04, 0.05, 0xb8c0c8);
+  // cantilever brackets under the deck, off the base beam; kickers down to the columns
+  for (const x of [-9.2, -5, -1.7, 1.7, 5, 9]) {
+    f.box(b, 'metal', x, FLOOR - 0.28, (Z0 + Z1) / 2 + 0.1, 0.14, 0.24, Z1 - Z0 + 0.2, STEEL);
+    f.collider(game, x, FLOOR - 0.28, (Z0 + Z1) / 2 + 0.1, 0.14, 0.24, Z1 - Z0 + 0.2);
+  }
+  for (const s of [-1, 1]) {
+    // from the column (z −0.3, 2.3 m below the deck) out to the deck's front edge
+    const za = -0.3,
+      ya = FLOOR - 2.3,
+      zb = Z1 - 0.1,
+      yb = FLOOR - 0.35;
+    const L = Math.hypot(zb - za, yb - ya);
+    const rx = Math.atan2(yb - ya, zb - za);
+    f.box(b, 'metal', s * 5, (ya + yb) / 2, (za + zb) / 2, 0.12, 0.12, L, STEEL, 0, -rx);
+    f.collider(game, s * 5, (ya + yb) / 2, (za + zb) / 2, 0.12, 0.12, L, 0, -rx);
+  }
+  // floodlights under the front edge, aimed up at the face
   for (let i = -2; i <= 2; i++) {
-    f.box(b, 'metal', i * 3.8, bottom - 2.2, -0.1, 0.08, 0.08, 1.2, 0x2b2f36);
-    f.box(b, 'lamp', i * 3.8, bottom - 2.05, 0.45, 0.6, 0.18, 0.4, 0xfff4d0, 0, -0.9);
+    f.box(b, 'metal', i * 3.8, FLOOR - 0.3, Z1 + 0.12, 0.08, 0.08, 0.3, 0x2b2f36);
+    f.box(b, 'lamp', i * 3.8, FLOOR - 0.28, Z1 + 0.3, 0.6, 0.18, 0.3, 0xfff4d0, 0, 0.7);
   }
-  // service ladder up the left column
-  for (let k = 0; k < Math.floor(bottom / 0.4); k++) f.box(b, 'metal', -5, 0.5 + k * 0.4, -0.2, 0.6, 0.05, 0.05, 0xcfd6dc);
+
+  // ---- railings (0.95 m, yellow). Colliders: thin (<0.9 m tall panels) + unclimbable.
+  const RH = 0.95;
+  const railRun = (ax: number, az: number, bx: number, bz: number, collide = true) => {
+    const dx = bx - ax,
+      dz = bz - az;
+    const l = Math.hypot(dx, dz);
+    const ry = Math.atan2(dx, dz); // local rotation so the box's z runs along the rail
+    const mx = (ax + bx) / 2,
+      mz = (az + bz) / 2;
+    f.box(b, 'paint', mx, FLOOR + RH, mz, 0.06, 0.06, l + 0.06, RAIL, ry);
+    f.box(b, 'paint', mx, FLOOR + 0.5, mz, 0.05, 0.05, l, RAIL, ry);
+    f.box(b, 'metal', mx, FLOOR + 0.06, mz, 0.02, 0.12, l, 0x8a929a, ry); // toe board
+    const n = Math.max(1, Math.round(l / 2));
+    for (let i = 0; i <= n; i++) f.box(b, 'paint', ax + (dx * i) / n, FLOOR + RH / 2, az + (dz * i) / n, 0.06, RH, 0.06, RAIL);
+    if (collide) {
+      noClimb(f.collider(game, mx, FLOOR + 0.43, mz, 0.06, 0.86, l, ry));
+      noClimb(f.collider(game, mx, FLOOR + RH - 0.03, mz, 0.08, 0.12, l, ry)); // top rail
+    }
+  };
+  const ZR = Z1 - 0.03;
+  railRun(X0, ZR, X1, ZR); // front
+  railRun(X0 + 0.03, Z0, X0 + 0.03, ZR); // −x end
+  railRun(X0, Z0 + 0.03, -W / 2, Z0 + 0.03); // behind the deck past the face ends
+  railRun(W / 2, Z0 + 0.03, X1, Z0 + 0.03);
+  // +x end: rails either side of the ladder opening (z∈[0.45, 1.55])
+  const LZ0 = 0.45,
+    LZ1 = 1.55,
+    LZ = (LZ0 + LZ1) / 2;
+  railRun(X1 - 0.03, Z0, X1 - 0.03, LZ0);
+  railRun(X1 - 0.03, LZ1, X1 - 0.03, ZR);
+
+  // ---- service mast + ladder (+x end), goose-neck over the top
+  const MX0 = X1 - 1.0; // mast x∈[MX0, X1], z∈[LZ − 0.5, LZ + 0.5]
+  const mg = Math.min(gl(X1 + 0.6, LZ), gl(MX0, LZ));
+  const my0 = mg - 0.3,
+    my1 = FLOOR - 0.16;
+  f.box(b, 'metal', (MX0 + X1) / 2, (my0 + my1) / 2, LZ, X1 - MX0, my1 - my0, 1.0, 0x7d858e);
+  f.collider(game, (MX0 + X1) / 2, (my0 + my1) / 2, LZ, X1 - MX0, my1 - my0, 1.0);
+  f.box(b, 'concrete', (MX0 + X1) / 2 + 0.2, mg + 0.05, LZ, 1.8, 0.5, 1.6, 0xc9ccd0);
+  f.collider(game, (MX0 + X1) / 2 + 0.2, mg + 0.05, LZ, 1.8, 0.5, 1.6);
+  const LX = X1 + 0.06; // ladder plane, just proud of the mast face
+  for (const z of [LZ0, LZ1]) {
+    f.box(b, 'paint', LX, (mg + FLOOR) / 2, z, 0.07, FLOOR - mg, 0.07, RAIL);
+    // goose-neck: up past the deck, over the landing edge, down to the deck
+    f.box(b, 'paint', LX, FLOOR + 0.55, z, 0.07, 1.1, 0.07, RAIL);
+    f.box(b, 'paint', (LX + X1 - 0.45) / 2, FLOOR + 1.1, z, LX - (X1 - 0.45) + 0.07, 0.07, 0.07, RAIL);
+    f.box(b, 'paint', X1 - 0.45, FLOOR + 0.55, z, 0.07, 1.1, 0.07, RAIL);
+    noClimb(f.collider(game, LX, FLOOR + 0.55, z, 0.07, 1.1, 0.07));
+    noClimb(f.collider(game, X1 - 0.45, FLOOR + 0.55, z, 0.07, 1.1, 0.07));
+  }
+  for (let y = mg + 0.35; y < FLOOR - 0.05; y += 0.35) f.box(b, 'metal', LX + 0.02, y, LZ, 0.05, 0.05, LZ1 - LZ0, 0xcfd6dc);
   {
-    const lo = f.p(-5, -0.5, -0.2);
-    const hi = f.p(-5, bottom + 1.5, -0.2);
-    world.addLadder(new THREE.Vector3(Math.min(lo.x, hi.x) - 1.4, lo.y, Math.min(lo.z, hi.z) - 1.4), new THREE.Vector3(Math.max(lo.x, hi.x) + 1.4, hi.y, Math.max(lo.z, hi.z) + 1.4));
+    // ladder volume: his body while on this ladder (from the mast face out ~0.9 m), foot to just over the deck
+    const pts = [];
+    for (const lx of [X1 - 0.1, X1 + 0.9]) for (const lz of [LZ0 - 0.05, LZ1 + 0.05]) for (const ly of [mg - 0.5, FLOOR + 0.6]) pts.push(f.p(lx, ly, lz));
+    const bx = new THREE.Box3().setFromPoints(pts);
+    world.addLadder(bx.min, bx.max);
   }
+  // sign on the mast's front face, at raccoon eye height
+  const signTex = canvasTexture(512, 384, (ctx, w, h) => {
+    ctx.fillStyle = '#f2c230';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#1c1530';
+    ctx.fillRect(10, 10, w - 20, h - 20);
+    ctx.fillStyle = '#f2c230';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    fitText(ctx, 'WINDOW WASHERS', w / 2, h * 0.2, w - 50, 60, "'Lilita One', sans-serif");
+    ctx.fillStyle = '#ffffff';
+    fitText(ctx, 'ladder ↑ to the catwalk', w / 2, h * 0.45, w - 60, 40, "'Nunito', sans-serif", '900');
+    fitText(ctx, 'water gutter + buckets up top', w / 2, h * 0.63, w - 60, 34, "'Nunito', sans-serif", '800');
+    ctx.fillStyle = '#ff7ab8';
+    fitText(ctx, 'please scrub responsibly', w / 2, h * 0.83, w - 80, 30, "'Nunito', sans-serif", 'italic 800');
+  });
+  const sp = f.p((MX0 + X1) / 2, mg + 1.3, LZ + 0.52);
+  signPanel(world, signTex, sp.x, sp.y, sp.z, 0.9, 0.68, yaw, { back: 0x1c1530, depth: 0.03, collide: false, batch: b });
+
+  // what Billboard.ts needs (world units): deck top, deck x-extent and gutter band in face-local coords
+  // (x from the face centre along the face, z from the face's FRONT surface outward), ladder foot
+  face.userData.catwalk = {
+    floorY: g + FLOOR,
+    x0: X0,
+    x1: X1,
+    gutter: [Z0 - 0.15, GUT - 0.15],
+    rail: ZR - 0.15,
+    ladderFoot: f.p(X1 + 1.2, mg, LZ),
+  };
   return { top: f.p(0, bottom + Hh + 0.2, -0.3) };
 }
 

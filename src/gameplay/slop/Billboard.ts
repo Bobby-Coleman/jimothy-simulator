@@ -9,6 +9,7 @@ import type { SlopFx } from './SlopFx';
 import { canvasTexture, markOwned, surfaceY, terrainY, toast, worldOf, type Timeline } from './util';
 
 const UP = new THREE.Vector3(0, 1, 0);
+const _rel = new THREE.Vector3();
 
 interface Face {
   center: THREE.Vector3;
@@ -18,6 +19,21 @@ interface Face {
   depth: number;
   slopTex: THREE.Texture | null;
   ours: boolean;
+  /** The zone builder's catwalk (SlopCorpCampus buildBillboard → face `userData.catwalk`), if it built one. */
+  catwalk?: CatwalkSpec;
+}
+
+/**
+ * Window-washer catwalk layout. x0/x1: deck extent along the face (from the face centre, along `right`);
+ * gutter/rail: distances out from the face's FRONT surface (along `normal`); floorY: deck top (world).
+ */
+interface CatwalkSpec {
+  floorY: number;
+  x0: number;
+  x1: number;
+  gutter: [number, number] | null;
+  rail: number;
+  ladderFoot: THREE.Vector3 | null;
 }
 
 /**
@@ -41,7 +57,10 @@ export class SlopBillboard {
   readonly right = new THREE.Vector3();
   /** Middle of the catwalk (standing height) — the dragon swoops past here. */
   readonly catwalkPoint = new THREE.Vector3();
+  catwalk!: CatwalkSpec;
   private lastHintAt = -10;
+  private catwalkHintAt = -100;
+  private ladderHintAt = -100;
 
   constructor(
     private game: Game,
@@ -72,19 +91,26 @@ export class SlopBillboard {
     // ---- catwalk + buckets
     const bottom = f.center.clone();
     bottom.y -= f.h / 2;
-    const catwalkY = this.ensureCatwalk(bottom);
-    this.catwalkPoint.copy(bottom).addScaledVector(this.normal, 0.7);
+    const cw = (this.catwalk = f.catwalk ?? this.ensureCatwalk(bottom));
+    const catwalkY = cw.floorY;
+    this.catwalkPoint.copy(bottom).addScaledVector(this.normal, f.depth / 2 + 0.8);
     this.catwalkPoint.y = catwalkY + 0.4;
-    this.addBuckets(bottom, catwalkY);
+    this.addWater(bottom, cw);
 
-    // ---- wash sensor (PROP group so Jimothy's wash/bonk overlap finds it)
-    const sensorCenter = f.center.clone().addScaledVector(this.normal, f.depth / 2 + 0.45);
-    sensorCenter.y -= 0.3;
+    // ---- wash sensor (PROP group so Jimothy's wash/bonk aim-assist finds it): a thin slab covering the face from
+    // the deck up, sunk into the face so it only pokes 2 cm out of it. Wash reach (1.4 m to its surface) covers the
+    // whole catwalk up to the rail. It must NOT extend over the walkway: the old 0.9 m-deep sensor filled the
+    // catwalk, and sphere casts hit sensors — his ground check hit it first (so he was never "grounded" up there,
+    // and pushing into anything auto-climbed it) and the camera cast stopped on it (the PROP rule counts bodies
+    // ≥ 60 kg; that 1-density sensor weighed 153 kg) and sat 0.2 m from him. Density 0 as a second guard.
+    const top = f.center.y + f.h / 2;
+    const sensorCenter = f.center.clone().addScaledVector(this.normal, f.depth / 2 - 0.09);
+    sensorCenter.y = (catwalkY + top) / 2;
     const body = game.physics.createBody(
       RAPIER.RigidBodyDesc.fixed()
         .setTranslation(sensorCenter.x, sensorCenter.y, sensorCenter.z)
         .setRotation({ x: f.quat.x, y: f.quat.y, z: f.quat.z, w: f.quat.w }),
-      [RAPIER.ColliderDesc.cuboid(f.w / 2, f.h / 2 + 0.3, 0.45).setSensor(true).setCollisionGroups(groups(G.PROP, G.PLAYER))],
+      [RAPIER.ColliderDesc.cuboid(f.w / 2, (top - catwalkY) / 2, 0.11).setSensor(true).setDensity(0).setCollisionGroups(groups(G.PROP, G.PLAYER))],
     );
     const self = this;
     this.entity = game.entities.create({
@@ -101,7 +127,7 @@ export class SlopBillboard {
       onBonk(g) {
         if (g.time - self.lastHintAt > 4) {
           self.lastHintAt = g.time;
-          g.hint(self.done ? 'That billboard is human made now. Be gentle.' : 'The billboard ignores the bonk. It needs a WASH (there are buckets on the catwalk).', 3);
+          g.hint(self.done ? 'That billboard is human made now. Be gentle.' : 'The billboard ignores the bonk. It needs a WASH: hold {wash} up on the catwalk (water in the gutter).', 3);
         }
         return true;
       },
@@ -152,70 +178,102 @@ export class SlopBillboard {
     return { center, quat, w: W, h: H, depth: 0.3, slopTex: null, ours: true };
   }
 
-  /** Make sure there's something to stand on in front of the face bottom; returns its top Y. */
-  private ensureCatwalk(bottom: THREE.Vector3): number {
+  /**
+   * Fallback (no builder catwalk): make sure there's something to stand on in front of the face bottom. Same rules
+   * as the builder's: ~1.7 m clear deck, thin + unclimbable rail colliders, a ladder on a solid 1 m backing (so
+   * auto-climb grabs it) inside a ladder volume that covers only the ladder.
+   */
+  private ensureCatwalk(bottom: THREE.Vector3): CatwalkSpec {
     const game = this.game;
     const world = worldOf(game)!;
     const f = this.face;
     const probe = bottom.clone().addScaledVector(this.normal, f.depth / 2 + 0.6);
     const top = surfaceY(game, probe.x, probe.z, bottom.y + 0.2);
-    if (top > bottom.y - 1.3 && top < bottom.y + 0.3) return top; // builder already made one
+    // something's already there
+    if (top > bottom.y - 1.3 && top < bottom.y + 0.3) return { floorY: top, x0: -f.w / 2, x1: f.w / 2, gutter: null, rail: 1.2, ladderFoot: null };
     const y = bottom.y - 0.35;
     const yaw = new THREE.Euler().setFromQuaternion(f.quat, 'YXZ').y;
     const q = new THREE.Quaternion().setFromAxisAngle(UP, yaw);
     const L = (lx: number, ly: number, lz: number) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(bottom.x, 0, bottom.z));
     const grate = world.material(0x6d737c, { roughness: 0.55, metalness: 0.55 });
     const rail = world.material(0xf2c230, { roughness: 0.5, metalness: 0.3 });
+    const noClimb = (c: { handle: number }) => game.physics.noClimb.add(c.handle);
     const d0 = f.depth / 2;
     const cw = f.w + 0.6;
+    const D = 1.8; // deck depth
     // floor
-    world.box(L(0, y - 0.06, d0 + 0.6), new THREE.Vector3(cw, 0.12, 1.2), grate, { rotY: yaw, name: 'SlopCatwalk' });
-    // front rail (visual) + low collider so you don't just roll off
-    world.box(L(0, y + 0.95, d0 + 1.17), new THREE.Vector3(cw, 0.07, 0.07), rail, { rotY: yaw, collide: false });
-    world.box(L(0, y + 0.5, d0 + 1.17), new THREE.Vector3(cw, 0.05, 0.05), rail, { rotY: yaw, collide: false });
-    world.collider(L(0, y + 0.45, d0 + 1.18), new THREE.Vector3(cw, 0.9, 0.08), yaw);
+    world.box(L(0, y - 0.06, d0 + D / 2), new THREE.Vector3(cw, 0.12, D), grate, { rotY: yaw, name: 'SlopCatwalk' });
+    // front rail (visual) + a thin (<0.9 m tall), unclimbable collider panel
+    const zr = d0 + D - 0.03;
+    world.box(L(0, y + 0.95, zr), new THREE.Vector3(cw, 0.07, 0.07), rail, { rotY: yaw, collide: false });
+    world.box(L(0, y + 0.5, zr), new THREE.Vector3(cw, 0.05, 0.05), rail, { rotY: yaw, collide: false });
+    noClimb(world.collider(L(0, y + 0.43, zr), new THREE.Vector3(cw, 0.86, 0.06), yaw));
     for (let i = 0; i <= 6; i++) {
       const lx = -cw / 2 + (i / 6) * cw;
-      world.box(L(lx, y + 0.48, d0 + 1.17), new THREE.Vector3(0.07, 0.95, 0.07), rail, { rotY: yaw, collide: false });
+      world.box(L(lx, y + 0.48, zr), new THREE.Vector3(0.07, 0.95, 0.07), rail, { rotY: yaw, collide: false });
     }
     // left side rail; right side is open (ladder)
-    world.box(L(-cw / 2, y + 0.95, d0 + 0.6), new THREE.Vector3(0.07, 0.07, 1.2), rail, { rotY: yaw, collide: false });
-    world.collider(L(-cw / 2, y + 0.45, d0 + 0.6), new THREE.Vector3(0.08, 0.9, 1.2), yaw);
-    // ladder at the right end, down to the ground (climb it!)
-    const lx = cw / 2 + 0.12;
-    const lz = d0 + 0.6;
+    world.box(L(-cw / 2, y + 0.95, d0 + D / 2), new THREE.Vector3(0.07, 0.07, D), rail, { rotY: yaw, collide: false });
+    noClimb(world.collider(L(-cw / 2, y + 0.43, d0 + D / 2), new THREE.Vector3(0.06, 0.86, D), yaw));
+    // ladder at the right end, down to the ground, on a solid 1 m backing (thin ladders need jump held)
+    const lx = cw / 2 + 0.5;
+    const lz = d0 + D / 2;
     const lp = L(lx, 0, lz);
     const gy = terrainY(game, lp.x, lp.z);
-    const lh = y - gy + 0.02;
-    world.box(L(lx, gy + lh / 2, lz), new THREE.Vector3(0.12, lh, 0.8), world.material(0xd0a41f, { roughness: 0.5, metalness: 0.4 }), { rotY: yaw, name: 'SlopLadder' });
-    const rungMat = world.material(0x8a8f97, { metalness: 0.6, roughness: 0.4 });
+    const lh = y - 0.12 - gy;
+    world.box(L(lx, gy + lh / 2, lz), new THREE.Vector3(1.0, lh, 1.0), world.material(0x7d858e, { roughness: 0.5, metalness: 0.5 }), { rotY: yaw, name: 'SlopLadder' });
+    world.box(L(lx, y - 0.06, lz), new THREE.Vector3(1.0, 0.12, 1.0), grate, { rotY: yaw });
+    const rungMat = world.material(0xd0a41f, { metalness: 0.4, roughness: 0.5 });
     for (let yy = gy + 0.3; yy < y; yy += 0.35) {
-      world.box(L(lx + 0.09, yy, lz), new THREE.Vector3(0.05, 0.05, 0.7), rungMat, { rotY: yaw, collide: false, castShadow: false });
+      world.box(L(lx + 0.53, yy, lz), new THREE.Vector3(0.05, 0.05, 0.9), rungMat, { rotY: yaw, collide: false, castShadow: false });
     }
-    // sign at the foot of the ladder
+    const bx = new THREE.Box3().setFromPoints([L(lx + 0.4, gy - 0.5, lz - 0.6), L(lx + 1.4, gy - 0.5, lz + 0.6), L(lx + 0.4, y + 0.6, lz + 0.6), L(lx + 1.4, y + 0.6, lz - 0.6)]);
+    world.addLadder(bx.min, bx.max);
+    // sign at the foot of the ladder (on the backing's front face)
     const sign = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.5, 0.75),
-      new THREE.MeshStandardMaterial({ map: canvasTexture(384, 192, (c, w, h) => drawLabel(c, w, h, ['WINDOW WASHERS ONLY', 'buckets provided ↑'], { bg: '#f2c230', fg: '#1c1530', accent: '#1c1530' })) }),
+      new THREE.PlaneGeometry(0.9, 0.45),
+      new THREE.MeshStandardMaterial({ map: canvasTexture(384, 192, (c, w, h) => drawLabel(c, w, h, ['WINDOW WASHERS ONLY', 'catwalk + water ↑'], { bg: '#f2c230', fg: '#1c1530', accent: '#1c1530' })) }),
     );
-    sign.position.copy(L(lx + 0.8, gy + 1.3, lz + 0.2));
+    sign.position.copy(L(lx, gy + 1.3, lz + 0.52));
     sign.quaternion.copy(q);
     world.staticRoot.add(markOwned(sign));
-    world.collider(L(lx + 0.8, gy + 0.65, lz + 0.15), new THREE.Vector3(0.1, 1.3, 0.1), yaw);
-    return y;
+    return { floorY: y, x0: -cw / 2, x1: cw / 2 + 1.0, gutter: [0.05, 0.4], rail: D - 0.03, ladderFoot: L(lx + 1.2, gy, lz) };
   }
 
-  private addBuckets(bottom: THREE.Vector3, catwalkY: number) {
+  /**
+   * Water up on the catwalk: a gutter strip along the face's foot for the full deck length (so Wash works from
+   * anywhere up there), plus window-washer buckets with squeegees hung off the OUTSIDE of the front rail (out of
+   * the walkway; the fallback catwalk without a known gutter gets them on the deck edge instead).
+   */
+  private addWater(bottom: THREE.Vector3, cw: CatwalkSpec) {
     const game = this.game;
     const world = worldOf(game)!;
     const water = game.get<WaterSystem>('water');
     const f = this.face;
+    const front = f.depth / 2;
+    const at = (x: number, out: number, y: number) => bottom.clone().addScaledVector(this.right, x).addScaledVector(this.normal, front + out).setY(y);
+    if (cw.gutter && water) {
+      const [g0, g1] = cw.gutter;
+      const gm = (g0 + g1) / 2;
+      const sy = cw.floorY - 0.07;
+      const len = cw.x1 - cw.x0 - 0.1;
+      // the visible surface (shallow volumes never count as swimmable; nearWater() from his paws finds them)
+      const strip = new THREE.Mesh(new THREE.PlaneGeometry(len, g1 - g0).rotateX(-Math.PI / 2), water.material('sink'));
+      strip.position.copy(at((cw.x0 + cw.x1) / 2, gm, sy));
+      strip.quaternion.copy(f.quat);
+      strip.renderOrder = 2;
+      strip.name = 'CatwalkGutterWater';
+      world.staticRoot.add(markOwned(strip));
+      const r = (g1 - g0) / 2;
+      for (let x = cw.x0 + r; x <= cw.x1 - r + 1e-3; x += 0.7) {
+        water.addCircle({ name: 'Window-Washer Gutter', kind: 'sink', center: at(x, gm, sy), radius: r, depth: 0.12, visual: false });
+      }
+    }
     const bucketMat = world.material(0x3a7bd5, { roughness: 0.5 });
     const handleMat = world.material(0xb0b4bb, { roughness: 0.4, metalness: 0.7 });
-    const n = Math.max(3, Math.round(f.w / 3.8));
-    for (let i = 0; i < n; i++) {
-      const t = ((i + 0.5) / n - 0.5) * 0.96;
-      const p = bottom.clone().addScaledVector(this.right, t * f.w).addScaledVector(this.normal, f.depth / 2 + 0.75);
-      p.y = catwalkY;
+    const hanging = !!cw.gutter;
+    for (const t of [-0.34, 0, 0.34]) {
+      const p = hanging ? at(t * f.w, cw.rail + 0.3, cw.floorY + 0.3) : at(t * f.w, cw.rail - 0.3, cw.floorY);
       const g = new THREE.Group();
       const pail = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.21, 0.36, 18, 1, true), bucketMat);
       pail.position.y = 0.18;
@@ -232,12 +290,22 @@ export class SlopBillboard {
       const blade = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.04), world.material(0x222222));
       blade.position.set(0.2, 0.8, 0);
       blade.rotation.z = -0.35;
-      g.add(pail, floor, handle, stick, blade);
+      const film = new THREE.Mesh(new THREE.CircleGeometry(0.235, 18).rotateX(-Math.PI / 2), water ? water.material('sink') : bucketMat);
+      film.position.y = 0.3;
+      g.add(pail, floor, handle, stick, blade, film);
+      if (hanging) {
+        // hook from the handle over the top rail
+        const hook = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.34), handleMat);
+        hook.position.set(0, 0.63, -0.15);
+        hook.rotation.x = -0.12;
+        g.add(hook);
+      }
       g.position.copy(p);
+      g.quaternion.copy(f.quat);
       g.traverse((o) => ((o as THREE.Mesh).castShadow = true));
       world.staticRoot.add(markOwned(g));
-      world.collider(p.clone().add(new THREE.Vector3(0, 0.17, 0)), new THREE.Vector3(0.44, 0.34, 0.44));
-      water?.addCircle({ name: 'Window-Washer Bucket', kind: 'sink', center: p.clone().add(new THREE.Vector3(0, 0.31, 0)), radius: 0.22, depth: 0.2 });
+      world.collider(p.clone().add(new THREE.Vector3(0, 0.17, 0)), new THREE.Vector3(0.44, 0.34, 0.44), new THREE.Euler().setFromQuaternion(f.quat, 'YXZ').y);
+      water?.addCircle({ name: 'Window-Washer Bucket', kind: 'sink', center: p.clone().add(new THREE.Vector3(0, 0.3, 0)), radius: 0.22, depth: 0.2, visual: false });
     }
   }
 
@@ -311,6 +379,30 @@ export class SlopBillboard {
     u.uMelt.value = this.melt;
     // the AI layer glitches now and then
     u.uGlitch.value = !this.done && Math.sin(this.game.time * 1.7) > 0.93 ? 1 : 0;
+    this.signpost();
+  }
+
+  /** Signposting: a hint at the foot of the service ladder, and one when he steps onto the catwalk. */
+  private signpost() {
+    const game = this.game;
+    if (this.done || this.completing || game.state !== 'playing') return;
+    const p = game.get<any>('player')?.position as THREE.Vector3 | undefined;
+    if (!p) return;
+    const t = game.time;
+    const foot = this.catwalk.ladderFoot;
+    if (foot && t - this.ladderHintAt > 45 && Math.hypot(p.x - foot.x, p.z - foot.z) < 2.6 && Math.abs(p.y - foot.y) < 1.5) {
+      this.ladderHintAt = t;
+      game.hint('Window-washer ladder: jump onto it and hold forward to climb to the catwalk.', 3.5);
+      return;
+    }
+    const f = this.face;
+    const rel = _rel.copy(p).sub(f.center);
+    const out = rel.dot(this.normal) - f.depth / 2;
+    const along = rel.dot(this.right);
+    if (t - this.catwalkHintAt > 40 && out > 0 && out < this.catwalk.rail + 0.1 && along > this.catwalk.x0 && along < this.catwalk.x1 && Math.abs(p.y - this.catwalk.floorY - 0.4) < 0.5) {
+      this.catwalkHintAt = t;
+      game.hint('Scrub time! Face the billboard and hold {wash}. (Water in the gutter at your paws.)', 4);
+    }
   }
 }
 
@@ -342,7 +434,7 @@ function findBillboardFace(game: Game, poiPos: THREE.Vector3): Face | null {
     const score = area * (/billboard/i.test(m.name) ? 3 : 1);
     if (score > bestScore) {
       bestScore = score;
-      best = { center: wp.clone(), quat: wq.clone(), w, h, depth: d, slopTex: front.map, ours: false };
+      best = { center: wp.clone(), quat: wq.clone(), w, h, depth: d, slopTex: front.map, ours: false, catwalk: m.userData.catwalk };
     }
   });
   return best;
