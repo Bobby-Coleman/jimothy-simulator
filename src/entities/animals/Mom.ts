@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import type { Game } from '../../core/Game';
 import type { Entity } from '../../core/Entities';
-import { G, groups } from '../../core/Physics';
+import { G } from '../../core/Physics';
 import { destroyProp } from '../Props';
-import { RaccoonAnimal, wrapAngle } from './Animal';
+import { RaccoonAnimal, wrapAngle, WORLD_ONLY } from './Animal';
 import { RIGS, type RigPose } from './RaccoonRig';
 
 /**
@@ -59,8 +59,9 @@ export class Mom extends RaccoonAnimal {
         colliderY: 0.36,
         mass: 16,
         tags: ['family', 'mom'],
-        // solid to Jimothy (while she stands still) but never bulldozes snacks / props around
-        filter: G.PLAYER | G.NPC | G.RAGDOLL,
+        // Never blocks Jimothy (she lives in a doorway!) and never bulldozes snacks / props around.
+        // Grab / bonk / wash still find her: those are queries, not contacts.
+        filter: G.NPC | G.RAGDOLL,
         emoteY: 1.05,
         emoteSize: 0.42,
       },
@@ -69,12 +70,41 @@ export class Mom extends RaccoonAnimal {
     this.home.copy(this.pos);
     this.homeYaw = yaw;
     this.entity.data.size = new THREE.Vector3(0.5, 0.8, 1.3);
+    this.scootSpot.copy(this.findScootSpot());
     const env = game.get<any>('environment');
     this.setState(env?.isNight ? 'idle' : 'sleep');
   }
 
+  /** Where she shuffles to when Jimothy wants in (the side of the den with more room). */
+  readonly scootSpot = new THREE.Vector3();
+  /** Currently scooted aside for Jimothy. */
+  private scooted = false;
+  private scootT = 0;
+
+  private findScootSpot(): THREE.Vector3 {
+    const side = new THREE.Vector3(Math.cos(this.homeYaw), 0, -Math.sin(this.homeYaw));
+    const back = new THREE.Vector3(-Math.sin(this.homeYaw), 0, -Math.cos(this.homeYaw));
+    const from = this.home.clone().setY(this.home.y + 0.3);
+    const room = (dir: THREE.Vector3) => this.game.physics.raycast(from, dir, 3, WORLD_ONLY)?.distance ?? 3;
+    const left = room(side);
+    const right = room(side.clone().negate());
+    const best = left >= right ? side : side.clone().negate();
+    const free = Math.max(left, right);
+    if (free > 1.2) return this.home.clone().addScaledVector(best, Math.min(1.15, free - 0.6));
+    // no room sideways: tuck further in
+    return this.home.clone().addScaledVector(back, Math.min(0.9, Math.max(0, room(back) - 0.9)));
+  }
+
+  /** Her resting spot right now (home, or scooted aside while Jimothy is in the doorway). */
+  private get restSpot() {
+    return this.scooted ? this.scootSpot : this.home;
+  }
+
   get awake() {
     return this.state !== 'sleep';
+  }
+  override get keepAwake() {
+    return this.airborne || this.isBusy || this.state === 'greet' || this.state === 'welcome';
   }
 
   get isBusy() {
@@ -153,9 +183,23 @@ export class Mom extends RaccoonAnimal {
     this.washCd -= dt;
     const dPlayer = this.distToPlayer();
 
+    // Jimothy in the doorway? Shuffle aside so he can get in; drift back once he's gone for a bit.
+    const dHome = player ? Math.hypot(player.position.x - this.home.x, player.position.z - this.home.z) : Infinity;
+    if (!this.scooted && dHome < 1.9 && (this.state === 'idle' || this.state === 'sleep')) {
+      this.scooted = true;
+      this.scootT = 0;
+      if (this.state === 'sleep') this.say('dots', 1.2);
+    } else if (this.scooted) {
+      this.scootT = dHome > 3.2 ? this.scootT + dt : 0;
+      if (this.scootT > 4) this.scooted = false;
+    }
+
     switch (this.state) {
       case 'sleep': {
-        this.snapToGround(dt);
+        // sleepwalk to the resting spot (scooting over for Jimothy), then lie down
+        const rs = this.restSpot;
+        if (Math.hypot(this.pos.x - rs.x, this.pos.z - rs.z) > 0.12) this.walkToward(rs, 1.1, dt, 5, 0.1);
+        else this.snapToGround(dt);
         if (Math.floor(game.time / 6) % 3 === 0 && this.emote.showing === '' && dPlayer < 30) this.say('zzz', 2.5);
         if (night) {
           this.setState('idle');
@@ -169,8 +213,12 @@ export class Mom extends RaccoonAnimal {
         break;
       }
       case 'idle': {
-        this.walkToward(this.home, 1.4, dt, 5, 0.25);
-        if (Math.hypot(this.pos.x - this.home.x, this.pos.z - this.home.z) < 0.4) this.turnToward(this.homeYaw, dt, 2);
+        const rs = this.restSpot;
+        this.walkToward(rs, 1.4, dt, 5, 0.25);
+        if (Math.hypot(this.pos.x - rs.x, this.pos.z - rs.z) < 0.4) {
+          if (this.scooted && player) this.turnToward(this.yawTo(player.position), dt, 3);
+          else this.turnToward(this.homeYaw, dt, 2);
+        }
         if (!night && dPlayer > 6 && this.stateTime > 6) this.setState('sleep');
         this.nextWander -= dt;
         if (this.nextWander <= 0 && dPlayer > 4) {
@@ -307,15 +355,7 @@ export class Mom extends RaccoonAnimal {
     }
     if (player && dPlayer < 9 && this.state !== 'sleep') this.lookYaw = wrapAngle(this.lookAngleTo(player.position));
     this.selfGroom = Math.max(0, this.selfGroom - dt);
-    // Kinematic bodies shove whatever they walk into: only be solid to Jimothy while standing still
-    const solid = this.speed < 0.05;
-    if (solid !== this.solid) {
-      this.solid = solid;
-      this.body.collider(0).setCollisionGroups(groups(G.ANIMAL, solid ? G.PLAYER | G.NPC | G.RAGDOLL : G.NPC | G.RAGDOLL));
-    }
   }
-
-  private solid = true;
 
   private pickUp(f: Entity) {
     const game = this.game;
@@ -423,6 +463,13 @@ export class Mom extends RaccoonAnimal {
     p.tailWag = 0.25;
     switch (this.state) {
       case 'sleep':
+        if (moving) {
+          // sleepy shuffle over to make room
+          p.eyes = 0.35;
+          p.tailWag = 0.05;
+          p.earsBack = 0.3;
+          break;
+        }
         p.lie = 1;
         p.eyes = this.hugCd > 10 ? 0.5 : 0;
         p.tailWag = 0.05;

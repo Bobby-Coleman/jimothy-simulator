@@ -1,7 +1,48 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Game } from '../../../core/Game';
 import type { Entity } from '../../../core/Entities';
 import { spawnProp } from '../../../entities/Props';
+
+/**
+ * Bake every mesh under `root` (relative to root) into ONE vertex-coloured mesh (1 draw call).
+ * Material colours become vertex colours; textures are dropped (use for small solid-colour props).
+ */
+export function mergeVertexColored(root: THREE.Object3D, opts: { roughness?: number; side?: THREE.Side } = {}): THREE.Mesh {
+  root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const rel = new THREE.Matrix4();
+  const geos: THREE.BufferGeometry[] = [];
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    let g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+    if (!g.getAttribute('normal')) g.computeVertexNormals();
+    rel.multiplyMatrices(inv, mesh.matrixWorld);
+    g.applyMatrix4(rel);
+    const mat = mesh.material as THREE.MeshStandardMaterial;
+    const c = mat && !Array.isArray(mat) && mat.color ? mat.color : new THREE.Color(1, 1, 1);
+    const n = g.getAttribute('position').count;
+    const col = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      col[i * 3] = c.r;
+      col[i * 3 + 1] = c.g;
+      col[i * 3 + 2] = c.b;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geos.push(g);
+  });
+  const merged = geos.length ? mergeGeometries(geos, false) : new THREE.BufferGeometry();
+  for (const g of geos) g.dispose();
+  const out = new THREE.Mesh(
+    merged ?? new THREE.BufferGeometry(),
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: opts.roughness ?? 0.8, side: opts.side ?? THREE.FrontSide }),
+  );
+  out.castShadow = true;
+  out.receiveShadow = true;
+  return out;
+}
 
 /**
  * Primitive props for the heart quests, used when the items system doesn't provide a kind:
@@ -388,6 +429,11 @@ export function buildRockingChair(seatH = 0.42): RockingChair {
   rocker.add(mesh(new THREE.BoxGeometry(0.5, 0.05, 0.45), m(0xc94f6d, 0.9), 0, seatH + 0.02, 0.01));
   const blanket = mesh(new THREE.BoxGeometry(0.52, 0.42, 0.03), m(0xf2c14e, 0.95), 0, 0.52, 0.03);
   back.add(blanket);
+  // bake the ~25 pieces into a single draw call
+  const merged = mergeVertexColored(rocker, { roughness: 0.75 });
+  merged.name = 'RockingChairMesh';
+  rocker.clear();
+  rocker.add(merged);
   const seat = new THREE.Object3D();
   seat.position.set(0, seatH + 0.045, 0.02);
   rocker.add(seat);

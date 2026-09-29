@@ -108,6 +108,9 @@ export class Danny extends RaccoonAnimal {
   get isRolling() {
     return this.rolling;
   }
+  override get keepAwake() {
+    return this.airborne || this.inviting || this.rolling || this.state === 'greet' || this.state === 'reunion' || this.state === 'bowled';
+  }
 
   private startRolling() {
     if (this.rolling) return;

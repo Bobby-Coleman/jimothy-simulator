@@ -322,15 +322,26 @@ export class NpcActor implements Actor {
   private target: THREE.Vector3 | null = null;
   private lastWalk = new THREE.Vector3(Infinity, 0, 0);
   private _pos = new THREE.Vector3();
+  private prev: { name?: string; passive?: boolean } = {};
 
+  /**
+   * owned = we spawned it (dispose removes it). Recruited ambient NPCs (owned = false) are borrowed:
+   * renamed + made passive while in the event, then handed back to their normal life on dispose.
+   */
   constructor(
     private kit: Kit,
     readonly npc: any,
     opts: ActorOpts,
+    readonly owned = true,
   ) {
     this.name = opts.name;
     this.type = opts.type;
     this.lookAtPlayer = opts.lookAtPlayer ?? true;
+    if (!owned) {
+      this.prev = { name: npc.name, passive: npc.passive };
+      if (typeof npc.name === 'string') npc.name = opts.name;
+      if (typeof npc.passive === 'boolean') npc.passive = true;
+    }
   }
 
   get alive() {
@@ -443,6 +454,14 @@ export class NpcActor implements Actor {
   dispose() {
     const n = this.npc;
     const npcs = this.kit.npcs;
+    if (!this.owned) {
+      // hand a recruited NPC back
+      n.stop?.();
+      if (this.prev.name != null) n.name = this.prev.name;
+      if (this.prev.passive != null) n.passive = this.prev.passive;
+      n.release?.();
+      return;
+    }
     if (typeof n.remove === 'function') n.remove();
     else if (typeof n.dispose === 'function') n.dispose();
     else if (typeof npcs?.remove === 'function') npcs.remove(n);

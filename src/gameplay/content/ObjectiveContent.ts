@@ -302,6 +302,9 @@ export class ObjectiveContent implements System {
     });
     on('explosion', () => this.done('kaboom'));
     on('hanging', (p) => {
+      // Riding the Slop Dragon isn't car surfing
+      const ent = p?.entity;
+      if (ent && (ent.tags?.has?.('dragon') || ent.data?.slopDragon || ent.kind !== 'vehicle')) return;
       const pl = this.game.get<Jimothy>('player');
       const speed = Math.max(Number(p.speed) || 0, pl?.speed ?? 0);
       if (speed > 1.5) this.accum('carSurfer', Number(p.dt) || this.game.dt, 1);

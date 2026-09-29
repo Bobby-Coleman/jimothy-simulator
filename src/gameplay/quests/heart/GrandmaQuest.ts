@@ -4,7 +4,7 @@ import { G, groups } from '../../../core/Physics';
 import { destroyProp } from '../../../entities/Props';
 import { Emote } from '../../../entities/animals';
 import type { HeartCtx, HeartQuest } from './ctx';
-import { buildBowl, buildKnittedHat, buildRockingChair, spawnFallbackGrapes, type RockingChair } from './props';
+import { buildBowl, buildKnittedHat, buildRockingChair, mergeVertexColored, spawnFallbackGrapes, type RockingChair } from './props';
 import { buildGrandma, buildKnitting, type Figure } from './humans';
 
 /**
@@ -69,7 +69,7 @@ export class GrandmaQuest implements HeartQuest {
     this.chair.root.position.copy(pos);
     this.chair.root.rotation.y = this.yaw;
     ctx.game.scene.add(this.chair.root);
-    const knit = buildKnitting();
+    const knit = mergeVertexColored(buildKnitting(), { roughness: 0.9 });
     knit.position.set(0, 0.1, 0.2);
     this.chair.seat.add(knit);
     // a bowl for the night-time grapes, beside the chair
@@ -77,7 +77,8 @@ export class GrandmaQuest implements HeartQuest {
     const fwd = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(0.35);
     this.bowlPos.copy(pos).add(side).add(fwd);
     this.bowlPos.y = ctx.ground(this.bowlPos.x, this.bowlPos.z, pos.y + 1.2);
-    this.bowl = buildBowl();
+    this.bowl = new THREE.Group();
+    this.bowl.add(mergeVertexColored(buildBowl(), { roughness: 0.35, side: THREE.DoubleSide }));
     this.bowl.position.copy(this.bowlPos);
     ctx.game.scene.add(this.bowl);
     // A warm porch light so her porch glows at night (the only light we add; on only at night, nearby).
@@ -109,6 +110,10 @@ export class GrandmaQuest implements HeartQuest {
   }
 
   setup(ctx: HeartCtx) {
+    this.spawnGrandma(ctx);
+  }
+
+  private spawnGrandma(ctx: HeartCtx) {
     const npc = ctx.spawnNpc({
       type: 'grandma',
       position: this.porch.clone(),
@@ -137,7 +142,7 @@ export class GrandmaQuest implements HeartQuest {
       } catch {
         /* optional */
       }
-    } else {
+    } else if (!this.fig) {
       // stand-in figure sitting in the chair
       const fig = buildGrandma();
       fig.sitting = true;
@@ -180,6 +185,11 @@ export class GrandmaQuest implements HeartQuest {
     const night = ctx.isNight;
     this.lineCd -= dt;
     this.waveT = Math.max(0, this.waveT - dt);
+    // someone cleared the NPCs? Grandma comes right back to her chair.
+    if (this.npc?.removed) {
+      this.npc = null;
+      this.spawnGrandma(ctx);
+    }
 
     // porch light: fades in at night while Jimothy is in the neighbourhood
     const nf = ctx.env?.nightFactor ?? (night ? 1 : 0);

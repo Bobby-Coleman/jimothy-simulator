@@ -159,6 +159,7 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
       bw = 2.6;
     const [lx, , lz, ry] = place(baySide, 0, 0, out / 2);
     f.box(b, 'siding', lx, 1.3, lz, bw, 2.3, out, o.siding, ry);
+    f.box(b, fMat, lx, (yb + 0.2) / 2, lz, bw + 0.04, 0.2 - yb, out + 0.04, fCol, ry);
     f.box(b, 'trim', lx, 0.25, lz, bw + 0.1, 0.2, out + 0.1, trim, ry);
     const [rx2, , rz2] = place(baySide, 0, 0, out / 2 + 0.05);
     f.box(b, 'roof', rx2, 2.6, rz2, bw + 0.3, 0.16, out + 0.35, roofC, ry);
@@ -169,7 +170,7 @@ export function buildHouse(game: Game, world: World, b: Batch, o: HouseOpts): Ho
       const [gx, , gz] = place(baySide, (s * bw) / 2, 0, out / 2);
       f.box(b, sideGlass, gx, 1.4, gz, 0.07, 1.4, out * 0.6, 0xa9bfcf, ry);
     }
-    f.collider(game, lx, 1.35, lz, bw, 2.6, out, ry);
+    f.collider(game, lx, (yb + 2.65) / 2, lz, bw, 2.65 - yb, out, ry); // down to the ground: no overhang to get stuck under
   }
 
   // --- chimney

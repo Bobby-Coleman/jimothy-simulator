@@ -133,6 +133,16 @@ export abstract class Animal {
     });
     this.emote = new Emote(visualRoot, cfg.emoteY, cfg.emoteSize ?? 0.36);
     this.visualRoot = visualRoot;
+    // the model root: the DetailCuller hides far animals through this, the UI anchors bubbles to it
+    this.entity.object = visualRoot;
+  }
+
+  /**
+   * Keep ticking even when far from Jimothy (off on an errand, following him, scripted). Everything else is
+   * frozen beyond FREEZE_DIST (no behaviour, no animation) — the DetailCuller hides them anyway.
+   */
+  get keepAwake(): boolean {
+    return this.airborne;
   }
 
   // ----------------------------------------------------------------------------------------- hooks
@@ -185,6 +195,11 @@ export abstract class Animal {
     this.airborne = false;
     this.vel.set(0, 0, 0);
     this.prevPos.copy(this.pos);
+    // move the visual right away too (we may be frozen far from Jimothy and not sync for a while)
+    if (this.visualRoot) {
+      this.visualRoot.position.copy(this.pos);
+      this.visualRoot.rotation.y = this.yaw;
+    }
     const b = this.body;
     if (b && !this.entity.data.heldByPlayer) {
       if (!b.isKinematic()) b.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
@@ -445,7 +460,7 @@ export abstract class RaccoonAnimal extends Animal {
     this.emote.update(dt, game.time);
     // Far away: animate at a quarter rate (the pose barely reads at that size)
     this.animAcc += dt;
-    if (camD > 70 && (game.frame + this.lodPhase) % 4 !== 0) return;
+    if (camD > 45 && (game.frame + this.lodPhase) % 4 !== 0) return;
     const adt = Math.min(this.animAcc, 0.25);
     this.animAcc = 0;
     clearPose(this.pose);

@@ -265,6 +265,9 @@ export class Crow extends Animal {
   get busy() {
     return !!this.job;
   }
+  override get keepAwake() {
+    return this.airborne || this.flying || !!this.job || (this.state !== 'ground' && this.state !== 'perch');
+  }
   get available() {
     return !this.job && (this.state === 'ground' || this.state === 'perch' || this.state === 'flee' || this.state === 'land');
   }

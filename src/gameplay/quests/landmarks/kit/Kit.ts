@@ -394,6 +394,28 @@ export class Kit {
     return a;
   }
 
+  /**
+   * Borrow existing NPCs (e.g. the stadium's ambient salmon racers) instead of spawning duplicates.
+   * Returns up to `count` actors wrapping NPCs of `type` within `radius` of `center`.
+   */
+  recruit(type: string, center: THREE.Vector3, radius: number, count: number, make: (i: number) => ActorOpts): Actor[] {
+    const npcs = this.npcs;
+    if (!npcs || typeof npcs.near !== 'function') return [];
+    const taken = new Set([...this.actors].map((a) => (a as NpcActor).npc).filter(Boolean));
+    let found: any[] = [];
+    try {
+      found = npcs.near(center, radius, (n: any) => n.type === type && n.alive !== false && !n.removed && !taken.has(n)) ?? [];
+    } catch {
+      return [];
+    }
+    found.sort((a: any, b: any) => a.position.distanceToSquared(center) - b.position.distanceToSquared(center));
+    return found.slice(0, count).map((npc: any, i: number) => {
+      const a = new NpcActor(this, npc, make(i), false);
+      this.actors.add(a);
+      return a;
+    });
+  }
+
   removeActor(a: Actor | null | undefined) {
     if (!a) return;
     this.actors.delete(a);

@@ -60,8 +60,19 @@ export class AnimalSystem implements System {
     if (!hasListener(this.game, 'hearts')) this.heartFx?.spawn(p, count);
   }
 
+  /** Animals farther than this from Jimothy (and not busy) are frozen: no behaviour, no animation. */
+  freezeDist = 85;
+  private frozen = new Set<Animal>();
+
   update(dt: number) {
+    const p = this.game.get<any>('player')?.position as THREE.Vector3 | undefined;
+    const fd2 = this.freezeDist * this.freezeDist;
     for (const a of this.list) {
+      if (p && !a.keepAwake && a.pos.distanceToSquared(p) > fd2) {
+        this.frozen.add(a);
+        continue;
+      }
+      this.frozen.delete(a);
       try {
         a.update(dt);
       } catch (err) {
@@ -70,9 +81,14 @@ export class AnimalSystem implements System {
     }
   }
 
+  /** Is this animal currently frozen by distance? */
+  isFrozen(a: Animal) {
+    return this.frozen.has(a);
+  }
+
   postPhysics(dt: number) {
     for (const a of this.list) {
-      if (!a.alive) continue;
+      if (!a.alive || this.frozen.has(a)) continue;
       try {
         a.sync(dt);
       } catch (err) {

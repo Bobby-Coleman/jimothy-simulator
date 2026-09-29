@@ -111,6 +111,16 @@ export class TeddyQuest implements HeartQuest {
   }
 
   setup(ctx: HeartCtx) {
+    this.spawnKid(ctx);
+    if (this.done) {
+      this.becomeHappy();
+      return;
+    }
+    const existing = ctx.game.entities.withTag('teddy').find((e) => e.alive && !e.data.clean && !e.data.washed);
+    this.teddy = existing ?? this.spawnTeddy();
+  }
+
+  private spawnKid(ctx: HeartCtx) {
     const npc = ctx.spawnNpc({
       type: 'kid',
       position: this.kidPos.clone(),
@@ -129,8 +139,8 @@ export class TeddyQuest implements HeartQuest {
       } catch {
         /* optional */
       }
-      this.tears = new Tears(ctx.game.scene);
-    } else {
+      this.tears ??= new Tears(ctx.game.scene);
+    } else if (!this.fig) {
       const fig = buildKid();
       fig.root.position.copy(this.kidPos);
       fig.root.rotation.y = this.kidYaw;
@@ -139,12 +149,6 @@ export class TeddyQuest implements HeartQuest {
       this.fig = fig;
       this.emote = new Emote(fig.root, 1.3, 0.34);
     }
-    if (this.done) {
-      this.becomeHappy();
-      return;
-    }
-    const existing = ctx.game.entities.withTag('teddy').find((e) => e.alive && !e.data.clean && !e.data.washed);
-    this.teddy = existing ?? this.spawnTeddy();
   }
 
   private spawnTeddy(): Entity {
@@ -188,6 +192,12 @@ export class TeddyQuest implements HeartQuest {
     this.ewCd -= dt;
     this.helloCd -= dt;
     const d = ctx.distToPlayer(this.kidPos);
+    // someone cleared the NPCs? The kid comes back (with the teddy, if we already returned it).
+    if (this.npc?.removed) {
+      this.npc = null;
+      this.spawnKid(ctx);
+      if (this.done) this.becomeHappy();
+    }
 
     if (this.done) {
       this.hugT = Math.max(0, this.hugT - dt);

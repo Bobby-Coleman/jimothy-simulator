@@ -82,6 +82,9 @@ export class Kit extends RaccoonAnimal {
   get isLost() {
     return this.state === 'lost';
   }
+  override get keepAwake() {
+    return this.airborne || this.isFollowing || this.state === 'toMom' || !!this.entity.data.heldByPlayer;
+  }
   get isFollowing() {
     return this.state === 'follow' || this.state === 'regroup' || this.state === 'dizzy' || this.state === 'found' || this.state === 'held';
   }

@@ -90,7 +90,8 @@ export class Slopothy {
   dying = false;
   dieT = 0;
   dead = false;
-  private reason: DissolveReason = 'washed';
+  /** Why it is dissolving (washed / water / unplug / timeout / cap). */
+  reason: DissolveReason | null = null;
   // animation
   private legFreq: number[] = [];
   private legPhase: number[] = [];

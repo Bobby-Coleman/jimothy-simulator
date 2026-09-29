@@ -743,7 +743,8 @@ function plazaAndSeawall(kit: Kit, b: Batch) {
   const game = kit.game;
   // Locks plaza (east of the lock, facing the water)
   b.decal([-90, 0, 158], [44, 15], 0xe2dccf, { mat: 'paving' });
-  seawall(kit, b, -180, WB[0]);
+  seawall(kit, b, -180, LAD.x0 - 0.7);
+  seawall(kit, b, LAD.x1 + 0.7, WB[0]);
   seawall(kit, b, EB[1], -66.5);
   for (const x of [-106, -98, -82, -74]) bench(b, x, 0, 163.2, 0);
   lamps(

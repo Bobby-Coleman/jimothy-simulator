@@ -45,10 +45,10 @@ export class DannyQuest implements HeartQuest {
     if (!d.hearChitter()) return;
     const ctx = this.ctx;
     ctx.game.events.emit('dannyChitter', {});
+    this.inviteT = 0;
+    this.together = 0;
+    this.shown = -1;
     if (!this.done) {
-      this.inviteT = 0;
-      this.together = 0;
-      this.shown = -1;
       if (!this.hinted) {
         this.hinted = true;
         ctx.hint('Danny chitters back! He wants to roll with you. Tuck & Roll (Q) right next to him!', 5);
@@ -71,7 +71,7 @@ export class DannyQuest implements HeartQuest {
       ctx.hint("It's Danny, the other round raccoon! He looks... familiar. Try chittering at him (C).", 4.5);
     }
 
-    if (danny.inviting && !this.done && !this.playing) {
+    if (danny.inviting && !this.playing) {
       this.inviteT += dt;
       const d = ctx.distToPlayer(danny.pos);
       if (player.mode === 'roll' && d < 3) {
@@ -80,19 +80,31 @@ export class DannyQuest implements HeartQuest {
         if (s !== this.shown) {
           this.shown = s;
           if (s > 0 && s < 5) {
-            ctx.onProgress('danny', this.step());
+            if (!this.done) ctx.onProgress('danny', this.step());
             const mid = player.position.clone().lerp(danny.pos, 0.5).setY(player.position.y + 0.6);
             ctx.hearts(mid, 2 + s);
             ctx.game.sfx('boing', mid, 0.3, 1 + s * 0.12);
           }
         }
-        if (this.together >= 5) this.reunion();
+        if (this.together >= 5) {
+          if (!this.done) this.reunion();
+          else {
+            // rolling together again: a small happy moment, no cutscene
+            danny.giveUp();
+            danny.say('heart', 2);
+            ctx.hearts(danny.pos.clone().setY(danny.pos.y + 1), 8);
+            ctx.game.score(150, 'Rolled With Danny Again', danny.pos.clone());
+            this.together = 0;
+          }
+        }
       }
       if (this.inviteT > 45 && this.together < 5) {
         danny.giveUp();
         this.together = 0;
-        ctx.hint('Danny got dizzy waiting. Chitter at him again!', 3);
-        ctx.onProgress('danny', this.step());
+        if (!this.done) {
+          ctx.hint('Danny got dizzy waiting. Chitter at him again!', 3);
+          ctx.onProgress('danny', this.step());
+        }
       }
     }
 

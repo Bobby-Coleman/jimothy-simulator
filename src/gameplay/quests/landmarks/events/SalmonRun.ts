@@ -59,10 +59,11 @@ function addTailFin(actor: Actor, color: number) {
   const rig = (actor as any).npc?.rig;
   const pelvis: THREE.Object3D | undefined = rig?.bones?.pelvis;
   const d = rig?.dims;
-  if (!pelvis || !d) return;
+  if (!pelvis || !d || pelvis.getObjectByName('lmTailFin')) return;
   const c = new THREE.Color(color).multiplyScalar(0.8);
   const fin = new THREE.Mesh(salmonTailGeometry(), new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 }));
   fin.castShadow = true;
+  fin.name = 'lmTailFin';
   fin.position.set(0, -0.02 * d.s, -(d.pelvisD ?? 0.2) * 0.62);
   fin.rotation.x = -0.35;
   fin.scale.setScalar(d.s ?? 1);
@@ -205,9 +206,11 @@ export class SalmonRun extends Landmark {
   private ensureRacers() {
     if (this.racers.length && this.racers.every((r) => r.actor.alive)) return;
     for (const r of this.racers) this.kit.removeActor(r.actor);
+    // Borrow the stadium's own salmon racers if they're hanging around the line; spawn the rest.
+    const recruited = this.kit.recruit('racer', this.start, 14, RACERS.length, (i) => ({ type: 'racer', name: RACERS[i].name, position: this.idleSpot(i) }));
     this.racers = RACERS.map((def, i) => {
       const spot = this.idleSpot(i);
-      const actor = this.kit.spawnActor({
+      const actor = recruited[i] ?? this.kit.spawnActor({
         type: 'racer',
         name: def.name,
         position: spot,
@@ -216,7 +219,7 @@ export class SalmonRun extends Landmark {
         look: { topStyle: 'salmon', hat: 'salmonhood', top: def.color, hatColor: def.color },
         passive: true,
       });
-      addTailFin(actor, def.color);
+      addTailFin(actor, recruited[i] ? ((actor as any).npc?.look?.top ?? def.color) : def.color);
       return { actor, name: def.name, lane: def.lane, s: 0, v0: def.v0, v1: def.v1, finishedAt: 0, lastSlap: -10, idleSpot: spot, checkS: 0, checkT: 0, squeeze: 1 };
     });
   }

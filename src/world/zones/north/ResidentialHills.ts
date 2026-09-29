@@ -309,6 +309,30 @@ export const ResidentialHills: ZoneBuilder = {
       fence.line(t.x - 8.3, BACK_FENCE, t.x + 8.3, BACK_FENCE, 1.8, 0xd6c2ae);
     });
 
+    // ---- front hedges on some Tumble St lots (gap for the front walk)
+    const hedgeLine = (x: number, za: number, zb: number) => {
+      const len = Math.abs(zb - za);
+      if (len < 0.8) return;
+      const n = Math.max(1, Math.ceil(len / 2.4));
+      for (let i = 0; i < n; i++) {
+        const z0 = za + ((zb - za) * i) / n,
+          z1 = za + ((zb - za) * (i + 1)) / n;
+        const g0 = Math.min(H(x, z0), H(x, z1));
+        const top = Math.max(H(x, z0), H(x, z1)) + 0.95;
+        b.box('hedge', x, (g0 - 0.2 + top) / 2, (z0 + z1) / 2, 0.8, top - g0 + 0.2, Math.abs(z1 - z0) + 0.05, pick(r, [0x4f7a3a, 0x5a8540, 0x46703a]));
+        world.collider(new THREE.Vector3(x, (g0 - 0.2 + top) / 2, (z0 + z1) / 2), new THREE.Vector3(0.8, top - g0 + 0.2, Math.abs(z1 - z0)));
+      }
+    };
+    for (const h of houses) {
+      const row = ROWS[h.row];
+      if (row.street !== 'tumble' || (h.row === special.danny[0] && h.lot === special.danny[1]) || (h.row === 0 && h.lot === 3)) continue;
+      if (r() < 0.45) continue;
+      const x = Math.sign(row.frontX) * (WALK_OUT + 0.95);
+      const walkZ = h.info.stepFoot.z;
+      hedgeLine(x, lotSouth(h.lot) - 0.7, walkZ + 1.9);
+      hedgeLine(x, walkZ - 1.1, lotNorth(h.lot) + 0.7);
+    }
+
     // ---- bins at the curb on Tumble St (it's garbage day), cones at the bottom (bowling!)
     const binKinds = ['recycle', 'compost', 'garbage'] as const;
     for (const h of houses.filter((q) => ROWS[q.row].street === 'tumble')) {

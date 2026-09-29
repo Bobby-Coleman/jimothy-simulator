@@ -352,7 +352,7 @@ export class AudioSystem implements System {
     }
 
     // SlopCorp data-center hum
-    const inSlop = live && this.area(p) === SLOP_AREA;
+    const inSlop = live && this.area(p) === SLOP_AREA && !(this.game as any).get?.('slop')?.unplugged;
     if (inSlop && (!this.hum || !this.hum.playing)) this.hum = audio.play('server_hum_loop', { volume: 0.35 });
     else if (!inSlop && this.hum) {
       this.hum.stop(1.5);
