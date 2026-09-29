@@ -10,7 +10,7 @@ const _v = new THREE.Vector3();
  */
 export class Environment implements System {
   name = 'environment';
-  timeOfDay = 16.2;
+  timeOfDay = 17.2;
   /** Real minutes for a full 24h cycle. */
   dayLengthMinutes = 20;
   frozen = false;
@@ -34,7 +34,7 @@ export class Environment implements System {
   fogFar = 620;
 
   get isNight() {
-    return this.timeOfDay < 5.5 || this.timeOfDay > 20.5;
+    return this.timeOfDay < 5 || this.timeOfDay > 21.4;
   }
 
   /** The stock Sky shader can output values beyond half-float range (Inf) which bloom smears
@@ -124,6 +124,13 @@ export class Environment implements System {
     scene.add(this.moon);
 
     this.applyTime(true);
+
+    // The viral clip was filmed at 7:42 PM in July: golden hour for the intro, then the next morning
+    game.events.on('introStart', () => this.setTime(19.6));
+    game.events.on('introEnd', () => {
+      this.setTime(9.5);
+      setTimeout(() => game.events.emit('toast', { title: 'The next morning…', text: 'Jimothy is internet famous. 10 million views. He has no idea.' }), 900);
+    });
   }
 
   update(dt: number) {
@@ -162,9 +169,22 @@ export class Environment implements System {
   }
 
   private applyTime(force: boolean) {
+    // Seattle summer: sunrise 5:30, sunset 21:00 (it's Jimothy Summer, after all)
     const h = this.timeOfDay;
-    const elev = Math.sin(((h - 6) / 24) * Math.PI * 2) * THREE.MathUtils.degToRad(62);
-    const az = ((h - 6) / 12) * Math.PI;
+    const SUNRISE = 5.5;
+    const SUNSET = 21.0;
+    let elev: number;
+    let az: number;
+    if (h >= SUNRISE && h <= SUNSET) {
+      const f = (h - SUNRISE) / (SUNSET - SUNRISE);
+      elev = Math.sin(f * Math.PI) * THREE.MathUtils.degToRad(64);
+      az = f * Math.PI;
+    } else {
+      const nightLen = 24 - (SUNSET - SUNRISE);
+      const f = ((((h - SUNSET) % 24) + 24) % 24) / nightLen;
+      elev = -Math.sin(f * Math.PI) * THREE.MathUtils.degToRad(40);
+      az = Math.PI + f * Math.PI;
+    }
     this.sunDir.set(Math.cos(az) * Math.cos(elev), Math.sin(elev), Math.sin(az) * Math.cos(elev) * 0.7 + 0.3).normalize();
     const su = this.sky.material.uniforms;
     su.sunPosition.value.copy(this.sunDir);
