@@ -63,3 +63,22 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * Automated regression playtest (`tools/playtest.mjs`): walking, jumping, washing cotton candy, bonking/stealing from
   NPCs, dumpster diving, getting hit by a car, climbing, rolling — 0 console errors.
 * QA wave started: objectives audit, world polish + performance, first-time-player UX + mobile.
+
+## 01:20–03:00 — QA wave + extras
+* **Objectives audit**: all 50 Instincts achievable through real play (37 verified as-is, 13 fixed, targets rebalanced);
+  `QA_OBJECTIVES.md` hint sheet; `tools/playtest.mjs --group obj` plays every one (52/52 passing).
+* **World polish + performance**: worst street-level draw calls 826 → 486 on high (every spot < 500), shadow pass
+  halved, a 5.4 s startup freeze (map capture compiling ~50 shaders) removed, shader warm-up after load, night
+  alleys lit, missing colliders fixed, cars/crows/NPCs LOD'd, quality-scaled fog/draw distance.
+* **First-time UX + mobile**: reactive onboarding hints, "Suggested next" Instincts with a tracked goal (pill + compass +
+  on-screen star + minimap star), clickable labelled map icons, pause-menu "Back to the den"/photo buttons, full touch
+  support (scrolling menus, photo-mode buttons, minimap tap), "Reduce flashing & shake" accessibility option,
+  focus-loss auto-pause.
+* **Fun extras**: raccoon cannons (Tee-Hee Park + "Bay Blaster" on the Space Noodle), a rideable Ferris wheel,
+  three unimpressed Actual Cats, and the **"Jimothy Summer Forever" finale** (family at the den, fireworks over the bay
+  incl. a raccoon face, credits) once Mom, the kits and Danny are all home.
+* Lead: KRCN News ticker, low-ceiling camera (the den!), terrain chunking + capped edge berms + forested side hills +
+  distant horizon with the Olympics and a Rainier-ish mountain across the bay, textures 25.5 MB → 3.1 MB
+  (first load 34.7 MB → 13.6 MB), single shadow proxy for Jimothy, soak test (6 simulated minutes of random input:
+  no errors, no NaNs).
+* Second polish wave started: game feel & forgiveness, visual beauty pass + README screenshots, more slapstick toys.
