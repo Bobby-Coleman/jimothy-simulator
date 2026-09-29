@@ -261,7 +261,7 @@ export class TeddyQuest implements HeartQuest {
     if (this.ewCd <= 0) {
       this.ewCd = 6;
       this.say("Ew, he's still muddy…", 2.6);
-      this.ctx.hint('Wash the teddy first: carry it to water and hold Wash (R).', 3.5);
+      this.ctx.hint('Wash the teddy first: carry it to water and hold Wash {wash}.', 3.5);
     }
   }
 

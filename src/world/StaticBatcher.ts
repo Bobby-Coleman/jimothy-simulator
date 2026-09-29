@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Game, System } from '../core/Game';
 import type { World } from './World';
 import { makeShadowOnly, registerShadowLight } from './shadowOnly';
+import { warmShaders } from './shaderWarmup';
 
 /**
  * Draw-call reducer. A couple of seconds after the world is live, merge static meshes under `world.staticRoot`
@@ -28,6 +29,8 @@ import { makeShadowOnly, registerShadowLight } from './shadowOnly';
  */
 const CELL = 120; // zone-aligned (offset 60) — see cellKey()
 const PROXY_CELL = 48;
+
+const IDENTITY = new THREE.Matrix4();
 
 function isVisibleChain(o: THREE.Object3D | null): boolean {
   while (o) {
@@ -143,6 +146,10 @@ function signatureFor(mat: THREE.Material, g: THREE.BufferGeometry): string | nu
 
 /** Plain Float32 copy of any (interleaved / normalised / quantised) attribute. */
 function toFloat32(a: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, itemSize = a.itemSize): THREE.BufferAttribute {
+  // fast path: plain Float32 data of the right width → one memcpy (the merge runs mid-game; keep it snappy)
+  if (!(a as any).isInterleavedBufferAttribute && !a.normalized && a.itemSize === itemSize && a.array instanceof Float32Array) {
+    return new THREE.BufferAttribute((a.array as Float32Array).slice(0, a.count * itemSize), itemSize);
+  }
   const n = a.count;
   const out = new Float32Array(n * itemSize);
   for (let i = 0; i < n; i++) {
@@ -186,30 +193,42 @@ function prepForMerge(m: THREE.Mesh): THREE.BufferGeometry {
 function splitByCell(g: THREE.BufferGeometry, matrix: THREE.Matrix4, cell: number): Map<string, THREE.BufferGeometry> {
   const pos = g.attributes.position;
   const n = pos.count;
-  const wp = new Float32Array(n * 3);
-  const v = new THREE.Vector3();
-  for (let i = 0; i < n; i++) {
-    v.fromBufferAttribute(pos, i).applyMatrix4(matrix);
-    wp[i * 3] = v.x;
-    wp[i * 3 + 1] = v.y;
-    wp[i * 3 + 2] = v.z;
+  // world-space positions (typed-array fast paths: this runs mid-game on ~250k triangles)
+  let wp: Float32Array;
+  const plain = !(pos as any).isInterleavedBufferAttribute && !pos.normalized && pos.itemSize === 3 && pos.array instanceof Float32Array;
+  if (plain && matrix.equals(IDENTITY)) wp = pos.array as Float32Array;
+  else if (plain) {
+    wp = (pos.array as Float32Array).slice(0, n * 3);
+    new THREE.BufferAttribute(wp, 3).applyMatrix4(matrix);
+  } else {
+    wp = new Float32Array(n * 3);
+    const v = new THREE.Vector3();
+    for (let i = 0; i < n; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(matrix);
+      wp[i * 3] = v.x;
+      wp[i * 3 + 1] = v.y;
+      wp[i * 3 + 2] = v.z;
+    }
   }
   const idx = g.index;
+  const ia = idx ? (idx.array as ArrayLike<number>) : null;
   const triCount = (idx ? idx.count : n) / 3;
-  const vi = (k: number) => (idx ? idx.getX(k) : k);
-  const buckets = new Map<string, number[]>();
+  const vi = ia ? (k: number) => ia[k] : (k: number) => k;
+  // numeric cell keys (a template string per triangle was most of the cost)
+  const buckets = new Map<number, number[]>();
   for (let t = 0; t < triCount; t++) {
     const a = vi(t * 3), b = vi(t * 3 + 1), c = vi(t * 3 + 2);
     const cx = (wp[a * 3] + wp[b * 3] + wp[c * 3]) / 3;
     const cz = (wp[a * 3 + 2] + wp[b * 3 + 2] + wp[c * 3 + 2]) / 3;
-    const key = `${Math.floor(cx / cell)},${Math.floor(cz / cell)}`;
+    const key = (Math.floor(cx / cell) + 512) * 1024 + (Math.floor(cz / cell) + 512);
     let arr = buckets.get(key);
     if (!arr) buckets.set(key, (arr = []));
     arr.push(t);
   }
   const remap = new Int32Array(n).fill(-1);
   const out = new Map<string, THREE.BufferGeometry>();
-  for (const [key, tris] of buckets) {
+  for (const [nkey, tris] of buckets) {
+    const key = `${Math.floor(nkey / 1024) - 512},${(nkey % 1024) - 512}`;
     const verts: number[] = [];
     const inds: number[] = [];
     const touched: number[] = [];
@@ -360,6 +379,7 @@ export class StaticBatcher implements System {
     // Zone builders' own shadow proxies (central lib/batch.ts: one per 120 m chunk, up to ~110k tris each) are
     // re-cut into our 48 m cells, so the shadow pass only draws the triangles near Jimothy.
     let recut = 0;
+    const tRecut0 = performance.now();
     world.staticRoot.traverse((o) => {
       const p = o as THREE.Mesh;
       if (!p.isMesh || !p.userData.shadowOnly || !p.visible || Array.isArray(p.material)) return;
@@ -377,6 +397,7 @@ export class StaticBatcher implements System {
       p.visible = false;
       recut++;
     });
+    const tRecut = performance.now() - tRecut0;
     for (const [key, arr] of groups) {
       if (arr.length < 2) {
         // Singletons stay as they are, but their shadow can still move into a proxy
@@ -421,6 +442,7 @@ export class StaticBatcher implements System {
         removed++;
       }
     }
+    const tProxy0 = performance.now();
     // Build the shadow-only proxies
     let proxies = 0;
     const proxyMats = new Map<THREE.Side, THREE.MeshBasicMaterial>();
@@ -447,6 +469,7 @@ export class StaticBatcher implements System {
       out.add(proxy);
       proxies++;
     }
+    const tProxy = performance.now() - tProxy0;
     game.scene.add(out);
     this.report = {
       candidates: meshes.length,
@@ -457,9 +480,13 @@ export class StaticBatcher implements System {
       shadowProxies: proxies,
       proxiesRecut: recut,
       ms: Math.round(performance.now() - t0),
+      msRecut: Math.round(tRecut),
+      msProxies: Math.round(tProxy),
     };
     console.info('[batcher]', this.report);
     // The map captures the world top-down; refresh it now that everything is final
     game.events.emit('worldBatched', this.report);
+    // …and compile every remaining shader in the background so new areas don't hitch when they come into view
+    warmShaders(game);
   }
 }

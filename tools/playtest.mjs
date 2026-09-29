@@ -240,26 +240,63 @@ function installHelpers(full) {
       idle();
       return t;
     },
-    /** Roll toward the nearest standing NPC (inside an optional [x0,z0,x1,z1] box) for `secs`. */
-    bowl(secs, box) {
+    /** Roll (sprinting) back and forth along the car-free waterfront promenade (z ≈ 152, x ±45) for `secs`. */
+    promenadeRoll(secs, untilDone) {
+      const cam = g.get('camera');
+      if (p.mode === 'roll') this.press('roll');
+      this.tp(-45, 152, Math.PI / 2);
+      this.press('roll');
+      g.input.virtual.buttons.add('sprint');
+      let dir = 1, t = 0;
+      while (t < secs && !(untilDone && O.isDone(untilDone))) {
+        if (p.position.x > 45) dir = -1;
+        if (p.position.x < -45) dir = 1;
+        cam.snapBehind(Math.atan2(dir, (152 - p.position.z) * 0.05));
+        g.input.virtual.move.set(0, 1);
+        g.advance(0.1);
+        t += 0.1;
+        if (p.mode !== 'roll' && p.mode !== 'ragdoll') this.press('roll');
+      }
+      idle();
+      return +t.toFixed(1);
+    },
+    /**
+     * One long sprint-roll bowling through people: chase the nearest standing, non-scripted NPC south of z = minZ;
+     * give up on a target after ~1.2 s (behind a counter, fled…) and never re-target someone already bowled.
+     */
+    bowl(secs, minZ = -50, until) {
       const cam = g.get('camera');
       if (p.mode !== 'roll') this.press('roll');
       g.input.virtual.buttons.add('sprint');
-      for (let k = 0; k < secs * 10; k++) {
-        let best = null, bd = 1e9;
-        for (const n of g.get('npcs').list) {
-          if (n.ragdolled || n.removed) continue;
-          if (box && (n.position.x < box[0] || n.position.x > box[2] || n.position.z < box[1] || n.position.z > box[3])) continue;
-          const d = Math.hypot(n.position.x - p.position.x, n.position.z - p.position.z);
-          if (d < bd) { bd = d; best = n; }
+      const bowled = new Set();
+      const off = g.events.on('npcRagdoll', (e) => e?.cause === 'roll' && e.entity && bowled.add(e.entity.id));
+      const tried = new Map();
+      let target = null, stuck = 0;
+      const last = p.position.clone();
+      for (let t = 0; t < secs && !(until && until()); t += 0.1) {
+        if (!target || target.ragdolled || target.removed || bowled.has(target.entity.id) || (tried.get(target.entity.id) ?? 0) > 1.2) {
+          let bd = 1e9;
+          target = null;
+          for (const n of g.get('npcs').list) {
+            if (n.ragdolled || n.removed || n.passive || bowled.has(n.entity.id) || (tried.get(n.entity.id) ?? 0) > 1.2 || n.position.z < minZ) continue;
+            const d = Math.hypot(n.position.x - p.position.x, n.position.z - p.position.z);
+            if (d < bd) { bd = d; target = n; }
+          }
+          if (!target) break;
         }
-        if (!best) break;
-        cam.snapBehind(Math.atan2(best.position.x - p.position.x, best.position.z - p.position.z));
+        // only time spent right next to a target counts against it (unreachable behind a counter, fleeing in circles…)
+        if (Math.hypot(target.position.x - p.position.x, target.position.z - p.position.z) < 8) tried.set(target.entity.id, (tried.get(target.entity.id) ?? 0) + 0.1);
+        cam.snapBehind(Math.atan2(target.position.x - p.position.x, target.position.z - p.position.z));
         g.input.virtual.move.set(0, 1);
         g.advance(0.1);
-        if (p.mode !== 'roll') break;
+        stuck = p.position.distanceTo(last) < 0.1 ? stuck + 0.1 : 0;
+        last.copy(p.position);
+        if (stuck > 1) { this.press('jump'); stuck = 0; }
+        if (p.mode !== 'roll' && p.mode !== 'ragdoll') this.press('roll');
       }
+      off();
       idle();
+      return bowled.size;
     },
     /** Advance quest dialogues with real Space key presses (real-time waits: the dialog ignores instant presses). */
     async closeDialogs(n = 24) {
@@ -460,7 +497,7 @@ const objScenarios = {
       T.release();
       const puddle = T.water('Alley Puddle 2');
       const used = new Set();
-      for (let i = 0; i < 14 && !T.O.isDone('wash10'); i++) {
+      for (let i = 0; i < 30 && !T.O.isDone('wash10'); i++) {
         const e = T.nearestEntity((e) => e.alive && e.body && e.tags.has('grabbable') && e.mass <= 3 && !used.has(e.id) && !e.tags.has('cottoncandy') && e.kind !== 'npc' && !e.data.heldByPlayer, puddle.center);
         if (!e) break;
         used.add(e.id);
@@ -557,15 +594,20 @@ const objScenarios = {
       T.release();
       const bins = T.g.entities.list.filter((e) => e.alive && e.tags.has('dumpster'));
       const cam = T.g.get('camera');
+      // jump onto it from the street (try each side: some dumpsters stand against a wall)
       const jumpOn = (d) => {
-        const t = d.body.translation();
-        T.tp(t.x, t.z + 2.4, Math.PI);
-        cam.snapBehind(Math.PI);
-        T.g.input.virtual.move.set(0, 1);
-        T.press('jump');
-        for (let k = 0; k < 20 && !(T.p.grounded && T.p.groundEntity === d); k++) T.step(0.05);
-        T.idle();
-        T.step(0.4);
+        for (const a of [0, Math.PI, Math.PI / 2, -Math.PI / 2]) {
+          const t = d.body.translation();
+          const x = t.x + Math.sin(a) * 2.4, z = t.z + Math.cos(a) * 2.4;
+          T.tp(x, z, a + Math.PI);
+          cam.snapBehind(a + Math.PI);
+          T.g.input.virtual.move.set(0, 1);
+          T.press('jump');
+          for (let k = 0; k < 20 && !(T.p.grounded && T.p.groundEntity === d); k++) T.step(0.05);
+          T.idle();
+          T.step(0.4);
+          if (T.p.groundEntity === d) return;
+        }
       };
       for (const d of bins) jumpOn(d);
       T.step(15); // per-dumpster cooldown
@@ -596,16 +638,15 @@ const objScenarios = {
     return ev(() => {
       T.resetObj('roundBoy');
       T.release();
+      // back and forth along the 300 m cross-town avenue (a car may bowl him over: just roll on)
       T.tp(-100, 60, Math.PI / 2);
       const cam = T.g.get('camera');
       T.press('roll');
       T.g.input.virtual.buttons.add('sprint');
       let dir = 1, t = 0;
-      const secs = T.full ? 70 : 12;
-      while (t < secs && !T.O.isDone('roundBoy')) {
-        const x = T.p.position.x;
-        if (x > 120) dir = -1;
-        if (x < -100) dir = 1;
+      while (t < (T.full ? 75 : 12) && !T.O.isDone('roundBoy')) {
+        if (T.p.position.x > 120) dir = -1;
+        if (T.p.position.x < -100) dir = 1;
         cam.snapBehind(dir > 0 ? Math.PI / 2 : -Math.PI / 2);
         T.g.input.virtual.move.set(0, 1);
         T.step(0.5);
@@ -622,21 +663,8 @@ const objScenarios = {
   async obj_spinMeRound() {
     return ev(() => {
       T.resetObj('spinMeRound');
-      T.tp(-100, 60, Math.PI / 2);
-      const cam = T.g.get('camera');
-      if (T.p.mode !== 'roll') T.press('roll');
-      let dir = 1, t = 0;
-      const secs = T.full ? 62 : 16;
-      while (t < secs && !T.O.isDone('spinMeRound')) {
-        const x = T.p.position.x;
-        if (x > 120) dir = -1;
-        if (x < -100) dir = 1;
-        cam.snapBehind(dir > 0 ? Math.PI / 2 : -Math.PI / 2);
-        T.g.input.virtual.move.set(0, 1);
-        T.step(0.5);
-        t += 0.5;
-      }
-      T.idle();
+      T.release();
+      const t = T.promenadeRoll(T.full ? 64 : 16, 'spinMeRound');
       const r = T.result('spinMeRound', { secs: t });
       if (!T.full) r.pass = r.pass || T.O.get('spinMeRound').progress >= 15;
       if (T.p.mode === 'roll') T.press('roll');
@@ -712,33 +740,40 @@ const objScenarios = {
     });
   },
   async obj_cryptid() {
-    // Filming needs NPCs with phones/cameras to notice Jimothy; hang around the busiest spots.
+    // Walk up to people who carry a phone/camera (tourists, fans, tech bros, some pedestrians) and let them notice
+    // you (no chittering: an "awww" interrupts filming).
     return ev(() => {
       T.resetObj('cryptid');
       T.release();
-      const spots = [[25, 15], [94, 2], [108, 0], [0, 80], [92, 152], [-30, -41], [141, -38], [0, 163], [-92, 157]];
+      const filmers = T.g.get('npcs').list.filter((n) => !n.passive && !n.isCustom && ((n.type === 'tourist' && (n.held?.data.itemKind === 'phone' || n.look.camera)) || (['pedestrian', 'fan', 'techbro'].includes(n.type) && n.held?.data.itemKind === 'phone')));
       let t = 0;
-      for (const [x, z] of spots) {
-        if (T.O.isDone('cryptid')) break;
-        T.tp(x, z, 0);
-        for (let k = 0; k < (T.full ? 16 : 6) && !T.O.isDone('cryptid'); k++) {
-          T.press('chitter');
-          T.step(2.5);
-          t += 2.5;
+      const filmedBy = new Set();
+      const off = T.g.events.on('filmed', (e) => e?.by && filmedBy.add(e.by.id));
+      for (let pass = 0; pass < 2; pass++) {
+        for (const n of filmers) {
+          if (T.O.isDone('cryptid') || filmedBy.has(n.entity.id) || n.removed) continue;
+          const a = Math.random() * Math.PI * 2;
+          const x = n.position.x + Math.sin(a) * 5, z = n.position.z + Math.cos(a) * 5;
+          T.tp(x, z, Math.atan2(n.position.x - x, n.position.z - z));
+          for (let k = 0; k < 40 && !filmedBy.has(n.entity.id); k++) { T.step(0.25); t += 0.25; }
         }
       }
-      const r = T.result('cryptid', { secs: t, filmers: T.g.get('npcs').list.filter((n) => (n.type === 'tourist' && (n.held?.data.itemKind === 'phone' || n.look.camera)) || (['pedestrian', 'fan', 'techbro'].includes(n.type) && n.held?.data.itemKind === 'phone')).length });
-      if (!T.full) r.pass = r.pass || T.O.get('cryptid').progress >= 3;
-      return r;
+      off();
+      return T.result('cryptid', { secs: t, potentialFilmers: filmers.length, filmedBy: filmedBy.size });
     });
   },
   async obj_stickySituation() {
     return ev(() => {
       T.resetObj('stickySituation');
-      T.tp(-26, 88.7, -Math.PI / 2);
-      T.g.get('camera').snapBehind(-Math.PI / 2);
-      T.move(0, 1, 2);
-      T.step(2.5);
+      T.release();
+      // walk west into the Gum Wall in Post Alley (try a few spots along it: people wander the alley)
+      for (const z of [88.7, 84, 93]) {
+        if (T.O.isDone('stickySituation')) break;
+        T.tp(-26, z, -Math.PI / 2);
+        T.g.get('camera').snapBehind(-Math.PI / 2);
+        T.move(0, 1, 2.5);
+        T.step(3);
+      }
       return T.result('stickySituation');
     });
   },
@@ -852,6 +887,34 @@ const objScenarios = {
         }
         climbed = s1.collected;
       }
+      // the street clock (c3): its top can't be climbed onto from the pole — climb the shop front behind it and
+      // wall-jump across
+      const c3 = C.items.find((b) => b.id === 'bobblehead:c3');
+      let clock = null;
+      if (c3 && !c3.collected) {
+        const cam = T.g.get('camera');
+        const ahead = new T.V(c3.pos.x + 0.5, 0, c3.pos.z - 1.3); // facade is ~2 m north of the clock
+        const hit = T.g.physics.raycast(new T.V(ahead.x, 3, c3.pos.z), new T.V(0, 0, -1), 6);
+        const wallZ = hit ? hit.point.z : c3.pos.z - 2;
+        T.p.teleport(new T.V(ahead.x, T.w.heightAt(ahead.x, wallZ + 0.7) + 0.6, wallZ + 0.7), Math.PI);
+        T.step(0.3);
+        for (let t = 0; t < 6 && T.p.position.y < c3.pos.y + 0.25; t += 0.05) {
+          cam.snapBehind(Math.PI);
+          T.g.input.virtual.move.set(0, 1);
+          if (T.p.mode === 'walk') T.g.input.virtual.buttons.add('jump');
+          else T.g.input.virtual.buttons.delete('jump');
+          T.step(0.05);
+        }
+        T.idle();
+        T.press('jump'); // wall jump back toward the clock
+        for (let i = 0; i < 40 && !c3.collected; i++) {
+          cam.snapBehind(Math.atan2(c3.pos.x - T.p.position.x, c3.pos.z - T.p.position.z));
+          T.g.input.virtual.move.set(0, 0.6);
+          T.step(0.05);
+        }
+        T.idle();
+        clock = c3.collected;
+      }
       const missed = [];
       for (const b of C.items) {
         if (b.collected) continue;
@@ -865,7 +928,7 @@ const objScenarios = {
         }
         if (!ok) missed.push(b.id);
       }
-      return T.result('bobbleheadCollector', { placed: C.items.length, climbedGasworks: climbed, missed, bobbleheadMutator: T.g.get('mutators').get('bobblehead')?.unlocked });
+      return T.result('bobbleheadCollector', { placed: C.items.length, climbedGasworks: climbed, wallJumpedClock: clock, missed, bobbleheadMutator: T.g.get('mutators').get('bobblehead')?.unlocked });
     });
   },
   // ---------------------------------------------------------------- AI slop
@@ -1242,26 +1305,32 @@ const objScenarios = {
       T.step(0.1);
       const A = S.crowd.actors.filter((a) => a.alive);
       const c = A.reduce((acc, a) => acc.add(a.position), new T.V()).multiplyScalar(1 / Math.max(1, A.length));
+      // step down toward them until ~6 m away, then a low lob (lands ~6 m out)
+      for (let k = 0; k < 40 && Math.hypot(c.x - T.p.position.x, c.z - T.p.position.z) > 6; k++) {
+        cam.snapBehind(Math.atan2(c.x - T.p.position.x, c.z - T.p.position.z));
+        T.g.input.virtual.move.set(0, 1);
+        T.step(0.1);
+      }
+      T.idle();
       const d = Math.hypot(c.x - T.p.position.x, c.z - T.p.position.z);
       const f = Math.atan2(c.x - T.p.position.x, c.z - T.p.position.z);
       T.p.facing = f;
       cam.snapBehind(f);
-      cam.pitch = d > 7 ? -0.05 : 0.35;
+      cam.pitch = 0.25;
+      const boom0 = T.count('explosion');
       T.press('bonk'); // throw
       T.step(6);
-      return T.result('chainReaction', { crowd: A.length, dist: +d.toFixed(1), explosions: T.count('explosion'), bestEffort: true });
+      return T.result('chainReaction', { crowd: A.length, dist: +d.toFixed(1), exploded: T.count('explosion') > boom0, bestEffort: true });
     });
   },
   async obj_strike() {
     return ev(() => {
       T.resetObj('strike');
       T.release();
-      T.tp(0, 78, 0);
-      T.bowl(T.full ? 150 : 45, [-60, 65, 60, 175]);
+      T.tp(0, 70, Math.PI); // the market / waterfront crowds
+      const bowled = T.bowl(T.full ? 180 : 60, -50, () => T.O.isDone('strike'));
       if (T.p.mode === 'roll') T.press('roll');
-      const r = T.result('strike');
-      if (!T.full) r.pass = r.pass || T.O.get('strike').progress >= 3;
-      return r;
+      return T.result('strike', { bowled });
     });
   },
   async obj_carSurfer() {

@@ -345,9 +345,10 @@ function buildControls(api: MenuApi) {
   table.append(tb);
   wrap.append(table);
   if (api.isTouch) {
-    wrap.append(
+    // Phones: the touch layout first (the key table is for keyboards / pads)
+    wrap.prepend(
       h('p', {
-        class: 'ctl-note',
+        class: 'ctl-note ctl-touch',
         text: 'Touch: drag on the left side to move (push the stick all the way to sprint), drag on the right side to look, and use the round buttons for everything else. Top-right: Instincts, photo mode and pause. Tap the minimap for the big map; tap an icon there to track it.',
       }),
     );

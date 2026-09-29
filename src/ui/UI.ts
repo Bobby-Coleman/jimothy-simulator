@@ -325,6 +325,12 @@ export class UI implements System, MenuApi, TitleApi, IntroApi, TouchApi {
     this.sfx('ui_open');
   }
 
+  /** IntroApi: the first suggested goal, so the intro's final camera sweep looks that way. */
+  introGoal() {
+    this.guide.resolve();
+    return this.guide.current()?.pos ?? null;
+  }
+
   onIntroDone(_skipped: boolean) {
     const first = !this.introSeen;
     this.introSeen = true;

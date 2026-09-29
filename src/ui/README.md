@@ -118,9 +118,9 @@ camera_shutter whoosh boing impact_heavy jingle_win trill bonk`.
 next to it. `tools/shots/ui/vite.nohmr.config.mjs` starts a private dev server on :5191 without HMR so other agents'
 saves don't reload the page mid-test.
 
-UX QA scripts: `tools/shots/ux/ux.mjs` (same helpers + `tap`, `drag` (CDP touch), `blurPage`, `resize`, and
+UX QA scripts (local — `tools/shots/` is gitignored): `tools/shots/ux/ux.mjs` (same helpers + `tap`, `drag` (CDP touch), `blurPage`, `resize`, and
 multi-phase scripts split by a `//---RELOAD---` line for persistence tests). Scripts next to it: `first5.js` (new
 player: title → intro → coach → guide → drawer → map), `mobile.js` (full touch flow + HUD overlap audit, run with
 `--touch --size 390x844` / `844x390`), `menus.js` (settings persistence + reset, 3 phases), `robust.js` (Esc/Tab/M/V
-spam, focus loss, dialogs vs menus, resize), `guide.js` (follow the first goal), `dialogs.js`. Test against a stable
+spam, focus loss, dialogs vs menus, resize), `guide.js` (follow the first goal), `dialogs.js`, `keys.js`; `run_all.sh` runs them all. Test against a stable
 build: `npx vite build --outDir tools/_downloads/ux_build --emptyOutDir` + `npx vite preview --outDir tools/_downloads/ux_build --port 5196`.

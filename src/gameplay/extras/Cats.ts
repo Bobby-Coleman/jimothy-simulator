@@ -4,7 +4,7 @@ import type RAPIER_T from '@dimforge/rapier3d-compat';
 import { RAPIER, G, groups } from '../../core/Physics';
 import type { Entity } from '../../core/Entities';
 import type { ExtrasFeature, ExtrasHost } from './host';
-import { surfaceAt, groundY, poi, playerOf, speech, pick, rand, dampAngle } from './shared';
+import { surfaceAt, groundY, poi, playerOf, speech, pick, rand, dampAngle, paintMat } from './shared';
 
 /**
  * ACTUAL CATS. Canon: the lady who filmed Jimothy thought he was a cat until he turned around. So the town has a few
@@ -67,15 +67,15 @@ const SPOTS: Spot[] = [
   {
     id: 'market',
     name: 'Sardine',
-    tint: [1.9, 1.2, 0.62],
+    tint: [0.96, 0.56, 0.22], // orange tabby fur (sRGB)
     place: (h) => {
       const g = h.game;
       const m = poi(g, 'fishMarket', new THREE.Vector3(0, 0.1, 94.2));
-      // the fish stall's steel work counter behind the ice display (top ≈ 0.9 m)
+      // the fish stall's steel work counter behind the ice display (top ≈ 0.9 m), clear of the ice crates
       for (const [dx, dz] of [
-        [-4.4, 0.9],
-        [-2.6, 0.9],
-        [4.6, 0.9],
+        [-2.5, 0.9],
+        [1.6, 0.9],
+        [4.9, 0.9],
       ]) {
         const x = m.x + dx;
         const z = m.z + dz;
@@ -88,7 +88,7 @@ const SPOTS: Spot[] = [
   {
     id: 'booth',
     name: 'Judge Biscuit',
-    tint: [1.65, 1.55, 1.38],
+    tint: [0.95, 0.91, 0.84], // cream-white fur (sRGB)
     place: (h) => {
       const g = h.game;
       const park = poi(g, 'teeHeePark', new THREE.Vector3(92, 0.2, 154));
@@ -206,8 +206,12 @@ class Cat {
     speech(game, { object: this.root, offsetY: 0.9 }, pick(['HSSSSS!', 'Hsss.', '*unimpressed hiss*', 'Mrrrow. No.']), 1.8, this, 'shout');
   }
 
+  private declineCd = 0;
+
   decline(action: 'grab' | 'bonk' | 'wash') {
     const game = this.game;
+    if (this.game.time < this.declineCd) return;
+    this.declineCd = this.game.time + 0.6;
     const p = playerOf(game)?.position as THREE.Vector3 | undefined;
     this.declines++;
     if (p) this.hiss(p);
@@ -263,6 +267,7 @@ export class CatFeature implements ExtrasFeature {
   readonly id = 'cats';
   readonly cats: Cat[] = [];
   private metCount = 0;
+  private npcLines = 0;
   private metNames = new Set<string>();
 
   constructor(private host: ExtrasHost) {}
@@ -332,30 +337,34 @@ export class CatFeature implements ExtrasFeature {
     bodyGeo.computeBoundingSphere();
     const tg = found.tail ?? new THREE.BufferGeometry();
     const tailMatrix = found.tailMatrix;
-    const base = found.mat.clone();
-    // palette texture: nearest filtering keeps the flat colours crisp (no palette bleeding in mips)
-    if (base.map) {
-      const map = base.map.clone();
-      map.magFilter = THREE.NearestFilter;
-      map.minFilter = THREE.NearestFilter;
-      map.generateMipmaps = false;
-      map.needsUpdate = true;
-      base.map = map;
-    }
-    const mats = new Map<string, THREE.Material>();
+    // Kenney palette kits colour by UV into one palette texture. Bake those colours into vertex colours so each
+    // cat gets its own fur (recoloured by hue, eyes & nose untouched) with the ONE shared extras material.
+    const palette = readImage(found.mat.map?.image);
+    let fallback: THREE.MeshStandardMaterial | null = null;
     for (const { s, pos, yaw } of spots) {
-      let mat: THREE.Material = base;
-      if (s.tint) {
-        const key = s.tint.join(',');
-        if (!mats.has(key)) {
-          const m = base.clone() as THREE.MeshStandardMaterial;
-          m.color.setRGB(s.tint[0], s.tint[1], s.tint[2]);
-          mats.set(key, m);
+      let mat: THREE.Material;
+      let bg = bodyGeo;
+      let tgeo = tg;
+      if (palette) {
+        bg = bakeColors(bodyGeo, palette, s.tint);
+        tgeo = bakeColors(tg, palette, s.tint);
+        mat = paintMat();
+      } else {
+        if (!fallback) {
+          fallback = found.mat.clone();
+          if (fallback.map) {
+            const map = fallback.map.clone();
+            map.magFilter = THREE.NearestFilter;
+            map.minFilter = THREE.NearestFilter;
+            map.generateMipmaps = false;
+            map.needsUpdate = true;
+            fallback.map = map;
+          }
         }
-        mat = mats.get(key)!;
+        mat = fallback;
       }
       try {
-        const cat = new Cat(this.host, s.name, pos, yaw, bodyGeo, tg, tailMatrix.clone(), mat);
+        const cat = new Cat(this.host, s.name, pos, yaw, bg, tgeo, tailMatrix.clone(), mat);
         this.cats.push(cat);
         this.game.get<any>('world')?.poi?.set(`cat:${s.id}`, pos.clone());
       } catch (err) {
@@ -392,11 +401,13 @@ export class CatFeature implements ExtrasFeature {
       if (list.length && Math.random() < 0.85) {
         list.sort((a, b) => a.position.distanceToSquared(cat.home) - b.position.distanceToSquared(cat.home));
         const npc = list[0];
+        // the canon joke first ("Oh cool, a real cat" — people thought Jimothy was one), then variations
+        const text = this.npcLines++ === 0 ? NPC_LINES[0] : pick(NPC_LINES);
         setTimeoutGame(game, 1.3, () => {
           if (npc.removed || npc.ragdolled) return;
           try {
             npc.lookAt?.(cat.home.clone());
-            npc.say?.(pick(NPC_LINES), 3);
+            npc.say?.(text, 3);
             npc.setExpression?.('happy');
           } catch {
             /* optional */
@@ -408,12 +419,33 @@ export class CatFeature implements ExtrasFeature {
   }
 
   update(dt: number) {
-    const p = playerOf(this.game)?.position as THREE.Vector3 | undefined;
+    const game = this.game;
+    const player = playerOf(game);
+    const p = player?.position as THREE.Vector3 | undefined;
     for (const c of this.cats) {
       if (p && c.home.distanceToSquared(p) > 70 * 70) continue;
       c.update(dt, p);
     }
-    tickGameTimers(this.game);
+    // Cats perch out of paw's reach (fences, counters, roofs): a grab / bonk / wash aimed at one from below still
+    // gets the polite refusal (the entity callbacks cover the within-reach case).
+    if (player && p && !player.frozen) {
+      const inp = game.input;
+      const act = inp.pressed('grab') ? 'grab' : inp.pressed('bonk') ? 'bonk' : inp.pressed('wash') ? 'wash' : null;
+      if (act && !(act === 'grab' && player.held)) {
+        for (const c of this.cats) {
+          const dx = c.home.x - p.x;
+          const dz = c.home.z - p.z;
+          const d = Math.hypot(dx, dz);
+          const dy = c.home.y - p.y;
+          if (d > 1.8 || dy < -1 || dy > 2.4) continue;
+          const f = d > 1e-3 ? (dx * Math.sin(player.facing) + dz * Math.cos(player.facing)) / d : 1;
+          if (d > 0.7 && f < 0.3) continue;
+          c.decline(act);
+          break;
+        }
+      }
+    }
+    tickGameTimers(game);
   }
 
   /** Debug/test: teleport next to a cat. */
@@ -427,6 +459,70 @@ export class CatFeature implements ExtrasFeature {
     player.teleport(at, Math.atan2(c.home.x - at.x, c.home.z - at.z));
     return true;
   }
+}
+
+// ------------------------------------------------------------------------------------------- palette baking
+interface Pixels {
+  data: Uint8ClampedArray;
+  w: number;
+  h: number;
+}
+
+function readImage(img: any): Pixels | null {
+  if (!img || typeof document === 'undefined') return null;
+  try {
+    const w = img.width ?? img.naturalWidth;
+    const h = img.height ?? img.naturalHeight;
+    if (!w || !h) return null;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0);
+    return { data: ctx.getImageData(0, 0, w, h).data, w, h };
+  } catch {
+    return null;
+  }
+}
+
+const _c = new THREE.Color();
+const _hsl = { h: 0, s: 0, l: 0 };
+
+/**
+ * Copy of `geo` with a vertex 'color' attribute sampled from the palette at each vertex UV (glTF UVs: v down).
+ * `fur` (sRGB 0..1) replaces the cool-grey fur hues, keeping each palette cell's lightness (eyes stay yellow).
+ */
+function bakeColors(geo: THREE.BufferGeometry, px: Pixels, fur?: [number, number, number]): THREE.BufferGeometry {
+  const g = geo.clone();
+  const uv = g.getAttribute('uv') as THREE.BufferAttribute | undefined;
+  const pos = g.getAttribute('position');
+  if (!uv || !pos) return g;
+  const n = pos.count;
+  const col = new Float32Array(n * 3);
+  const target = fur ? new THREE.Color().setRGB(fur[0], fur[1], fur[2], THREE.SRGBColorSpace) : null;
+  const tHsl = { h: 0, s: 0, l: 0 };
+  target?.getHSL(tHsl);
+  for (let i = 0; i < n; i++) {
+    const u = ((uv.getX(i) % 1) + 1) % 1;
+    const v = ((uv.getY(i) % 1) + 1) % 1;
+    const x = Math.min(px.w - 1, Math.floor(u * px.w));
+    const y = Math.min(px.h - 1, Math.floor(v * px.h));
+    const k = (y * px.w + x) * 4;
+    _c.setRGB(px.data[k] / 255, px.data[k + 1] / 255, px.data[k + 2] / 255, THREE.SRGBColorSpace);
+    if (target) {
+      _c.getHSL(_hsl);
+      // the cube cat's fur is a cool blue-grey; eyes are warm, pupils/nose near-black → leave those alone
+      const coolFur = _hsl.h > 0.5 && _hsl.h < 0.8 && _hsl.l > 0.12;
+      if (coolFur) _c.setHSL(tHsl.h, tHsl.s, THREE.MathUtils.clamp(tHsl.l * (_hsl.l / 0.42), 0.05, 0.95));
+    }
+    col[i * 3] = _c.r;
+    col[i * 3 + 1] = _c.g;
+    col[i * 3 + 2] = _c.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.deleteAttribute('uv');
+  return g;
 }
 
 // tiny game-time timer list (NPC reaction delay)

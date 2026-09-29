@@ -19,7 +19,7 @@ import { OBJECTIVES } from './objectiveDefs';
  *   moneyLaundering     wash/itemWashed of cash                      deepClean       wash/itemWashed of a phone
  *   dumpsterDiver       'dumpsterDive' ×5 (items: 15 s cooldown/bin) trashTornado    'trashTipped' ×20
  *   roundBoy            player.stats.rolled (cumulative, 500 m)      notACat         'notACat'
- *   cryptid             'filmed' {by} ×15 unique people              fiveFingerDisc. 'steal'/'grab' of a pizza
+ *   cryptid             'filmed' {by} ×12 unique people              fiveFingerDisc. 'steal'/'grab' of a pizza
  *   stickyFingers       'steal' ×10 unique items                     stickySituation 'gumWall'
  *   spaceNoodle         'noodleSummit' | y > 56 near POI spaceNoodleTop     nocturnal   environment.isNight for 60 s
  *   bathTime            swim in 4 water kinds (persisted set)        marathon        player.stats.distance 2 km

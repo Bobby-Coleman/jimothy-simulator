@@ -40,6 +40,10 @@ const POIS: PoiDef[] = [
   { re: /^salmonRunStart$/, icon: '⚾', label: 'Salmon Run', obj: 'salmonRun' },
   { re: /^mural$/, icon: '🎨', label: 'Mural' },
   { re: /^locks$/, icon: '⚓', label: 'The Locks' },
+  { re: /^cannon:stadium$/, icon: '💥', label: 'Raccoon Cannon' },
+  { re: /^cannon:noodle$/, icon: '💥', label: 'Bay Blaster' },
+  { re: /^wheelGondola$/, icon: '🎡', label: 'Pretty Good Wheel' },
+  { re: /^dragonPad$/, icon: '🐉', label: 'Slop Dragon', obj: 'dragonRider' },
 ];
 
 interface DrawnPoi {

@@ -51,7 +51,7 @@ export class DannyQuest implements HeartQuest {
     if (!this.done) {
       if (!this.hinted) {
         this.hinted = true;
-        ctx.hint('Danny chitters back! He wants to roll with you. Tuck & Roll (Q) right next to him!', 5);
+        ctx.hint('Danny chitters back! He wants to roll with you. Tuck & Roll {roll} right next to him!', 5);
       }
       ctx.onProgress('danny', 'Danny wants to roll! Tuck & Roll (Q) next to him.');
     } else {
@@ -68,7 +68,7 @@ export class DannyQuest implements HeartQuest {
     // nudge the player the first time they're close
     if (!this.done && !this.nearHint && ctx.distToPlayer(danny.pos) < 7) {
       this.nearHint = true;
-      ctx.hint("It's Danny, the other round raccoon! He looks... familiar. Try chittering at him (C).", 4.5);
+      ctx.hint("It's Danny, the other round raccoon! He looks... familiar. Try chittering at him {chitter}.", 4.5);
     }
 
     if (danny.inviting && !this.playing) {

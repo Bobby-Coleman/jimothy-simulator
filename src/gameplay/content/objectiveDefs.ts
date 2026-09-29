@@ -14,7 +14,7 @@ export const OBJECTIVES: ObjectiveDef[] = [
   { id: 'trashTornado', category: 'raccoon', points: 1500, target: 20, title: 'Trash Panda Tornado', desc: 'Tip over 20 trash cans. The bins had it coming.' },
   { id: 'roundBoy', category: 'raccoon', points: 1500, target: 500, title: 'Round Boy', desc: 'Roll 500 m in total. Aerodynamically: a ball.', reward: 'chonk' },
   { id: 'notACat', category: 'raccoon', points: 750, title: 'Not A Cat', desc: "Let someone call 'here kitty kitty'. Then turn around." },
-  { id: 'cryptid', category: 'raccoon', points: 1500, target: 15, title: 'Cryptid Sighting', desc: 'Get filmed by 15 different people. Every photo is somehow blurry.' },
+  { id: 'cryptid', category: 'raccoon', points: 1500, target: 12, title: 'Cryptid Sighting', desc: 'Get filmed by 12 different people. Every photo is somehow blurry.' },
   { id: 'fiveFingerDiscount', category: 'raccoon', points: 750, title: 'Five-Finger Discount', desc: 'Steal a whole pizza. Tiny hands, big dreams.' },
   { id: 'stickyFingers', category: 'raccoon', points: 1500, target: 10, title: 'Sticky Fingers', desc: 'Steal 10 things from humans. Phones, lunches, their sense of security.' },
   { id: 'stickySituation', category: 'raccoon', points: 750, title: 'Sticky Situation', desc: 'Get stuck to the Gum Wall. Ew. Ewww. Ewwwww.' },

@@ -30,8 +30,12 @@ export const TREE_TOP: Record<TreeKind, number> = { maple: 7.2, plum: 5.2, cherr
 const templateCache = new Map<string, THREE.Group>();
 
 /** Build (cached) a tree template: two meshes (bark + leaves) with vertex colours. */
-export function treeTemplate(kind: TreeKind, variant: number, mats: MatSet): THREE.Group {
-  const key = `${kind}:${variant}`;
+/** perf: 7-sided cone for the low-poly backdrop conifers. */
+const CONE7 = new THREE.ConeGeometry(0.5, 1, 7, 1);
+
+/** `lowPoly` (perf): fewer, coarser tiers for the out-of-bounds backdrop forest (~87 vs ~176 tris per fir). */
+export function treeTemplate(kind: TreeKind, variant: number, mats: MatSet, lowPoly = false): THREE.Group {
+  const key = `${kind}:${variant}${lowPoly ? ':lo' : ''}`;
   const hit = templateCache.get(key);
   if (hit) return hit;
   const r = rng(1000 + variant * 97 + kind.length * 13);
@@ -46,7 +50,7 @@ export function treeTemplate(kind: TreeKind, variant: number, mats: MatSet): THR
     };
   };
   const trunk = (h: number, rad: number) => {
-    bark.add('bark', GEO.cyl8, trs(0, h / 2, 0, rad * 2, h, rad * 2), spec.bark);
+    bark.add('bark', lowPoly ? GEO.cyl6 : GEO.cyl8, trs(0, h / 2, 0, rad * 2, h, rad * 2), spec.bark);
   };
   switch (kind) {
     case 'maple':
@@ -118,13 +122,13 @@ export function treeTemplate(kind: TreeKind, variant: number, mats: MatSet): THR
     case 'cedar': {
       const tall = kind === 'fir' ? 13 : 10.5;
       trunk(spec.trunkH + 1.5, spec.trunkR);
-      const tiers = kind === 'fir' ? 6 : 5;
+      const tiers = lowPoly ? 3 : kind === 'fir' ? 6 : 5;
       for (let i = 0; i < tiers; i++) {
         const t = i / tiers;
         const rad = (kind === 'fir' ? 3.0 : 2.6) * (1 - t * 0.78);
         const y0 = spec.trunkH + t * (tall - spec.trunkH - 1.2);
         const hgt = (tall - spec.trunkH) / tiers + 1.4;
-        leaves.add('leaves', GEO.cone, trs(0, y0 + hgt / 2, 0, rad * 2, hgt, rad * 2, r() * 6), 0xffffff, { shade: shadeLeaf(leafCol(i)) });
+        leaves.add('leaves', lowPoly ? CONE7 : GEO.cone, trs(0, y0 + hgt / 2, 0, rad * 2, hgt, rad * 2, r() * 6), 0xffffff, { shade: shadeLeaf(leafCol(i)) });
       }
       break;
     }
@@ -165,7 +169,7 @@ export function plantTrees(
   mats: MatSet,
   kind: TreeKind,
   list: ([number, number] | [number, number, number])[],
-  opts: { seed?: number; scale?: [number, number]; collider?: boolean; variants?: number; castShadow?: boolean } = {},
+  opts: { seed?: number; scale?: [number, number]; collider?: boolean; variants?: number; castShadow?: boolean; lowPoly?: boolean } = {},
 ) {
   if (!list.length) return;
   const r = rng(opts.seed ?? 7);
@@ -188,7 +192,7 @@ export function plantTrees(
   }
   buckets.forEach((b, v) => {
     if (b.length) {
-      const g = instances(world, treeTemplate(kind, v, mats), b, { castShadow: opts.castShadow });
+      const g = instances(world, treeTemplate(kind, v, mats, opts.lowPoly), b, { castShadow: opts.castShadow });
       if (opts.castShadow === false) g.traverse((o) => (o.userData.noMerge = true));
     }
   });
@@ -206,6 +210,7 @@ export function plantBackdrop(game: Game, world: World, mats: MatSet) {
   for (let z = -201; z > -262; z -= 7.5) for (let x = -262; x <= 262; x += 7.5) add(x, z);
   for (const s of [-1, 1])
     for (let z = -60; z > -201; z -= 8) for (let x = 203; x <= 262; x += 8) add(s * x, z);
-  plantTrees(game, world, mats, 'fir', firs, { seed: 301, scale: [1.0, 1.8], collider: false, castShadow: false });
-  plantTrees(game, world, mats, 'cedar', cedars, { seed: 302, scale: [1.0, 1.7], collider: false, castShadow: false });
+  // perf: low-poly templates — ~900 always-visible silhouettes were ~150k triangles every frame
+  plantTrees(game, world, mats, 'fir', firs, { seed: 301, scale: [1.0, 1.8], collider: false, castShadow: false, lowPoly: true });
+  plantTrees(game, world, mats, 'cedar', cedars, { seed: 302, scale: [1.0, 1.7], collider: false, castShadow: false, lowPoly: true });
 }

@@ -21,6 +21,8 @@ export class CameraRig implements System {
   baseFov = 62;
   /** When set, the camera is driven externally (cutscenes). */
   override: ((cam: THREE.PerspectiveCamera, dt: number) => void) | null = null;
+  private ceilT = 0;
+  private ceilY = Infinity;
   /** Target to follow; defaults to the player. */
   follow: (() => THREE.Vector3) | null = null;
   private game!: Game;
@@ -73,10 +75,29 @@ export class CameraRig implements System {
     this.pivot.y += (target.y - this.pivot.y) * ky;
     if (this.pivot.distanceToSquared(target) > 100) this.pivot.copy(target);
 
-    _dir.set(Math.sin(this.yaw) * Math.cos(this.pitch), -Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch));
+    const player = game.get<any>('player');
+    // Low ceilings (the den under Mom's porch, decks, tunnels): keep the pivot under the ceiling and flatten the
+    // camera so it looks along the gap instead of jamming into the boards above.
+    let pitch = this.pitch;
+    if (!this.follow && player?.position) {
+      this.ceilT -= dt;
+      if (this.ceilT <= 0) {
+        this.ceilT = 0.1;
+        const up = game.physics.raycast(player.position, _v.set(0, 1, 0), 2.4, groups(G.ALL, G.WORLD), player.body, (c) => !game.physics.isThin(c));
+        this.ceilY = up ? up.point.y : Infinity;
+      }
+      if (Number.isFinite(this.ceilY)) {
+        const maxPivot = this.ceilY - 0.3;
+        if (this.pivot.y > maxPivot) this.pivot.y = Math.max(player.position.y, maxPivot);
+        const maxRise = this.ceilY - 0.25 - this.pivot.y;
+        const d = Math.max(0.5, this.targetDistance);
+        if (-Math.sin(pitch) * d > maxRise) pitch = -Math.asin(THREE.MathUtils.clamp(maxRise / d, -0.4, 1));
+      }
+    }
+
+    _dir.set(Math.sin(this.yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(this.yaw) * Math.cos(pitch));
     // Collision: pull the camera in front of walls
     let dist = this.targetDistance;
-    const player = game.get<any>('player');
     // Ignore thin things (lamp posts, poles, trunks) so the camera doesn't pump in and out on busy streets
     const hit = game.physics.sphereCast(this.pivot, _dir, 0.22, dist, groups(G.ALL, G.WORLD | G.VEHICLE), player?.body, (c) => !game.physics.isThin(c));
     if (hit) dist = Math.max(0.5, hit.distance - 0.05);

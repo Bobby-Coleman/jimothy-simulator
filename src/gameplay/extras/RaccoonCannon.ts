@@ -181,14 +181,15 @@ export class Cannon {
       const signGroup = new THREE.Group();
       signGroup.position.set(sx, 0, sz);
       signGroup.rotation.y = sy; // π: readable from behind the cannon (where you load it)
+      // posts behind the board, the printed face in front of it (facing the group's +Z)
       const post = paintMesh([
-        { g: new THREE.BoxGeometry(0.12, 1.9, 0.12), c: 0x3d3a44, m: T(-0.8, 0.95, 0.06) },
-        { g: new THREE.BoxGeometry(0.12, 1.9, 0.12), c: 0x3d3a44, m: T(0.8, 0.95, 0.06) },
-        { g: new THREE.BoxGeometry(2.3, 1.2, 0.06), c: 0x1d1a26, m: T(0, 1.55, 0.02) },
+        { g: new THREE.BoxGeometry(0.12, 2.1, 0.12), c: 0x3d3a44, m: T(-0.8, 1.05, -0.1) },
+        { g: new THREE.BoxGeometry(0.12, 2.1, 0.12), c: 0x3d3a44, m: T(0.8, 1.05, -0.1) },
+        { g: new THREE.BoxGeometry(2.3, 1.2, 0.06), c: 0x1d1a26, m: T(0, 1.55, 0) },
       ]);
       signGroup.add(post);
       const q = this.host.atlas.quad(region, 2.2, 1.1);
-      q.position.set(0, 1.55, 0.06);
+      q.position.set(0, 1.55, 0.035);
       signGroup.add(q);
       root.add(signGroup);
       root.updateMatrixWorld(true);
@@ -275,7 +276,8 @@ export class Cannon {
     switch (this.state) {
       case 'idle': {
         const d = this.distTo(player.position);
-        if (d < 4 && !this.host.busy && !sceneBusy(game)) prompt(game, `${this.spec.title}: walk into the barrel!`);
+        const near = d < 4 && Math.abs(player.position.y - this.breech.y) < 2.5;
+        if (near && !this.host.busy && !sceneBusy(game)) prompt(game, `${this.spec.title}: walk into the barrel!`);
         if (d < 2 && !this.host.busy && !player.frozen && !sceneBusy(game) && (player.mode === 'walk' || player.mode === 'roll') && this.wantsLoad(player.position)) this.begin();
         break;
       }
@@ -283,7 +285,7 @@ export class Cannon {
         // slide in through the breech, up the barrel, until the round little face pokes out of the muzzle
         const u = clamp(this.t / 0.75, 0, 1);
         const target = _v;
-        if (u < 0.35) target.copy(this.startPos).lerp(this.breech, smooth(u / 0.35));
+        if (u < 0.35) target.copy(this.startPos).lerp(_v2.copy(this.breech).setY(this.breech.y + 0.2 * this.scale), smooth(u / 0.35));
         else this.insidePoint(target, lerp(BREECH - 0.3, MUZZLE - 0.12, smooth((u - 0.35) / 0.65)));
         this.hold(player, target, dt, 14);
         if (u >= 1) {

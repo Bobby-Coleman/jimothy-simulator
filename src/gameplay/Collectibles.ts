@@ -580,7 +580,7 @@ export class Collectibles implements System {
     if (!this.compassEl) {
       const el = document.createElement('div');
       el.style.cssText =
-        'position:absolute;left:50%;top:12%;transform:translateX(-50%);pointer-events:none;z-index:30;' +
+        'position:absolute;left:50%;bottom:31%;transform:translateX(-50%);pointer-events:none;z-index:30;' + // below the goal pill/toasts
         'font:800 15px system-ui,sans-serif;color:#ffe08a;text-shadow:0 2px 0 #000,0 0 6px #000;display:flex;align-items:center;gap:8px;white-space:nowrap';
       el.innerHTML = '<span data-a style="display:inline-block;font-size:22px;transition:transform .1s">➤</span><span data-t></span>';
       (document.getElementById('ui') ?? document.body).appendChild(el);

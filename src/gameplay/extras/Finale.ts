@@ -272,11 +272,11 @@ export class Finale implements ExtrasFeature {
         break;
       case 'scene':
         this.updateScene(dt);
-        this.updateSkip(dt);
+        if (this.phase === 'scene') this.updateSkip(dt);
         break;
       case 'credits':
         this.updateCredits(dt);
-        this.updateSkip(dt);
+        if (this.phase === 'credits') this.updateSkip(dt);
         break;
       case 'end':
         this.updateEnd(dt);
@@ -338,9 +338,11 @@ export class Finale implements ExtrasFeature {
       this.nagT = 150;
       if (d > 16) toast(game, 'Jimothy Summer Forever', 'Mom, the kits and Danny are all waiting at the den tonight. Head home!', 'heart');
     }
-    const safe = !this.host.busy && !sceneBusy(game) && player.mode !== 'ragdoll' && (d < 14 || this.nagT > 1e8);
+    const forced = this.nagT > 1e8;
+    const safe = !this.host.busy && !sceneBusy(game) && player.mode !== 'ragdoll' && (d < 14 || forced);
     this.safeT = safe ? this.safeT + dt : 0;
-    if (this.safeT > 1.5) this.start();
+    // (a forced `?finale` preview before the arc is done plays as an encore and doesn't unlock anything)
+    if (this.safeT > 1.5) this.start({ replay: forced && !this.arcComplete() });
   }
 
   private onChitter(pos?: THREE.Vector3) {

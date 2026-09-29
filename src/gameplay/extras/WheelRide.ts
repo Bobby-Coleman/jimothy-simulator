@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type RAPIER_T from '@dimforge/rapier3d-compat';
 import { RAPIER, G, groups } from '../../core/Physics';
 import type { Entity } from '../../core/Entities';
@@ -171,11 +172,15 @@ export class WheelRide implements ExtrasFeature {
       const g = new THREE.Group();
       g.add(paintMesh(parts));
       if (k === 0) {
-        // on the front (bay side) and the back (boardwalk side)
-        for (const s of [1, -1]) {
-          const q = this.host.atlas.quad(signR, 1.5, 0.36);
-          q.position.set(0, 0.22, s * 0.915);
-          if (s < 0) q.rotation.y = Math.PI;
+        // on the front (bay side) and the back (boardwalk side): one merged mesh
+        const front = this.host.atlas.quad(signR, 1.5, 0.36);
+        const back = this.host.atlas.quad(signR, 1.5, 0.36);
+        front.geometry.applyMatrix4(T(0, 0.22, 0.915));
+        back.geometry.applyMatrix4(TR(0, 0.22, -0.915, 0, Math.PI, 0));
+        const merged = mergeGeometries([front.geometry, back.geometry], false);
+        if (merged) {
+          const q = new THREE.Mesh(merged, this.host.atlas.material);
+          q.castShadow = false;
           g.add(q);
         }
       }
@@ -195,13 +200,13 @@ export class WheelRide implements ExtrasFeature {
       grp.rotation.y = rotY;
       grp.add(
         paintMesh([
-          { g: new THREE.BoxGeometry(0.1, 1.7, 0.1), c: 0x1d3557, m: T(-0.65, 0.85, 0) },
-          { g: new THREE.BoxGeometry(0.1, 1.7, 0.1), c: 0x1d3557, m: T(0.65, 0.85, 0) },
-          { g: new THREE.BoxGeometry(1.7, 0.9, 0.05), c: 0x1d3557, m: T(0, 1.45, -0.03) },
+          { g: new THREE.BoxGeometry(0.1, 1.85, 0.1), c: 0x1d3557, m: T(-0.65, 0.92, -0.09) },
+          { g: new THREE.BoxGeometry(0.1, 1.85, 0.1), c: 0x1d3557, m: T(0.65, 0.92, -0.09) },
+          { g: new THREE.BoxGeometry(1.7, 0.9, 0.05), c: 0x1d3557, m: T(0, 1.45, -0.02) },
         ]),
       );
       const q = this.host.atlas.quad(region, 1.6, 0.8);
-      q.position.set(0, 1.45, 0.005);
+      q.position.set(0, 1.45, 0.012);
       grp.add(q);
       game.scene.add(grp);
     };
@@ -302,7 +307,7 @@ export class WheelRide implements ExtrasFeature {
       case 'idle': {
         const seat = this.seat(this.theta, _v);
         const d = Math.hypot(player.position.x - seat.x, player.position.z - seat.z);
-        if (d < 5 && !this.host.busy && !sceneBusy(game)) prompt(game, 'Express Gondola: hop in for a Pretty Good View');
+        if (d < 5 && Math.abs(player.position.y - seat.y) < 2.5 && !this.host.busy && !sceneBusy(game)) prompt(game, 'Express Gondola: hop in for a Pretty Good View');
         const onFloor = player.groundEntity === this.floorEntity;
         const inside = d < 1.3 && Math.abs(player.position.y - seat.y) < 1.0;
         if ((onFloor || inside) && player.mode === 'walk' && !player.frozen && !this.host.busy && !sceneBusy(game)) this.board();
@@ -467,7 +472,7 @@ export class WheelRide implements ExtrasFeature {
       if (pov) {
         // cut back out to the follow view
         pov = false;
-        this.camPsi = this.theta > Math.PI / 2 ? -0.75 : 0.75;
+        this.camPsi = -0.9; // always heading down the west side after the view from the top
         want.set(seat.x + Math.sin(this.camPsi) * 7, seat.y + 1.3, seat.z + Math.cos(this.camPsi) * 7);
         cam.position.copy(want);
         this.camLook.copy(seat);

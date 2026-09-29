@@ -38,6 +38,8 @@ const smooth = (a: number, b: number, x: number) => {
 
 export interface IntroApi extends UiCtx {
   onIntroDone(skipped: boolean): void;
+  /** Where the first suggested goal is (the final camera sweep looks that way). */
+  introGoal?(): THREE.Vector3 | null;
 }
 
 /**
@@ -52,6 +54,8 @@ export class Intro {
   private facing0 = 0;
   /** Horizontal unit vector from Jimothy toward the phone. */
   private phoneDir = new THREE.Vector3(0, 0, 1);
+  /** Horizontal unit vector from Jimothy toward the final gameplay camera (it looks the opposite way). */
+  private endDir = new THREE.Vector3(0, 0, 1);
   private zoom = 1;
   private shake = 0;
   private capIdx = -1;
@@ -140,6 +144,7 @@ export class Intro {
     game.state = 'cutscene';
     p.frozen = true;
     this.chooseFacing(p);
+    this.chooseEndDir(p);
     p.facing = this.facing0;
     this.el.className = 'intro on';
     this.vf.className = 'vf';
@@ -173,6 +178,47 @@ export class Intro {
     }
     this.facing0 = best;
     this.phoneDir.set(-Math.sin(best), 0, -Math.cos(best));
+  }
+
+  /**
+   * UX pass: end the intro looking toward the first suggested goal along an open direction. The old framing looked
+   * straight at Mom's den, so the very first W walked Jimothy under the porch and the camera jammed into the deck.
+   */
+  private chooseEndDir(p: any) {
+    this.endDir.copy(this.phoneDir);
+    let goal: THREE.Vector3 | null = null;
+    try {
+      goal = this.api.introGoal?.() ?? null;
+    } catch {
+      goal = null;
+    }
+    if (!goal) return;
+    const game = this.api.game;
+    const from = _a.copy(p.position);
+    from.y += 0.6;
+    const ga = Math.atan2(goal.x - p.position.x, goal.z - p.position.z);
+    let bestScore = Infinity;
+    for (let i = 0; i < 16; i++) {
+      const off = ((i % 2 ? 1 : -1) * Math.ceil(i / 2) * Math.PI) / 8;
+      const a = ga + off;
+      const lx = Math.sin(a);
+      const lz = Math.cos(a);
+      try {
+        // camera behind (opposite the look direction) must be clear…
+        const cam = _b.set(-lx, 0, -lz).multiplyScalar(GAME_DIST).addScaledVector(UP, 1.1);
+        if (game.physics.raycast(from, cam, cam.length() + 0.3, CLEAR_FILTER, p.body)) continue;
+        // …and the way ahead should be open for a few metres
+        const hit = game.physics.raycast(from, _c.set(lx, 0, lz), 12, CLEAR_FILTER, p.body);
+        const open = hit ? hit.distance : 12;
+        const score = Math.abs(off) + (open < 7 ? 1.5 : 0) + (open < 3 ? 3 : 0);
+        if (score < bestScore) {
+          bestScore = score;
+          this.endDir.set(-lx, 0, -lz);
+        }
+      } catch {
+        return;
+      }
+    }
   }
 
   skip() {
@@ -312,9 +358,9 @@ export class Intro {
     // Gameplay framing (matches CameraRig with yaw from phoneDir, pitch -0.3, distance 4.8)
     const gameLook = _c.copy(J);
     gameLook.y += 0.75 * (p.sizeMul ?? 1);
-    const gx = gameLook.x + this.phoneDir.x * Math.cos(GAME_PITCH) * GAME_DIST;
+    const gx = gameLook.x + this.endDir.x * Math.cos(GAME_PITCH) * GAME_DIST;
     const gy = gameLook.y - Math.sin(GAME_PITCH) * GAME_DIST;
-    const gz = gameLook.z + this.phoneDir.z * Math.cos(GAME_PITCH) * GAME_DIST;
+    const gz = gameLook.z + this.endDir.z * Math.cos(GAME_PITCH) * GAME_DIST;
     const k = smooth(T_SLAM - 0.2, T_END - 0.1, t);
     cam.position.set(phone.x + (gx - phone.x) * k, phone.y + (gy - phone.y) * k, phone.z + (gz - phone.z) * k);
     const look = phoneLook.lerp(gameLook, k);
@@ -343,7 +389,7 @@ export class Intro {
     if (p) p.facing = this.facing0 + Math.PI;
     if (rig) {
       rig.override = null;
-      rig.yaw = Math.atan2(this.phoneDir.x, this.phoneDir.z);
+      rig.yaw = Math.atan2(this.endDir.x, this.endDir.z);
       rig.pitch = GAME_PITCH;
       rig.targetDistance = GAME_DIST;
       rig.distance = GAME_DIST;
