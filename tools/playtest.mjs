@@ -1020,15 +1020,42 @@ const objScenarios = {
       if (B.done) B.reslop?.();
       const cp = B.catwalkPoint;
       const face = Math.atan2(-B.normal.x, -B.normal.z);
-      T.p.teleport(new T.V(cp.x, cp.y + 0.2, cp.z), face); // on the window-washer's catwalk (ladder at its end)
+      // the real route, from the ground: service ladder at the catwalk's +x end → landing → walk to the middle
+      const cam = T.g.get('camera');
+      const cw = B.catwalk;
+      const foot = cw.ladderFoot;
+      const fx = foot.x + B.normal.x * 3, fz = foot.z + B.normal.z * 3;
+      T.tp(fx, fz, 0);
+      for (let k = 0; k < 20 && T.p.stamina < 0.99; k++) T.step(0.2); // catch his breath on the ground first
+      const toward = (x, z) => cam.snapBehind(Math.atan2(x - T.p.position.x, z - T.p.position.z));
+      const up = cp.clone().addScaledVector(B.right, cw.x1 - 3);
+      let t = 0, climbed = false;
+      while (t < 25) {
+        const near = Math.hypot(T.p.position.x - foot.x, T.p.position.z - foot.z) < 1;
+        if (near || climbed || T.p.position.y > foot.y + 1) toward(up.x, up.z); else toward(foot.x, foot.z);
+        T.g.input.virtual.move.set(0, 1);
+        if (near && T.p.mode === 'walk' && T.p.grounded) T.press('jump');
+        T.step(0.1);
+        t += 0.1;
+        if (T.p.mode === 'climb') climbed = true;
+        if (T.p.grounded && T.p.mode === 'walk' && T.p.position.y > cw.floorY + 0.2) break;
+      }
+      const onCatwalk = T.p.position.y > cw.floorY + 0.2;
+      for (t = 0; t < 15 && Math.hypot(T.p.position.x - cp.x, T.p.position.z - cp.z) > 0.5; t += 0.1) {
+        toward(cp.x, cp.z);
+        T.g.input.virtual.move.set(0, 1);
+        T.step(0.1);
+      }
+      T.idle();
       T.step(0.5);
+      cam.snapBehind(face);
       for (let i = 0; i < 4 && !T.O.isDone('countToFive'); i++) {
         T.p.facing = face;
         T.washHeld(1.25);
         T.step(0.3);
       }
       T.step(2);
-      return T.result('countToFive', { washes: B.washes });
+      return T.result('countToFive', { washes: B.washes, climbed, onCatwalk });
     });
   },
   async obj_dragonRider() {
