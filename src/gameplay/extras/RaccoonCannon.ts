@@ -338,7 +338,7 @@ export class Cannon {
         this.launchElev = this.aimElev;
         this.hold(player, this.insidePoint(_v), dt, 30);
         this.updateArc(player);
-        prompt(game, `Move to aim (lands ~${Math.round(this.arcRange)} m away) · Jump to fire · ${Math.max(1, Math.ceil(AIM_SECS - this.t))}…`);
+        prompt(game, `Move to aim · Jump to fire · ${Math.max(1, Math.ceil(AIM_SECS - this.t))}…`);
         // drumroll: rapid low taps getting louder
         this.drumT -= dt;
         if (this.drumT <= 0) {
@@ -460,7 +460,8 @@ export class Cannon {
       game.scene.add(this.arc);
     }
     const arc = this.arc;
-    arc.visible = true;
+    // no visible tracer (playtest feedback: aim by eye); the prediction still frames the aim camera
+    arc.visible = false;
     const dir = this.axis(_v3);
     this.root.updateMatrixWorld(true);
     const p = this.barrel.localToWorld(_v.set(0, 0, MUZZLE)).addScaledVector(dir, 0.35 * this.scale);

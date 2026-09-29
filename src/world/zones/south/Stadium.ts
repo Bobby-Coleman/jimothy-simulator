@@ -225,10 +225,13 @@ function field(kit: Kit, b: Batch) {
   }
   // backstop net behind home
   const bs = H.z + 10.5;
-  for (const x of [-9, -3, 3, 9]) b.cyl([H.x + x, 3.5, bs], 0.12, 7, 0x2a2f38, { seg: 8, collide: true, mat: 'metal' });
+  // two panels with a gap for the Gate H tunnel behind home (one 18 m net used to seal the entrance off)
+  const gap = 2.5;
+  for (const x of [-9, -gap, gap, 9]) b.cyl([H.x + x, 3.5, bs], 0.12, 7, 0x2a2f38, { seg: 8, collide: true, mat: 'metal' });
   b.box([H.x, 7, bs], [18.3, 0.2, 0.2], 0x2a2f38, { collide: false, mat: 'metal' });
+  const panelW = 9 - gap;
   const net = new THREE.Mesh(
-    new THREE.PlaneGeometry(18, 6.6),
+    new THREE.PlaneGeometry(panelW, 6.6),
     new THREE.MeshStandardMaterial({
       map: canvasTex(
         128,
@@ -254,10 +257,14 @@ function field(kit: Kit, b: Batch) {
       roughness: 0.8,
     }),
   );
-  ((net.material as THREE.MeshStandardMaterial).map as THREE.Texture).repeat.set(18, 6.6);
-  net.position.set(H.x, 3.7, bs);
-  kit.root.add(net);
-  kit.collider([H.x, 3.5, bs], [18, 7, 0.2]);
+  ((net.material as THREE.MeshStandardMaterial).map as THREE.Texture).repeat.set(panelW, 6.6);
+  for (const sgn of [-1, 1]) {
+    const cx = H.x + sgn * (gap + panelW / 2);
+    const panel = sgn < 0 ? net : net.clone();
+    panel.position.set(cx, 3.7, bs);
+    kit.root.add(panel);
+    kit.collider([cx, 3.5, bs], [panelW, 7, 0.2]);
+  }
   // a few baseballs lying around (grabbable)
   P.baseball(kit.game, H.x + 1.2, 0.1, H.z - 1.5);
   P.baseball(kit.game, MOUND.x + 0.6, 0.3, MOUND.z);

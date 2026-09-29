@@ -171,3 +171,11 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * **Proximity hints**: linger ~2 s near where an unfinished Instinct happens and its hint appears under the goal
   pill (36 of 54 Instincts; never secrets, never during cutscenes/menus).
 * Standing still on a sloped roof no longer creeps downhill.
+
+## Playtest batch 4 (from the human)
+* Cannon aiming has no visible tracer any more (aim by eye); proximity hints stay quiet while he's in a cannon.
+* Tee-Hee Park: the backstop net sealed the Gate H tunnel behind home plate → two panels with a gap.
+* Lawn sprinklers now place themselves: nearest spot to the requested one where the whole spray is clear of
+  colliders, on fairly flat lawn and off the street/sidewalk (several sat inside porches or under steps).
+* University hall entrance steps (shared gothic builder): sized to meet the ground downhill instead of floating,
+  every step reaches the ground and has a collider (only a narrow central ramp was solid before).

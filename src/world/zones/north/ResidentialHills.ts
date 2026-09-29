@@ -110,6 +110,10 @@ export const ResidentialHills: ZoneBuilder = {
     b.add('marking', ribbon(world, [new THREE.Vector2(0, -67.4), new THREE.Vector2(0, -67.95)], -ROAD_HW + 0.35, 0, 0.045, { across: 2 }), null, 0xf4f4f0, { uvTile: 0 });
 
     const crescent = smoothPath(CRESCENT, 1.5);
+    paved = [
+      { pts: tumble, half: WALK_OUT },
+      { pts: crescent, half: 6.0 },
+    ];
     b.add('asphalt', ribbon(world, crescent, -3.6, 3.6, 0.03, { tile: 7, across: 3 }), null, 0xffffff, { uvTile: 0 });
     // The Crescent runs west→east: right-hand normal = +z (south). South sidewalk is split where Tumble St meets it.
     const crescentS = crescent.filter((p) => Math.abs(p.x) > WALK_OUT + 0.3);
@@ -667,10 +671,62 @@ const wetMat = () =>
 let _catMat: THREE.MeshStandardMaterial | null = null;
 const catMat = () => (_catMat ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
 
+/** Street centre-lines + half-width to the sidewalk's outer edge (set while building; sprinklers keep off them). */
+let paved: { pts: THREE.Vector2[]; half: number }[] = [];
+function distToPaved(x: number, z: number) {
+  let best = Infinity;
+  for (const { pts, half } of paved)
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i],
+        c = pts[i + 1];
+      const dx = c.x - a.x,
+        dz = c.y - a.y;
+      const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.y) * dz) / (dx * dx + dz * dz || 1)));
+      best = Math.min(best, Math.hypot(x - (a.x + dx * t), z - (a.y + dz * t)) - half);
+    }
+  return best;
+}
+
 /** Lawn sprinkler: shallow 'sprinkler' water volume + rotating spray arcs + a wet patch. */
-function sprinkler(game: Game, world: World, mats: MatSet, water: WaterSystem, x: number, z: number) {
-  const y = world.heightAt(x, z);
+function sprinkler(game: Game, world: World, mats: MatSet, water: WaterSystem, x0: number, z0: number) {
   const radius = 2.6;
+  // Lot layouts vary (porches, steps, lattice, hedges): find the nearest spot to the requested one where the whole
+  // spray is on open, fairly flat lawn — several used to sit inside porches or under steps.
+  const clear = (x: number, z: number) => {
+    if (distToPaved(x, z) < 1.2) return false; // on the lawn, not the street / sidewalk
+    const y = world.heightAt(x, z);
+    for (let r = 0; r <= radius + 0.2; r += 0.45)
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+        const px = x + Math.cos(a) * r,
+          pz = z + Math.sin(a) * r;
+        if (Math.abs(world.heightAt(px, pz) - y) > 0.45) return false;
+        for (const h of [0.15, 0.7, 1.3]) {
+          let hit = false;
+          game.physics.world.intersectionsWithPoint({ x: px, y: y + h, z: pz }, (c) => {
+            if (c.isSensor() || c.shapeType() === 7 /* heightfield */) return true;
+            hit = true;
+            return false;
+          });
+          if (hit) return false;
+          if (r === 0) break;
+        }
+      }
+    return true;
+  };
+  refreshQueries(game); // colliders built earlier in this zone must be visible to the clearance test
+  let x = x0,
+    z = z0;
+  search: for (let d = 0; d <= 9; d += 0.75)
+    for (let a = 0; a < Math.PI * 2; a += d === 0 ? 7 : Math.PI / Math.max(4, Math.round(d * 3))) {
+      const cx = x0 + Math.cos(a) * d,
+        cz = z0 + Math.sin(a) * d;
+      if (clear(cx, cz)) {
+        x = cx;
+        z = cz;
+        break search;
+      }
+    }
+  const y = world.heightAt(x, z);
   water.addCircle({ name: 'Lawn Sprinkler', kind: 'sprinkler', center: new THREE.Vector3(x, y + 0.08, z), radius, depth: 0.1, visual: false });
   const base = new THREE.Mesh(GEO.cyl, mats.gloss);
   base.scale.set(0.18, 0.12, 0.18);

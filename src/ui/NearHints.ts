@@ -131,7 +131,8 @@ export class NearHints implements System {
     if (!this.el) return;
     const ui = this.ui;
     const guide: Guide = ui.guide;
-    const can = guide.pillVisible && !ui.hud?.isHushed && this.game.state === 'playing' && ui.settings?.showGuide !== false;
+    const can =
+      guide.pillVisible && !ui.hud?.isHushed && this.game.state === 'playing' && ui.settings?.showGuide !== false && !this.game.get<any>('player')?.frozen; // (not while strapped into a cannon etc.)
     if (!can) {
       if (this.shown) this.hide();
       this.pending = null;

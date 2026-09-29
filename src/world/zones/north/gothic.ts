@@ -169,23 +169,48 @@ export function gothicHall(game: Game, world: World, b: Batch, o: HallOpts): Hal
   f.geo(b, 'paint', GEO.prism, 0, 0.95 + doorH - 0.6, pz + 0.3, doorW, 1.0, 0.6, 0x4a2f1f);
   f.box(b, 'metal', 0, 2.2, pz + 0.62, 0.06, 2.4, 0.04, 0x1d1d1d);
   f.collider(game, 0, 2.6, pz, doorW + 1.6, 5.2, 1.1);
-  // steps to the door
-  const footG = (() => {
-    const p = f.p(0, 0, pz + 2.2);
-    return world.heightAt(p.x, p.z) - floorY;
-  })();
-  const nSteps = Math.max(1, Math.ceil((0.95 - footG) / 0.2));
+  // steps to the door. The flight is sized so it actually meets the ground at its foot (halls sit on hillsides, so
+  // the ground keeps falling away downhill — sizing it from the ground next to the door left the bottom floating),
+  // every step reaches down to the ground under it, and every step is solid (the old single ramp was narrower than
+  // the widening steps, so their sides had no collision).
+  const stepW = doorW + 2.4;
+  const stepRun = 0.36;
+  const z0 = pz + 0.6; // front edge of the landing in front of the door
+  const groundUnder = (lz: number, halfW: number) => {
+    let m = Infinity;
+    for (const lx of [-halfW, 0, halfW]) {
+      const p = f.p(lx, 0, lz);
+      m = Math.min(m, world.heightAt(p.x, p.z) - floorY);
+    }
+    return m;
+  };
+  let nSteps = 1;
+  let footG = groundUnder(z0 + stepRun, stepW / 2);
+  for (let it = 0; it < 6; it++) {
+    nSteps = Math.max(1, Math.ceil((0.95 - footG) / 0.19));
+    const g2 = groundUnder(z0 + nSteps * stepRun + 0.2, stepW / 2 + 0.3);
+    if (Math.abs(g2 - footG) < 0.02) break;
+    footG = g2;
+  }
+  const rise = (0.95 - footG) / (nSteps + 1);
   for (let i = 0; i < nSteps; i++) {
-    const top = 0.95 - ((i + 1) * (0.95 - footG)) / nSteps + (0.95 - footG) / nSteps;
-    f.box(b, 'concrete', 0, (top + footG - 0.4) / 2, pz + 0.75 + i * 0.36, doorW + 2.4 + i * 0.3, top - footG + 0.4, 0.38, 0xd8d0bf);
+    const top = 0.95 - (i + 1) * rise;
+    const zc = z0 + (i + 0.5) * stepRun;
+    const sw = stepW + Math.min(i, 6) * 0.2; // a gentle flare at the top only
+    const gy = Math.min(top - 0.1, groundUnder(zc, sw / 2)) - 0.4;
+    f.box(b, 'concrete', 0, (top + gy) / 2, zc, sw, top - gy, stepRun + 0.02, 0xd8d0bf);
+    f.collider(game, 0, (top + gy) / 2, zc, sw, top - gy, stepRun + 0.02);
   }
   {
-    const rise = 0.95 - footG;
-    const runL = nSteps * 0.36 + 0.3;
-    const ang = Math.atan2(rise, runL);
-    f.collider(game, 0, footG + rise / 2 - 0.15, pz + 0.6 + runL / 2, doorW + 2.4, 0.3, Math.hypot(rise, runL), 0, ang, 0);
+    // smooth ramp through the step noses (walking up a staircase of 0.19 m boxes as a ball is bumpy)
+    const topY = 0.95 - rise;
+    const lastTop = 0.95 - nSteps * rise;
+    const len = (nSteps - 1) * stepRun;
+    if (len > 0.1) {
+      const ang = Math.atan2(topY - lastTop, len);
+      f.collider(game, 0, (topY + lastTop) / 2 - 0.12, z0 + stepRun / 2 + len / 2, stepW, 0.24, Math.hypot(len, topY - lastTop) + 0.2, 0, ang, 0);
+    }
   }
-
   // central tower
   let towerTop: THREE.Vector3 | undefined;
   if (o.tower) {
@@ -228,7 +253,7 @@ export function gothicHall(game: Game, world: World, b: Batch, o: HallOpts): Hal
     ridge,
     towerTop,
     entrance: f.p(0, 0, pz + 2.4),
-    stepsEnd: f.p(0, footG, pz + 0.6 + nSteps * 0.36 + 0.3),
+    stepsEnd: f.p(0, footG, z0 + nSteps * stepRun + 0.3),
     plaque: { pos: o.tower ? f.p(0, h + 0.4, d / 2 + 1.23) : f.p(0, h - 1.25, d / 2 + 0.07), rotY: o.face },
   };
 }
