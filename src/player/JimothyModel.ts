@@ -28,6 +28,7 @@ type PartName =
   | 'EyeL'
   | 'EyeR'
   | 'Nose'
+  | 'Mouth'
   | 'ArmL'
   | 'ArmR'
   | 'HandL'
@@ -41,7 +42,7 @@ type PartName =
   | 'Tail5';
 
 const PART_NAMES: PartName[] = [
-  'Body', 'Head', 'EarL', 'EarR', 'EyeL', 'EyeR', 'Nose', 'ArmL', 'ArmR', 'HandL', 'HandR', 'LegL', 'LegR',
+  'Body', 'Head', 'EarL', 'EarR', 'EyeL', 'EyeR', 'Nose', 'Mouth', 'ArmL', 'ArmR', 'HandL', 'HandR', 'LegL', 'LegR',
   'Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5',
 ];
 
@@ -328,6 +329,13 @@ export class JimothyModel {
     for (const n of ['EyeL', 'EyeR'] as PartName[]) {
       const e = this.parts[n];
       if (e) e.scale.set(1, eyeY, 1);
+    }
+
+    // Chitter: little mouth chatters
+    const mouth = this.parts.Mouth;
+    if (mouth) {
+      const open = s.sinceChitter < 0.7 ? Math.abs(Math.sin(s.sinceChitter * 34)) * (1 - s.sinceChitter / 0.7) : 0;
+      mouth.scale.set(1 + open * 0.3, 1 + open * 2.2, 1);
     }
 
     // Squash & stretch spring

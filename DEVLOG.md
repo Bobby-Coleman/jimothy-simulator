@@ -21,4 +21,15 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * Public repo + GitHub Pages deploy: https://greenninjada.github.io/jimothy-simulator/
 * Helper agents running in parallel: Blender (Jimothy/Mom/kit/Danny/Slopothy/hats), CC0 asset librarian, audio,
   NPC humans + ragdolls, UI/menus/intro, 3 level builders (central / north / south-west), FX + items + trash,
-  objectives + mutators + collectibles.
+  objectives + mutators + collectibles, heartwarming family quests, AI-slop enemies + SlopCorp, landmark events.
+
+## 23:45–00:10 — Lead work while helpers build
+* Asset librarian finished: 20 Kenney kits (1,751 models), 12 Poly Haven texture sets, HDRI, fonts — all CC0/OFL/Apache.
+* Fixed a nasty bug: the first animation frame could have a *negative* dt → 0/0 in the walk code → NaN velocity →
+  NaN camera FOV → the whole screen turned into flat fog. Plus NaN guards and an HDR sanitize pass before bloom.
+* Terrain now blends grass/dirt/sand photo textures (re-tinted to Goat-Sim green) with anti-tiling.
+* **Photo mode (V)**: freeze time, orbit, snap → fake viral post ("what am I looking at", "0% AI") + Save button.
+* **Seattle weather**: drizzle/rain with GPU rain streaks, overcast sky, wet ground. While it rains outdoors the whole
+  city is a sink — Jimothy can wash anything anywhere.
+* **Map**: minimap + full map (M) rendered from a top-down capture of the world.
+* Slow-mo (T), respawn (H), performance overlay (F3 / `?stats`), instanced fur (130 → 13 draw calls).
