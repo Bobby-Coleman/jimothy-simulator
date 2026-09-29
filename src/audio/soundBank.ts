@@ -219,7 +219,6 @@ const user = (label: string, name: string): MusicLink => ({ label, url: `${OGA}/
 
 /** Every music file the game ships (CREDITS.md). Author links are the "Author" field of each OGA page. */
 const T = {
-  bounce: { file: 'respectable_bounce.ogg', gain: 2.3, title: 'A respectable amount of Bounce', author: 'Some Weirdo', page: oga('a-respectable-amount-of-bounce'), links: [user('Some Weirdo', 'some-weirdo')] },
   banana: { file: 'banana_track.ogg', gain: 0.59, title: 'Banana Track', author: 'skrjablin', page: oga('banana-track'), links: [user('skrjablin', 'skrjablin')] },
   workings: { file: 'wacky_workings.ogg', gain: 0.76, title: 'Wacky Workings', author: 'Fupi', page: oga('wacky-workings'), links: [user('Fupi', 'fupi')] },
   garden: { file: 'trouble_in_the_garden.ogg', gain: 2.1, title: 'Trouble in the Garden', author: 'HaelDB', page: oga('trouble-in-the-garden'), links: [user('HaelDB', 'haeldb')] },
@@ -244,7 +243,7 @@ export const MUSIC_BANK: Record<MusicTrack, MusicDef> = {
   title: {
     desc: 'The music player playlist: every track, upbeat first. Title screen, and gameplay in "My playlist" mode (checked tracks, optional shuffle: musicPrefs.ts).',
     volume: 1,
-    files: [T.workings, T.banana, T.garden, T.wobblings, T.bounce, at(T.dialup, 0.9), at(T.aiContact, 0.9), at(T.lofi, 0.85), at(T.napping, 0.85)],
+    files: [T.workings, T.banana, T.garden, T.wobblings, at(T.dialup, 0.9), at(T.aiContact, 0.9), at(T.lofi, 0.85), at(T.napping, 0.85)],
   },
   day: {
     desc: 'Daytime free-roam: jaunty, silly, a little dumb.',
@@ -264,4 +263,4 @@ export const MUSIC_BANK: Record<MusicTrack, MusicDef> = {
 };
 
 /** Every distinct music file, in title-playlist order (credits). */
-export const MUSIC_FILES: MusicFile[] = [T.workings, T.banana, T.garden, T.wobblings, T.bounce, T.dialup, T.aiContact, T.lofi, T.napping];
+export const MUSIC_FILES: MusicFile[] = [T.workings, T.banana, T.garden, T.wobblings, T.dialup, T.aiContact, T.lofi, T.napping];

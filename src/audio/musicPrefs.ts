@@ -8,7 +8,13 @@
  *  - checked: which playlist tracks are in rotation (index = MUSIC_BANK.title.files index; at least one stays on).
  *             Next / previous / auto-advance skip unchecked tracks.
  *  - shuffle: random order among the checked tracks (previous walks back through what played).
- *  - last:    the last playlist track (the playlist starts there next time).
+ *  - last:    the last playlist track.
+ *  - paused:  the player paused the music (remembered across visits: the title screen stays quiet until they press
+ *             play). Otherwise the title screen starts on a random checked track.
+ *  Checking / unchecking a track switches the mode to 'playlist' (the player is curating: they want their picks).
+ *
+ *  Save format v2: the playlist lost "A respectable amount of Bounce" (old index 4); v1 index-based saves are
+ *  migrated on load.
  *
  * Plus runtime-only state: `theme` (the music theme the AudioSystem currently wants, resolved from the mode) and
  * `userPaused` (the player pressed pause: the AudioSystem doesn't start new themes until they press play).
@@ -31,8 +37,16 @@ class MusicPrefs {
   unmuteVolume = 0.6;
   /** The theme the AudioSystem wants right now (the player shows / seeks this one). Set every frame. */
   theme: MusicTrack | null = null;
-  /** The player paused the music: don't auto-start themes until it presses play (or switches mode). */
-  userPaused = false;
+  /** The player paused the music: don't auto-start themes until it presses play (or switches mode). Persisted. */
+  private paused = false;
+  get userPaused() {
+    return this.paused;
+  }
+  set userPaused(v: boolean) {
+    if (v === this.paused) return;
+    this.paused = v;
+    this.save();
+  }
   /** Shuffle history (for "previous"). */
   private history: number[] = [];
   private listeners = new Set<() => void>();
@@ -40,7 +54,10 @@ class MusicPrefs {
   constructor() {
     this.load();
     audio.setMusicPicker(PLAYLIST, (cur, dir) => this.step(cur, dir));
-    audio.musicSelect(PLAYLIST, this.checked[this.last] ? this.last : this.step(this.last, 1));
+    // The title screen opens on a random checked track (it autoplays once the browser allows audio, unless paused)
+    const on = this.checked.map((c, i) => (c ? i : -1)).filter((i) => i >= 0);
+    const start = on.length ? on[Math.floor(Math.random() * on.length)] : 0;
+    audio.musicSelect(PLAYLIST, start);
   }
 
   /** The playlist's theme key in the AudioManager. */
@@ -85,6 +102,8 @@ class MusicPrefs {
     if (i < 0 || i >= this.count) return false;
     if (!on && this.checked[i] && this.checkedCount <= 1) return false;
     this.checked[i] = on;
+    // curating the playlist = "my playlist" (keeps a user pause as it is)
+    this.mode = 'playlist';
     this.save();
     return true;
   }
@@ -126,12 +145,21 @@ class MusicPrefs {
     try {
       const raw = JSON.parse(localStorage.getItem(KEY) || '{}') as Record<string, unknown>;
       if (raw.mode === 'auto' || raw.mode === 'playlist') this.mode = raw.mode;
-      if (Array.isArray(raw.checked)) {
-        const c = this.checked.map((_, i) => (raw.checked as unknown[])[i] !== false);
+      let savedChecked = Array.isArray(raw.checked) ? (raw.checked as unknown[]).slice() : null;
+      let savedLast = typeof raw.last === 'number' ? raw.last : -1;
+      if (raw.v !== 2) {
+        // v1 saves indexed the old 9-track list, which had "A respectable amount of Bounce" at index 4
+        if (savedChecked && savedChecked.length === 9) savedChecked.splice(4, 1);
+        if (savedLast === 4) savedLast = 0;
+        else if (savedLast > 4) savedLast -= 1;
+      }
+      if (savedChecked) {
+        const c = this.checked.map((_, i) => savedChecked![i] !== false);
         if (c.some(Boolean)) this.checked = c;
       }
       if (typeof raw.shuffle === 'boolean') this.shuffle = raw.shuffle;
-      if (typeof raw.last === 'number' && raw.last >= 0 && raw.last < this.count) this.last = Math.floor(raw.last);
+      if (savedLast >= 0 && savedLast < this.count) this.last = Math.floor(savedLast);
+      if (typeof raw.paused === 'boolean') this.paused = raw.paused;
       if (typeof raw.unmute === 'number' && raw.unmute > 0 && raw.unmute <= 1) this.unmuteVolume = raw.unmute;
     } catch {
       /* private mode / bad JSON: defaults */
@@ -140,7 +168,7 @@ class MusicPrefs {
 
   private save() {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ mode: this.mode, checked: this.checked, shuffle: this.shuffle, last: this.last, unmute: this.unmuteVolume }));
+      localStorage.setItem(KEY, JSON.stringify({ v: 2, mode: this.mode, checked: this.checked, shuffle: this.shuffle, last: this.last, unmute: this.unmuteVolume, paused: this.paused }));
     } catch {
       /* storage unavailable */
     }

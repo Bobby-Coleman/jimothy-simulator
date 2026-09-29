@@ -1303,7 +1303,7 @@ export class Finale implements ExtrasFeature {
       p('Kenney — Impact, RPG, Interface, Sci-fi, Jingle & Voiceover packs (CC0)'),
       p('Raccoon chitters, crowds and slop noises synthesized from scratch', 'small'),
       h2('MUSIC (CC0, VIA OPENGAMEART)'),
-      p('Some Weirdo · skrjablin · Fupi · HaelDB · omfgdude · qubodup · congusbongus · Of Far Different Nature'),
+      p('skrjablin · Fupi · HaelDB · omfgdude · qubodup · congusbongus · Of Far Different Nature'),
       h2('MADE BY'),
       p('A team of AI agents, overnight, while a human slept.'),
       p('(He woke up to a raccoon cannon. We regret nothing.)', 'joke'),

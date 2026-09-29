@@ -42,7 +42,6 @@ const KENNEY = {
 
 /** OpenGameArt music: bank file name -> page + direct file URL. */
 const OGA = {
-  'respectable_bounce.ogg': ['a-respectable-amount-of-bounce', 'a_respectable_amount_of_bounce_0.ogg'],
   'banana_track.ogg': ['banana-track', 'banana_track.ogg'],
   'wacky_workings.ogg': ['wacky-workings', 'wackyworkings_0.ogg'],
   'trouble_in_the_garden.ogg': ['trouble-in-the-garden', 'trouble%20in%20the%20garden.ogg'],

@@ -207,3 +207,6 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
   kicker jump, 7 checkpoints through town, finish by bowling ten giant pins by City Hall. Bronze (finish) /
   Silver < 0:52 / Gold < 0:40 / Platinum Pin < 0:34 — the scripted ideal line's best is 32.9 s. Boosts cap at Bronze.
 * Crow's nest: rope ladder removed (trunk + branch climb).
+* Music: "A respectable amount of Bounce" removed (file, playlist, credits). Checking/unchecking a track switches
+  to "My playlist"; the title screen starts on a random checked track; a pause is remembered across visits.
+  Old saves are migrated (the playlist indices shifted).
