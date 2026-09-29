@@ -353,7 +353,7 @@ export class Jimothy implements System {
     const dz = tz - vz;
     const dl = Math.hypot(dx, dz);
     const step = accel * dt;
-    if (dl <= step) {
+    if (dl <= step || dl < 1e-6) {
       vx = tx;
       vz = tz;
     } else {

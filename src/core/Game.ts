@@ -96,7 +96,8 @@ export class Game {
   }
 
   private tick(now: number) {
-    const rawDt = Math.min((now - this.last) / 1000, 0.1);
+    // rAF timestamps can be slightly EARLIER than performance.now() taken in start(): never allow dt < 0
+    const rawDt = Math.min(Math.max(0, (now - this.last) / 1000), 0.1);
     this.last = now;
     this.frameStep(rawDt, true);
   }

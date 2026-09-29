@@ -30,8 +30,8 @@ export class Environment implements System {
   /** 0 = full day, 1 = full night */
   nightFactor = 0;
   /** Forced weather tint etc. can hook here */
-  fogNear = 70;
-  fogFar = 480;
+  fogNear = 90;
+  fogFar = 620;
 
   get isNight() {
     return this.timeOfDay < 5.5 || this.timeOfDay > 20.5;
@@ -188,8 +188,8 @@ export class Environment implements System {
     this.hemi.intensity = 0.55 + 0.75 * day;
 
     // Fog & background
-    const fogDay = new THREE.Color(0xc5dcef);
-    const fogGold = new THREE.Color(0xf2c29d);
+    const fogDay = new THREE.Color(0xd3e6f7);
+    const fogGold = new THREE.Color(0xfbd2b4);
     const fogNight = new THREE.Color(0x121a2c);
     const fogCol = fogNight.clone().lerp(fogDay.clone().lerp(fogGold, golden * 0.75), day);
     const fog = this.game.scene.fog as THREE.Fog;
