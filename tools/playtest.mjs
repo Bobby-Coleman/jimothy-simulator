@@ -59,6 +59,11 @@ function installHelpers(full) {
     counts[name] = (counts[name] || 0) + 1;
     return origEmit(name, payload);
   };
+  // The "Jimothy Summer Forever" finale auto-starts once the family arc is done (obj_familyReunion) and Jimothy lingers
+  // near the den. Mid-suite (obj_strike's bowling chase rolling through Old Ballard) its long cutscene froze every later
+  // scenario (6-7 cascading FAILs, all passing alone). It isn't an Instinct, so keep it out of the scripted runs.
+  const finale = g.get('extras')?.finale;
+  if (finale) finale.done = true;
   // the real-time game loop keeps running between evaluate() calls: stop input leaking into it
   const idle = () => {
     g.input.virtual.move.set(0, 0);
@@ -271,7 +276,7 @@ function installHelpers(full) {
       const bowled = new Set();
       const off = g.events.on('npcRagdoll', (e) => e?.cause === 'roll' && e.entity && bowled.add(e.entity.id));
       const tried = new Map();
-      let target = null, stuck = 0;
+      let target = null, stuck = 0, retries = 2;
       const last = p.position.clone();
       for (let t = 0; t < secs && !(until && until()); t += 0.1) {
         if (!target || target.ragdolled || target.removed || bowled.has(target.entity.id) || (tried.get(target.entity.id) ?? 0) > 1.2) {
@@ -282,7 +287,15 @@ function installHelpers(full) {
             const d = Math.hypot(n.position.x - p.position.x, n.position.z - p.position.z);
             if (d < bd) { bd = d; target = n; }
           }
-          if (!target) break;
+          if (!target) {
+            // Everyone left has dodged us for 1.2 s: chase them again (like a player would) instead of giving up with
+            // most of the time budget unused (obj_strike used to stop at ~12 s with 3-4 of 5 bowled).
+            if (tried.size && retries-- > 0) {
+              tried.clear();
+              continue;
+            }
+            break;
+          }
         }
         // only time spent right next to a target counts against it (unreachable behind a counter, fleeing in circles…)
         if (Math.hypot(target.position.x - p.position.x, target.position.z - p.position.z) < 8) tried.set(target.entity.id, (tried.get(target.entity.id) ?? 0) + 0.1);

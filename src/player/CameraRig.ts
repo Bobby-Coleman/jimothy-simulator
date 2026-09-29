@@ -139,8 +139,14 @@ export class CameraRig implements System {
     // Collision: pull the camera in front of walls
     let dist = this.targetDistance;
     // Ignore thin things (lamp posts, poles, trunks) so the camera doesn't pump in and out on busy streets
-    const camFilter = groups(G.ALL, G.WORLD | G.VEHICLE);
-    const notThin = (c: any) => !game.physics.isThin(c);
+    // Heavy props (dumpsters, parked cars, fridges…) block the camera too; light props and thin poles don't.
+    const camFilter = groups(G.ALL, G.WORLD | G.VEHICLE | G.PROP);
+    const notThin = (c: any) => {
+      if (game.physics.isThin(c)) return false;
+      const b = c.parent?.();
+      if (b && (c.collisionGroups() >>> 16) & G.PROP) return b.mass() >= 60 && !b.isKinematic();
+      return true;
+    };
     const hit = game.physics.sphereCast(this.pivot, _dir, 0.22, dist, camFilter, player?.body, notThin);
     if (hit) dist = Math.max(0.5, hit.distance - 0.05);
     // Feel pass: back to a wall (the camera would sit inside it at its 0.5 m minimum): swing up over his head instead
