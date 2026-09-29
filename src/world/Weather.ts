@@ -4,8 +4,9 @@ import { G, groups } from '../core/Physics';
 
 export type WeatherKind = 'clear' | 'drizzle' | 'rain';
 
-const DROPS = 3500;
-const BOX = 36; // half-size of the rain box around the camera
+const DROPS = 5000;
+const BOX = 30; // half-size of the rain box around the camera
+const _rainCol = new THREE.Color();
 
 /**
  * Seattle weather. Mostly clear ("Jimothy Summer"), sometimes drizzle or rain.
@@ -32,8 +33,10 @@ export class WeatherSystem implements System {
     const q = new URLSearchParams(location.search).get('weather') as WeatherKind | null;
     if (q === 'clear' || q === 'drizzle' || q === 'rain') this.forced = q;
 
-    const geo = new THREE.PlaneGeometry(0.02, 0.7);
-    geo.translate(0, 0.35, 0);
+    const geo = new THREE.PlaneGeometry(0.018, 0.6);
+    geo.translate(0, 0.3, 0);
+    // Art pass: streaks are tapered (soft ends), thin + faded right in front of the camera (they used to read as white
+    // sticks), a touch wider far away so the curtain stays visible, and tinted by the sky/fog colour each frame.
     this.mat = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
@@ -47,29 +50,36 @@ export class WeatherSystem implements System {
       vertexShader: /* glsl */ `
         uniform float uTime; uniform vec3 uCam; uniform float uIntensity;
         attribute vec4 aSeed;
-        varying float vAlpha;
+        varying float vAlpha; varying float vV;
         void main() {
           float box = ${BOX.toFixed(1)};
           float speed = 16.0 + aSeed.w * 6.0;
           // wrap each drop inside a box that follows the camera
           vec3 p = vec3(aSeed.x * box * 2.0, 0.0, aSeed.z * box * 2.0);
-          p.y = mod(aSeed.y * 40.0 - uTime * speed, 40.0) - 12.0;
+          p.y = mod(aSeed.y * 36.0 - uTime * speed, 36.0) - 12.0;
           p.x = mod(p.x - uCam.x + box, box * 2.0) - box + uCam.x;
           p.z = mod(p.z - uCam.z + box, box * 2.0) - box + uCam.z;
           p.y += uCam.y;
+          float d = length(p - uCam);
           // slight wind slant
           vec3 local = position;
+          local.x *= clamp(d / 9.0, 0.6, 2.2);
           local.x += local.y * 0.12;
           // billboard around Y toward the camera
           vec3 toCam = normalize(vec3(uCam.x - p.x, 0.0, uCam.z - p.z));
           vec3 right = vec3(toCam.z, 0.0, -toCam.x);
           vec3 world = p + right * local.x + vec3(0.0, local.y, 0.0);
-          vAlpha = step(aSeed.w, uIntensity) * 0.55;
+          vAlpha = step(aSeed.w, uIntensity) * 0.42 * smoothstep(1.2, 4.5, d) * (1.0 - smoothstep(box * 0.7, box, d));
+          vV = uv.y;
           gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
         }`,
       fragmentShader: /* glsl */ `
-        uniform vec3 uColor; varying float vAlpha;
-        void main() { if (vAlpha < 0.01) discard; gl_FragColor = vec4(uColor, vAlpha); }`,
+        uniform vec3 uColor; varying float vAlpha; varying float vV;
+        void main() {
+          float a = vAlpha * sin(vV * 3.14159);
+          if (a < 0.01) discard;
+          gl_FragColor = vec4(uColor, a);
+        }`,
     });
     this.rain = new THREE.InstancedMesh(geo, this.mat, DROPS);
     const seeds = new Float32Array(DROPS * 4);
@@ -142,6 +152,16 @@ export class WeatherSystem implements System {
       if (su) su.turbidity.value = 3.5 + 8 * k;
       env.overcastU.value = 0.9 * k;
       env.overcastColorU.value.setRGB(0.55, 0.6, 0.67).multiplyScalar(0.25 + 0.85 * (1 - env.nightFactor));
+      // rain streaks catch the sky light: pale grey-blue by day, dim blue at night
+      _rainCol.copy(fog.color).multiplyScalar(1.35).addScalar(0.08);
+      this.mat.uniforms.uColor.value.copy(_rainCol);
+    }
+    // Moody Seattle grade while it rains: a little cooler and less saturated (Environment sets the base each frame)
+    const r = game.renderer;
+    r.saturation.saturation = 0.3 - 0.12 * k;
+    if (k > 0.001) {
+      r.gradeHighlights.value.lerp(_rainCol.setRGB(0.98, 1.0, 1.04), 0.6 * k);
+      r.gradeShadows.value.lerp(_rainCol.setRGB(0.96, 1.0, 1.06), 0.6 * k);
     }
     // Wet world: shinier, darker ground
     const terrain = game.get<any>('world')?.terrain as THREE.Mesh | undefined;

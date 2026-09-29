@@ -64,6 +64,42 @@ function waterNormalTexture() {
 
 const _v = new THREE.Vector3();
 
+/** Art pass: shared water uniforms — time for the second wave layer, and the sky colour the fresnel reflects. */
+const waterUniforms = {
+  uWaterTime: { value: 0 },
+  uWaterSky: { value: new THREE.Color(0.75, 0.85, 0.95) },
+};
+const _sky = new THREE.Color();
+
+/**
+ * Stylised water: a second, slower normal-map layer crossing the first (gentle cross-waves instead of one sliding
+ * texture), and a fresnel blend toward the horizon colour — calm reflective sheen at grazing angles, clear colour when
+ * looking down. Pure shader math on the existing material: no extra passes or draw calls.
+ */
+function stylizeWater(m: THREE.MeshStandardMaterial, fresnelAmt: number) {
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uWaterTime = waterUniforms.uWaterTime;
+    shader.uniforms.uWaterSky = waterUniforms.uWaterSky;
+    const maps = THREE.ShaderChunk.normal_fragment_maps.replace(
+      'vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;',
+      `vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;
+       vec3 mapN2 = texture2D( normalMap, vNormalMapUv * 0.61 + vec2( -uWaterTime * 0.009, uWaterTime * 0.013 ) ).xyz * 2.0 - 1.0;
+       mapN = vec3( mapN.xy + mapN2.xy, mapN.z * mapN2.z );`,
+    );
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uWaterTime;\nuniform vec3 uWaterSky;')
+      .replace('#include <normal_fragment_maps>', maps)
+      .replace(
+        '#include <opaque_fragment>',
+        `float wF = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 4.0);
+         outgoingLight = mix(outgoingLight, uWaterSky, clamp(wF * ${fresnelAmt.toFixed(2)}, 0.0, 0.9));
+         diffuseColor.a = mix(diffuseColor.a, 1.0, wF);
+         #include <opaque_fragment>`,
+      );
+  };
+  m.customProgramCacheKey = () => 'water_stylized_' + fresnelAmt.toFixed(2);
+}
+
 export class WaterSystem implements System {
   name = 'water';
   readonly volumes: WaterVolume[] = [];
@@ -82,7 +118,8 @@ export class WaterSystem implements System {
     if (m) return m;
     const tex = waterNormalTexture().clone();
     tex.needsUpdate = true;
-    const color = key === 'bay' ? 0x2b6f8f : key === 'pond' ? 0x3f7d6a : key === 'puddle' ? 0x6d7f8c : key === 'coolant' ? 0x39e6ff : 0x6fc3e0;
+    // art pass: richer, more saturated Goat-Sim water (bay: deep teal-blue, pond: green-teal, pools: bright aqua)
+    const color = key === 'bay' ? 0x1b6d99 : key === 'pond' ? 0x2c7c74 : key === 'puddle' ? 0x6d7f8c : key === 'coolant' ? 0x39e6ff : 0x4fc4e6;
     m = new THREE.MeshStandardMaterial({
       color,
       roughness: key === 'puddle' ? 0.14 : 0.1,
@@ -90,13 +127,15 @@ export class WaterSystem implements System {
       transparent: true,
       opacity: key === 'puddle' ? 0.6 : key === 'bay' ? 0.88 : 0.78,
       normalMap: tex,
-      normalScale: new THREE.Vector2(0.35, 0.35),
+      normalScale: new THREE.Vector2(0.3, 0.3),
       envMapIntensity: 1.4,
       depthWrite: false,
     });
     if (key === 'coolant') {
       m.emissive = new THREE.Color(0x0bb8d6);
       m.emissiveIntensity = 0.6;
+    } else {
+      stylizeWater(m, key === 'puddle' ? 0.45 : 0.5);
     }
     tex.repeat.set(key === 'bay' ? 40 : 4, key === 'bay' ? 40 : 4);
     this.materials.set(key, m);
@@ -220,6 +259,15 @@ export class WaterSystem implements System {
       if (m.normalMap) {
         m.normalMap.offset.set(this.scroll * 0.012, this.scroll * 0.008);
       }
+    }
+    // fresnel reflects the horizon haze (peach at golden hour, deep blue at night), lifted a touch toward the sky
+    waterUniforms.uWaterTime.value = this.scroll;
+    const fog = game.scene.fog as THREE.Fog | null;
+    const env = game.get<any>('environment');
+    if (fog) {
+      _sky.copy(fog.color);
+      if (env?.hemi) _sky.lerp(env.hemi.color, 0.6);
+      waterUniforms.uWaterSky.value.copy(_sky).multiplyScalar(0.95);
     }
     // Buoyancy for dynamic things in deep-ish water.
     // NOTE: never modify bodies inside a Rapier query callback — collect first, apply after.

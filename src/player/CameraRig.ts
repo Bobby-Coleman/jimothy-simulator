@@ -26,9 +26,44 @@ export class CameraRig implements System {
   /** Target to follow; defaults to the player. */
   follow: (() => THREE.Vector3) | null = null;
   private game!: Game;
+  /**
+   * Feel: gently swing the camera behind Jimothy while he runs/rolls forward and the player hasn't touched the camera
+   * for a moment. Subtle on purpose; set false to disable.
+   */
+  autoFollow = true;
+  /** Seconds since the last manual camera input (mouse / right stick / touch drag). */
+  private lookIdle = 0;
+  // Feel: directional camera kick (spring) + FOV punch, layered on top of the follow camera.
+  private kickX = new THREE.Vector3();
+  private kickV = new THREE.Vector3();
+  private fovPunch = 0;
+  private fovSmooth = NaN;
 
   init(game: Game) {
     this.game = game;
+  }
+
+  /**
+   * True when the "Reduce flashing & shake" setting is on: ui/settings.ts swallows shake() by shadowing it with an
+   * own property on this instance, so kicks / FOV punches follow the same switch.
+   */
+  get motionReduced() {
+    return this.shake !== CameraRig.prototype.shake;
+  }
+
+  /** Feel: a short punch of the camera (bonks, impacts). `dir` = world direction to shove it (default: down). */
+  kick(amount: number, dir?: THREE.Vector3) {
+    if (this.motionReduced || !(amount > 0)) return;
+    const a = Math.min(1, amount);
+    if (dir && dir.lengthSq() > 1e-6) this.kickV.addScaledVector(_v.copy(dir).normalize(), a * 2.6);
+    else this.kickV.y -= a * 2.2;
+    this.fovPunch = Math.min(8, this.fovPunch + a * 3.5);
+  }
+
+  /** Feel: brief field-of-view "whoomp" in degrees (negative zooms in). */
+  punchFov(deg: number) {
+    if (this.motionReduced) return;
+    this.fovPunch = THREE.MathUtils.clamp(this.fovPunch + deg, -8, 8);
   }
 
   /** Flat forward direction the camera is looking (for camera-relative movement). */
@@ -60,9 +95,11 @@ export class CameraRig implements System {
       this.pitch = THREE.MathUtils.clamp(this.pitch, -1.35, 0.75);
       if (inp.wheel) this.targetDistance = THREE.MathUtils.clamp(this.targetDistance * (1 + inp.wheel * 0.12), this.minDistance, this.maxDistance);
     }
+    this.lookIdle = Math.abs(inp.look.x) + Math.abs(inp.look.y) > 1e-5 ? 0 : this.lookIdle + dt;
 
     const target = this.follow ? this.follow() : (game.get<any>('player')?.cameraTarget as THREE.Vector3 | undefined);
     if (!target) return;
+    this.updateAutoFollow(dt, game);
     if (!this.pivotInit) {
       this.pivot.copy(target);
       this.pivotInit = true;
@@ -118,15 +155,34 @@ export class CameraRig implements System {
       cam.position.z += Math.sin(this.shakeT * 1.3 + 2) * s;
       this.shakeAmt *= Math.exp(-dt * 5);
     }
+    // Feel: kick spring (slightly under-damped so a bonk "thunks" and settles within ~0.25 s)
+    if (this.kickX.lengthSq() > 1e-8 || this.kickV.lengthSq() > 1e-8) {
+      const h = Math.min(dt, 1 / 30);
+      this.kickV.addScaledVector(this.kickX, -260 * h).multiplyScalar(Math.exp(-h * 16));
+      this.kickX.addScaledVector(this.kickV, h);
+      if (this.kickX.length() > 0.35) this.kickX.setLength(0.35);
+      cam.position.add(this.kickX);
+    }
     _v.copy(this.pivot);
     cam.lookAt(_v);
 
-    // Speed FOV kick
+    // Speed FOV kick (+ feel punch, decays fast)
     const speed = player?.speed ?? 0;
     const fov = this.baseFov + THREE.MathUtils.clamp(speed - 7, 0, 18) * 0.7;
-    cam.fov += (fov - cam.fov) * (1 - Math.exp(-dt * 4));
+    if (!Number.isFinite(this.fovSmooth)) this.fovSmooth = Number.isFinite(cam.fov) ? cam.fov : this.baseFov;
+    this.fovSmooth += (fov - this.fovSmooth) * (1 - Math.exp(-dt * 4));
+    this.fovPunch *= Math.exp(-dt * 9);
+    if (Math.abs(this.fovPunch) < 0.01) this.fovPunch = 0;
+    cam.fov = this.fovSmooth + this.fovPunch;
     // NaN guards: one bad frame must never poison the camera forever
-    if (!Number.isFinite(cam.fov)) cam.fov = this.baseFov;
+    if (!Number.isFinite(cam.fov)) {
+      cam.fov = this.fovSmooth = this.baseFov;
+      this.fovPunch = 0;
+    }
+    if (!Number.isFinite(this.kickX.x + this.kickX.y + this.kickX.z + this.kickV.x + this.kickV.y + this.kickV.z)) {
+      this.kickX.set(0, 0, 0);
+      this.kickV.set(0, 0, 0);
+    }
     if (!Number.isFinite(cam.position.x + cam.position.y + cam.position.z)) {
       this.pivot.copy(target);
       cam.position.copy(target).add(_v.set(0, 2, 5));
@@ -134,5 +190,29 @@ export class CameraRig implements System {
     }
     if (!Number.isFinite(this.distance)) this.distance = this.targetDistance;
     cam.updateProjectionMatrix();
+  }
+
+  /**
+   * Feel: subtle auto-follow. After ~1.2 s without manual camera input, while Jimothy moves forward-ish (or rolls on
+   * his own momentum), ease the yaw toward "behind his motion". Never while climbing/hanging/ragdolling, never when
+   * running at the camera, and strafing doesn't swing it (so camera-relative steering stays predictable).
+   */
+  private updateAutoFollow(dt: number, game: Game) {
+    if (!this.autoFollow || this.follow || game.paused || game.state !== 'playing') return;
+    const player = game.get<any>('player');
+    if (!player || player.frozen || this.lookIdle < 1.2) return;
+    const mode = player.mode as string;
+    if (mode !== 'walk' && mode !== 'roll' && mode !== 'swim') return;
+    const v = player.velocity as THREE.Vector3;
+    const sp = Math.hypot(v.x, v.z);
+    if (!(sp > 2.5)) return;
+    const mv = game.input.move;
+    const weight = mv.lengthSq() < 0.01 ? (mode === 'roll' ? 1 : 0) : THREE.MathUtils.clamp(mv.y, 0, 1);
+    if (weight <= 0) return;
+    let d = Math.atan2(v.x, v.z) + Math.PI - this.yaw;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    if (Math.abs(d) > 2.3) return;
+    const rate = 1.1 * weight * Math.min(1, (sp - 2.5) / 6) * Math.min(1, (this.lookIdle - 1.2) / 0.8);
+    this.yaw += d * (1 - Math.exp(-dt * rate));
   }
 }

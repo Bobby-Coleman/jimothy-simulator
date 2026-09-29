@@ -32,7 +32,28 @@ export const furUniforms = {
   uFurTime: { value: 0 },
   /** Global fur length multiplier (e.g. wet fur = 0.5). */
   uFurScale: { value: 1 },
+  /** Art pass: rim/sheen light colour (HDR, linear) so Jimothy pops off any background; Environment sets it per time of day. */
+  uFurRim: { value: new THREE.Color(0.55, 0.5, 0.42) },
 };
+
+/** GLSL: soft fresnel rim (view-space normal vs view dir), added to the lit colour. */
+const RIM_GLSL = /* glsl */ `
+  float furNdV = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
+  float furRim = pow(1.0 - furNdV, 2.6);`;
+
+/** Rim on the base (under-shell) fur material too: low quality has no shells, and it keeps silhouettes consistent. */
+function addBaseRim(base: THREE.MeshStandardMaterial) {
+  if (base.userData.furRim) return;
+  base.userData.furRim = true;
+  base.onBeforeCompile = (shader) => {
+    shader.uniforms.uFurRim = furUniforms.uFurRim;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\nuniform vec3 uFurRim;`)
+      .replace('#include <opaque_fragment>', `${RIM_GLSL}\n  outgoingLight += uFurRim * furRim * diffuseColor.rgb * 1.6;\n#include <opaque_fragment>`);
+  };
+  base.customProgramCacheKey = () => 'fur_base_rim';
+  base.needsUpdate = true;
+}
 
 /** Quality knob: 0 disables fur for newly furred models. */
 export const furSettings = { shells: DEFAULT_SHELLS };
@@ -50,6 +71,7 @@ function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number): TH
     shader.uniforms.uFurWind = furUniforms.uFurWind;
     shader.uniforms.uFurTime = furUniforms.uFurTime;
     shader.uniforms.uFurScale = furUniforms.uFurScale;
+    shader.uniforms.uFurRim = furUniforms.uFurRim;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -72,7 +94,7 @@ function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number): TH
       .replace(
         '#include <common>',
         `#include <common>
-         uniform sampler2D uNoise; varying vec3 vFurObjPos; varying float vShellH;`,
+         uniform sampler2D uNoise; uniform vec3 uFurRim; varying vec3 vFurObjPos; varying float vShellH;`,
       )
       .replace(
         '#include <alphatest_fragment>',
@@ -82,8 +104,15 @@ function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number): TH
          float n3 = texture2D(uNoise, fp.zx / 128.0 + 0.71).r;
          float strand = max(n1, max(n2, n3) * 0.92);
          if (strand < vShellH * 0.9 + 0.12) discard;
-         diffuseColor.rgb *= mix(0.72, 1.12, vShellH);
+         // art pass: darker roots (self-shadowing), lighter slightly warm tips that catch the light = fluffier
+         diffuseColor.rgb *= mix(0.68, 1.16, vShellH) * mix(vec3(1.0), vec3(1.05, 1.02, 0.96), vShellH);
          #include <alphatest_fragment>`,
+      )
+      .replace(
+        '#include <opaque_fragment>',
+        `${RIM_GLSL}
+         outgoingLight += uFurRim * furRim * diffuseColor.rgb * (0.9 + 1.4 * vShellH);
+         #include <opaque_fragment>`,
       );
   };
   m.customProgramCacheKey = () => 'fur_instanced_' + shells;
@@ -94,7 +123,7 @@ const _ident = new THREE.Matrix4();
 
 export function applyFur(root: THREE.Object3D, enabled = true) {
   const shells = furSettings.shells;
-  if (!enabled || shells <= 0) return;
+  if (!enabled) return;
   const targets: THREE.Mesh[] = [];
   root.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -104,6 +133,8 @@ export function applyFur(root: THREE.Object3D, enabled = true) {
     if (!/^(Fur|Slop)/i.test(mat.name)) return;
     targets.push(m);
   });
+  for (const mesh of targets) if ((mesh.material as THREE.MeshStandardMaterial).isMeshStandardMaterial) addBaseRim(mesh.material as THREE.MeshStandardMaterial);
+  if (shells <= 0) return;
   const matCache = new Map<THREE.Material, THREE.MeshStandardMaterial>();
   for (const mesh of targets) {
     const base = mesh.material as THREE.MeshStandardMaterial;

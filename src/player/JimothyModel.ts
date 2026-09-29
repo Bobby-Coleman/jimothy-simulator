@@ -157,6 +157,20 @@ export class JimothyModel {
     this.squashV += amount * 9;
   }
 
+  // Feel: paw gestures (grab miss = one-paw swipe at the air, grab = quick two-paw snatch)
+  private swipeT = 9;
+  private swipeSide = 1;
+  private reachT = 9;
+  /** A little paw swipe at nothing (grab missed). */
+  swipe() {
+    this.swipeT = 0;
+    this.swipeSide = -this.swipeSide;
+  }
+  /** Both paws snatch forward (grab landed). */
+  reach() {
+    this.reachT = 0;
+  }
+
   /** 0 = dry, 1 = soaked (darker, flatter fur). */
   setWetness(w: number) {
     if (Math.abs(w - this.wetness) < 0.01) return;
@@ -277,6 +291,22 @@ export class JimothyModel {
     if (s.sinceBonk < 0.3) {
       bodyPitch += 0.35 * (1 - s.sinceBonk / 0.3);
       armL = armR = -1.4;
+    }
+    // Feel: grab-miss swipe (one paw lashes out and back, body leans in) and grab snatch
+    this.swipeT += dt;
+    this.reachT += dt;
+    if (this.swipeT < 0.32 && s.mode !== 'roll' && s.mode !== 'ragdoll') {
+      const u = this.swipeT / 0.32;
+      const out = u < 0.35 ? u / 0.35 : 1 - (u - 0.35) / 0.65;
+      if (this.swipeSide > 0) armL = -2.3 * out + armL * (1 - out);
+      else armR = -2.3 * out + armR * (1 - out);
+      armSpread = -0.35 * out;
+      bodyPitch += 0.22 * out;
+      bodyRoll += 0.12 * out * this.swipeSide;
+    }
+    if (this.reachT < 0.18 && !s.carrying && s.mode !== 'roll' && s.mode !== 'ragdoll') {
+      armL = armR = -2.0;
+      bodyPitch += 0.15;
     }
     if (s.sinceChitter < 0.8) {
       headTilt += Math.sin(s.sinceChitter * 30) * 0.12 * (1 - s.sinceChitter / 0.8);

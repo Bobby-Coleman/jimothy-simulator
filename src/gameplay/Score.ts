@@ -43,21 +43,37 @@ export class ScoreSystem implements System {
     const now = this.game.time;
     const lt = this.labelTimes.get(p.label);
     let base = p.points;
+    let repeat = 0;
     if (lt && now - lt.t < 1.5) {
       lt.n++;
+      repeat = lt.n;
       base = Math.max(1, Math.round(base / (1 + lt.n * 0.6)));
     } else {
       this.labelTimes.set(p.label, { t: now, n: 0 });
+      if (lt) lt.n = 0;
     }
     if (lt) lt.t = now;
 
+    // Feel pass (pacing): the 6th+ rapid repeat of the same thing that's now worth ≤ 2 points still counts toward the
+    // total, but makes no popup, plink or combo step — mashing one trivial action can't flood the screen.
+    if (repeat >= 5 && base <= 2) {
+      this.total += base;
+      if (this.total > this.best) this.best = this.total;
+      return;
+    }
+
     if (!p.noCombo) {
-      if (this.comboTimer > 0) this.combo++;
-      else {
-        this.combo = 1;
+      // Feel pass (pacing): combos reward variety and size. Trivial (< 8 pts) or quickly repeated acts keep a running
+      // combo alive for a moment but don't build it; big moments (250+) count double.
+      const step = repeat >= 2 || base < 8 ? 0 : base >= 250 ? 2 : 1;
+      if (this.comboTimer > 0) {
+        this.combo += step;
+        this.comboTimer = step > 0 ? this.comboWindow : Math.max(this.comboTimer, 1.2);
+      } else {
+        this.combo = Math.max(1, step);
         this.comboPoints = 0;
+        this.comboTimer = this.comboWindow;
       }
-      this.comboTimer = this.comboWindow;
     }
     const prevMult = this.mult;
     this.mult = Math.min(8, 1 + Math.floor(Math.max(0, this.combo - 1) / 3) * 0.5);

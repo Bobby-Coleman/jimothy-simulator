@@ -2,8 +2,14 @@ import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import type { Game, System } from '../core/Game';
 import { registerShadowLight } from './shadowOnly';
+import { furUniforms } from '../player/Fur';
 
 const _v = new THREE.Vector3();
+const _c1 = new THREE.Color();
+const _c2 = new THREE.Color();
+const _c3 = new THREE.Color();
+const _c4 = new THREE.Color();
+const _c5 = new THREE.Color();
 
 /**
  * perf: view distance per quality preset — fog (the DetailCuller also drops anything past fog.far) and the camera
@@ -49,17 +55,44 @@ export class Environment implements System {
   }
 
   /** The stock Sky shader can output values beyond half-float range (Inf) which bloom smears
-   *  across the whole screen. Clamp + scale it, and kill NaNs. */
+   *  across the whole screen. Clamp + scale it, and kill NaNs.
+   *  Art pass: plus a stylised grade — richer Goat-Sim blue by day, a warm horizon glow around the sun at golden hour,
+   *  and a deep-blue gradient at night (instead of the physically-correct black). Uniforms are shared by the visible sky
+   *  and the env-map sky, so reflections follow the same look. */
   private tameSky(sky: Sky, exposure: number) {
     const mat = sky.material as THREE.ShaderMaterial;
     mat.uniforms.skyExposure = { value: exposure };
     mat.uniforms.uOvercast = this.overcastU;
     mat.uniforms.uOvercastColor = this.overcastColorU;
+    mat.uniforms.uSkySat = this.skySatU;
+    mat.uniforms.uGolden = this.goldenU;
+    mat.uniforms.uGlowColor = this.glowColorU;
+    mat.uniforms.uNight = this.nightU;
+    mat.uniforms.uNightHorizon = this.nightHorizonU;
+    mat.uniforms.uNightZenith = this.nightZenithU;
     mat.fragmentShader = mat.fragmentShader
-      .replace('void main() {', 'uniform float skyExposure;\nuniform float uOvercast;\nuniform vec3 uOvercastColor;\nvoid main() {')
+      .replace(
+        'void main() {',
+        'uniform float skyExposure;\nuniform float uOvercast;\nuniform vec3 uOvercastColor;\nuniform float uSkySat;\nuniform float uGolden;\nuniform vec3 uGlowColor;\nuniform float uNight;\nuniform vec3 uNightHorizon;\nuniform vec3 uNightZenith;\nvoid main() {',
+      )
       .replace(
         'gl_FragColor = vec4( texColor, 1.0 );',
-        'texColor = max(texColor, vec3(0.0));\n\t\t\tif (any(isnan(texColor)) || any(isinf(texColor))) texColor = vec3(0.0);\n\t\t\ttexColor = mix(texColor * skyExposure, uOvercastColor, uOvercast);\n\t\t\tgl_FragColor = vec4( min( texColor, vec3( 12.0 ) ), 1.0 );',
+        `texColor = max(texColor, vec3(0.0));
+			if (any(isnan(texColor)) || any(isinf(texColor))) texColor = vec3(0.0);
+			texColor *= skyExposure;
+			float skyL = dot(texColor, vec3(0.2126, 0.7152, 0.0722));
+			texColor = max(mix(vec3(skyL), texColor, uSkySat), vec3(0.0));
+			float upY = clamp(direction.y, 0.0, 1.0);
+			float hz = 1.0 - upY;
+			vec2 dxz = normalize(direction.xz + vec2(1e-5));
+			vec2 sxz = normalize(vSunDirection.xz + vec2(1e-5));
+			float sunSide = 0.5 + 0.5 * dot(dxz, sxz);
+			texColor += uGlowColor * uGolden * pow(hz, 4.0) * (0.25 + 0.75 * sunSide * sunSide);
+			texColor *= mix(vec3(1.0), vec3(1.08, 0.94, 0.86), uGolden * (1.0 - upY) * 0.6);
+			vec3 nightSky = mix(uNightHorizon, uNightZenith, pow(upY, 0.45));
+			texColor = mix(texColor, nightSky + texColor * 0.25, uNight);
+			texColor = mix(texColor, uOvercastColor, uOvercast);
+			gl_FragColor = vec4( min( texColor, vec3( 12.0 ) ), 1.0 );`,
       );
     mat.needsUpdate = true;
   }
@@ -67,6 +100,15 @@ export class Environment implements System {
   /** 0..1 overcast blend of the sky toward a flat grey (the weather system drives it). */
   readonly overcastU = { value: 0 };
   readonly overcastColorU = { value: new THREE.Color(0.55, 0.6, 0.66) };
+  /** Sky grade (see tameSky). */
+  private readonly skySatU = { value: 1.35 };
+  private readonly goldenU = { value: 0 };
+  private readonly glowColorU = { value: new THREE.Color(1.0, 0.45, 0.16) };
+  private readonly nightU = { value: 0 };
+  private readonly nightHorizonU = { value: new THREE.Color(0x1d2f5c) };
+  private readonly nightZenithU = { value: new THREE.Color(0x070d24) };
+  /** 0..1 golden-hour factor (sun low but up), for other systems (e.g. Weather) to read. */
+  golden = 0;
 
   init(game: Game) {
     this.game = game;
@@ -224,49 +266,60 @@ export class Environment implements System {
 
     const e = this.sunDir.y; // -1..1
     const day = THREE.MathUtils.smoothstep(e, -0.08, 0.18);
-    const golden = 1 - THREE.MathUtils.smoothstep(e, 0.02, 0.32);
+    // Art pass: golden hour starts earlier (sun below ~30°, e.g. 19:30 in Jimothy Summer) instead of the last minutes
+    const golden = (1 - THREE.MathUtils.smoothstep(e, 0.2, 0.5)) * day;
+    this.golden = golden;
     this.nightFactor = 1 - THREE.MathUtils.smoothstep(e, -0.2, 0.02);
+    const night = this.nightFactor;
 
-    // Sun / moon light
-    const sunCol = new THREE.Color(1, 0.96, 0.9).lerp(new THREE.Color(1, 0.62, 0.36), golden * day);
-    const moonCol = new THREE.Color(0.55, 0.65, 1.0);
+    // Sun / moon light — warm Goat-Sim sunshine, deep amber at golden hour, cool blue moonlight
+    const sunCol = _c1.set(0xfff1dc).lerp(_c2.set(0xffa860), golden);
     const light = this.sun;
     if (e > -0.02) {
       light.color.copy(sunCol);
-      light.intensity = 0.2 + 3.2 * day;
+      light.intensity = 0.2 + 3.3 * day - 0.35 * golden * day;
     } else {
-      light.color.copy(moonCol);
-      light.intensity = 0.8 * this.nightFactor; // polish: was 0.55 — moonlit, not pitch black
+      light.color.set(0x9fb4ff);
+      light.intensity = 0.95 * night; // moonlit, not pitch black
     }
-    // Hemisphere fill
-    const skyDay = new THREE.Color(0xb7d4ff);
-    const skyGold = new THREE.Color(0xffc9a0);
-    // polish: brighter blue night fill (was 0x2a3b66 at 0.55): moon shadows used to be pure black and Jimothy a
-    // silhouette. Still reads as night — glowing windows/lamps pop against it.
-    const skyNight = new THREE.Color(0x3f5796);
-    const hemiSky = skyNight.clone().lerp(skyDay.clone().lerp(skyGold, golden * 0.6), day);
+    // Hemisphere fill: saturated sky blue from above, warm grass/earth bounce from below
+    const skyDay = _c3.set(0xb6d2f2);
+    const skyGold = _c4.set(0xffc39a);
+    // Night fill: brighter blue (moon shadows used to be pure black and Jimothy a silhouette). Still reads as night —
+    // glowing windows/lamps pop against it.
+    const hemiSky = _c5.set(0x4460a2).lerp(skyDay.lerp(skyGold, golden * 0.65), day);
     this.hemi.color.copy(hemiSky);
-    this.hemi.groundColor.set(0x5b4c3a).lerp(new THREE.Color(0x2b3244), this.nightFactor);
-    this.hemi.intensity = 1.05 + 0.25 * day;
+    this.hemi.groundColor.set(0x7d6b48).lerp(_c1.set(0x2c3752), night);
+    this.hemi.intensity = 1.12 + 0.2 * day;
 
-    // Fog & background
-    const fogDay = new THREE.Color(0xd3e6f7);
-    const fogGold = new THREE.Color(0xfbd2b4);
-    const fogNight = new THREE.Color(0x121a2c);
-    const fogCol = fogNight.clone().lerp(fogDay.clone().lerp(fogGold, golden * 0.75), day);
+    // Fog & background (horizon haze: pale blue by day, peach at golden hour, deep blue at night)
+    const fogDay = _c2.set(0xc9e0f5);
+    const fogGold = _c3.set(0xf6c79f);
+    const fogCol = _c4.set(0x1c2b4f).lerp(fogDay.lerp(fogGold, golden * 0.8), day);
     const fog = this.game.scene.fog as THREE.Fog;
     fog.color.copy(fogCol);
     fog.near = this.fogNear;
     fog.far = this.fogFar;
     (this.game.scene.background as THREE.Color).copy(fogCol);
 
-    // Sky shader looks odd at night; fade it and show stars
+    // Sky grade + stars
     (this.sky.material as THREE.ShaderMaterial).uniforms.rayleigh.value = 0.4 + 1.0 * day;
+    this.goldenU.value = golden;
+    this.nightU.value = THREE.MathUtils.smoothstep(night, 0.05, 0.85);
+    this.nightHorizonU.value.copy(fogCol).lerp(_c5.set(0x1d2f5c), 0.5);
     const starMat = this.stars.material as THREE.PointsMaterial;
-    starMat.opacity = this.nightFactor * 0.9;
+    starMat.opacity = night * 0.9;
     const moonMat = this.moon.material as THREE.MeshBasicMaterial;
-    moonMat.opacity = this.nightFactor;
-    this.game.renderer.bloom.intensity = 0.5 + this.nightFactor * 0.5;
+    moonMat.opacity = night;
+
+    // Post: exposure lift at night (readable, not murky), glowier bloom at golden hour/night, split-tone grade
+    const r = this.game.renderer;
+    r.bloom.intensity = 0.5 + night * 0.45 + golden * 0.15;
+    r.exposure.value = 1.0 + 0.06 * golden + 0.3 * night;
+    r.gradeHighlights.value.setRGB(1.04, 1.0, 0.94).lerp(_c1.setRGB(1.08, 0.99, 0.87), golden).lerp(_c2.setRGB(1.04, 1.0, 1.0), night);
+    r.gradeShadows.value.setRGB(1.0, 0.99, 1.02).lerp(_c3.setRGB(1.0, 0.95, 1.02), golden).lerp(_c4.setRGB(0.9, 0.98, 1.12), night);
+    // Jimothy's fur rim light: soft sky sheen by day, amber at golden hour, moon-blue at night
+    furUniforms.uFurRim.value.setRGB(0.55, 0.55, 0.5).lerp(_c1.setRGB(1.0, 0.62, 0.32), golden).lerp(_c2.setRGB(0.32, 0.45, 0.9), night);
 
     // Environment map (reflections) — regenerate occasionally
     const now = this.game.realTime;

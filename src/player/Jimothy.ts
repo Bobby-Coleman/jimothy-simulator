@@ -26,6 +26,31 @@ const _m = new THREE.Matrix4();
 const GROUND_FILTER = groups(G.ALL, G.WORLD | G.PROP | G.VEHICLE | G.NPC | G.RAGDOLL | G.ANIMAL);
 const CLIMB_FILTER = groups(G.ALL, G.WORLD | G.VEHICLE);
 const GRAB_FILTER = groups(G.ALL, G.PROP | G.NPC | G.RAGDOLL | G.VEHICLE | G.ANIMAL);
+const SIGHT_FILTER = groups(G.ALL, G.WORLD);
+
+// ---- Feel pass: soft aim-assist (see pickTarget) + juice. Ranges are from Jimothy's centre to the target's nearest point.
+const DEG = Math.PI / 180;
+const GRAB_RANGE = 1.3;
+const GRAB_CONE = 52 * DEG; // half-angle: a ~100° cone in front of him
+const BONK_RANGE = 2.1;
+const BONK_CONE = 45 * DEG;
+const WASH_TARGET_RANGE = 1.4;
+const WASH_TARGET_CONE = 60 * DEG;
+/** Things this close count from (almost) any side: he's touching them. */
+const TOUCH_RANGE = 0.55;
+/** Water within this of his paws / body counts for washing (puddles are tiny: be generous). */
+const WASH_REACH_HAND = 1.0;
+const WASH_REACH_BODY = 1.25;
+
+export interface AimTarget {
+  entity: Entity;
+  collider: RAPIER.Collider;
+  /** Nearest point of the target's collider to Jimothy's centre. */
+  point: THREE.Vector3;
+  dist: number;
+  angle: number;
+  score: number;
+}
 
 function dampAngle(a: number, b: number, k: number, dt: number) {
   let d = b - a;
@@ -90,6 +115,13 @@ export class Jimothy implements System {
   private vBefore = new THREE.Vector3();
   private washHintCooldown = 0;
   private hangTarget: { entity: Entity; local: THREE.Vector3 } | null = null;
+  // Feel pass state
+  /** Aim-assisted bonk target (the lunge homes in on it and it always counts when reached). */
+  private bonkTarget: Entity | null = null;
+  /** Until this game time the bonk lunge carries (low ground friction) instead of stopping dead. */
+  private lungeUntil = -10;
+  /** Real time of the last hit-stop (so bowling through a crowd doesn't turn into a slideshow). */
+  private lastHitStop = -10;
   /** Seconds since the player last gave input. */
   idleTime = 0;
   /** 0..1, set to 1 in water and dries over time. */
@@ -145,6 +177,95 @@ export class Jimothy implements System {
     return out;
   }
 
+  /**
+   * Feel pass: soft aim-assist. The best entity whose nearest point is within `range` of Jimothy's centre and inside a
+   * ±`cone` wedge around his facing (anything he's touching counts from almost any side), scored by distance + angle
+   * (+ optional `bias`, lower = better), with line of sight so he never grabs through walls.
+   */
+  pickTarget(range: number, cone: number, accept: (e: Entity) => boolean, bias?: (e: Entity) => number): AimTarget | null {
+    const game = this.game;
+    const p = this.position;
+    const fx = Math.sin(this.facing);
+    const fz = Math.cos(this.facing);
+    const cols = game.physics.overlapSphere(p, range + 0.05, GRAB_FILTER, this.body);
+    let best: AimTarget | null = null;
+    const pt = new THREE.Vector3();
+    for (const c of cols) {
+      const e = game.entities.fromCollider(c);
+      if (!e || !e.alive || !e.body || e === this.entity || !accept(e)) continue;
+      let proj: { point: { x: number; y: number; z: number } } | null = null;
+      try {
+        proj = c.projectPoint({ x: p.x, y: p.y, z: p.z }, true);
+      } catch {
+        proj = null;
+      }
+      if (proj) pt.set(proj.point.x, proj.point.y, proj.point.z);
+      else {
+        const t = c.translation();
+        pt.set(t.x, t.y, t.z);
+      }
+      const dy = pt.y - p.y;
+      if (dy > 1.15 || dy < -0.8) continue; // out of paw reach vertically
+      const dx = pt.x - p.x;
+      const dz = pt.z - p.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > range) continue;
+      let angle = 0;
+      if (dist > 0.08) angle = Math.acos(THREE.MathUtils.clamp((dx * fx + dz * fz) / dist, -1, 1));
+      else {
+        // (he's on top of / inside it: judge by the direction to its centre instead)
+        const t = e.body.translation();
+        const cx = t.x - p.x;
+        const cz = t.z - p.z;
+        const cl = Math.hypot(cx, cz);
+        if (cl > 0.05) angle = Math.acos(THREE.MathUtils.clamp((cx * fx + cz * fz) / cl, -1, 1));
+      }
+      if (angle > (dist < TOUCH_RANGE ? 105 * DEG : cone)) continue;
+      const score = dist / range + (angle / cone) * 0.85 + (bias ? bias(e) : 0);
+      if (best && score >= best.score) continue;
+      if (dist > 0.3) {
+        const dir = _c.set(dx, dy, dz);
+        const los = game.physics.raycast(p, dir, Math.max(0, dir.length() - 0.06), SIGHT_FILTER, this.body, (col) => !game.physics.isThin(col));
+        if (los) continue;
+      }
+      best = { entity: e, collider: c, point: pt.clone(), dist, angle, score };
+    }
+    return best;
+  }
+
+  /** Snap-turn to face a world point (aim-assist). */
+  private faceToward(pt: THREE.Vector3) {
+    const dx = pt.x - this.position.x;
+    const dz = pt.z - this.position.z;
+    if (dx * dx + dz * dz > 0.0004) this.facing = Math.atan2(dx, dz);
+  }
+
+  /**
+   * Feel pass: freeze-frame + camera punch for a hit. `strength` 0..1. Rate-limited so bowling through a crowd or a
+   * run of trash cans stays smooth; the camera part respects "Reduce flashing & shake" (CameraRig.kick).
+   */
+  private feelHit(strength: number, dir?: THREE.Vector3) {
+    const game = this.game;
+    const s = THREE.MathUtils.clamp(strength, 0, 1);
+    game.get<CameraRig>('camera')?.kick?.(0.25 + s * 0.5, dir);
+    if (game.realTime - this.lastHitStop < 0.3) return;
+    this.lastHitStop = game.realTime;
+    (game as any).hitStop?.(0.04 + s * 0.03, 0.06);
+  }
+
+  /** Particle helper (FxSystem.emit), no-op when FX isn't there. */
+  private fx(kind: string, pos: THREE.Vector3, opts?: Record<string, unknown>) {
+    try {
+      this.game.get<any>('fx')?.emit?.(kind, pos, opts);
+    } catch {
+      /* purely cosmetic */
+    }
+  }
+
+  private feetPoint(out = new THREE.Vector3()) {
+    return out.copy(this.position).setY(this.position.y - R * 0.9 * this.sizeMul);
+  }
+
   private setGroupsHeld(e: Entity, held: boolean, prev?: number[]) {
     const b = e.body!;
     const out: number[] = [];
@@ -186,6 +307,9 @@ export class Jimothy implements System {
     this.game.events.emit('land', { height: fall });
     this.model.squash(Math.min(0.45, 0.08 + fall * 0.05));
     if (fall > 1.2) this.game.sfx('land', this.position, Math.min(1, fall / 6));
+    // Feel pass: small hops get a puff too (FX does its own dust ring above 1.5 m); big drops thump the camera
+    if (fall > 0.55 && fall <= 1.5 && this.mode === 'walk') this.fx('dust', this.feetPoint(new THREE.Vector3()), { scale: 0.4 + fall * 0.2 });
+    if (fall > 3) this.game.get<CameraRig>('camera')?.kick?.(Math.min(0.8, fall * 0.06));
     this.airPeakY = this.position.y;
   }
 
@@ -285,6 +409,7 @@ export class Jimothy implements System {
           if (this.held) this.release(false);
           this.setMode('roll');
           game.sfx('boing', this.position, 0.5, 1.4);
+          this.rollWhoomp(true);
           game.events.emit('rollStart', {});
         }
       }
@@ -355,7 +480,9 @@ export class Jimothy implements System {
     const plat = this.grounded ? (this.groundEntity?.data?.velocity as THREE.Vector3 | undefined) : undefined;
     const tx = wish.x * max + (plat?.x ?? 0);
     const tz = wish.z * max + (plat?.z ?? 0);
-    const accel = this.grounded ? (wish.lengthSq() > 0.01 ? 42 : 34) : 11;
+    let accel = this.grounded ? (wish.lengthSq() > 0.01 ? 42 : 34) : 11;
+    // Feel pass: an aim-assisted bonk lunge at something a bit farther away carries for a moment instead of stopping dead
+    if (game.time < this.lungeUntil) accel = Math.min(accel, 10);
     const dx = tx - vx;
     const dz = tz - vz;
     const dl = Math.hypot(dx, dz);
@@ -393,9 +520,11 @@ export class Jimothy implements System {
     // Start climbing: pushing into a wall while airborne, or holding jump against it
     if (!this.frozen && this.climbCooldown <= 0 && wish.lengthSq() > 0.2 && (!this.grounded || inp.held('jump'))) {
       const dir = _a.copy(wish).normalize();
-      const hit = game.physics.raycast(this.position, dir, R + 0.28, CLIMB_FILTER, this.body);
+      // Feel pass: a little more reach so pressing into a wall at an angle + jump reliably grabs on
+      const hit = game.physics.raycast(this.position, dir, R + 0.36, CLIMB_FILTER, this.body);
       if (hit && Math.abs(hit.normal.y) < 0.4 && !game.entities.fromCollider(hit.collider)?.tags.has('noclimb')) {
-        this.enterClimb(hit.normal);
+        // Feel pass: a low wall / ledge he can almost reach: vault straight onto it instead of climbing 20 cm
+        if (!this.tryVault(hit.point, hit.normal)) this.enterClimb(hit.normal);
       }
     }
 
@@ -407,6 +536,34 @@ export class Jimothy implements System {
       if (v.y < -4) game.sfx('splash', this.position, Math.min(1, -v.y / 12));
       game.events.emit('splash', { position: this.position.clone(), strength: -v.y, volume: vol });
     }
+  }
+
+  /**
+   * Feel pass: ledge vault. If the wall he's pressing into has a walkable top no higher than ~0.75 m above his centre,
+   * pop him up and over it (a mantle) instead of starting a climb. Returns true if he vaulted.
+   */
+  private tryVault(wallPoint: THREE.Vector3, normal: THREE.Vector3) {
+    const game = this.game;
+    const n = _b.copy(normal).setY(0);
+    if (n.lengthSq() < 1e-4) return false;
+    n.normalize();
+    const from = new THREE.Vector3(wallPoint.x - n.x * 0.32, this.position.y + 0.95 * this.sizeMul, wallPoint.z - n.z * 0.32);
+    // the space above the ledge must be free (not a taller wall with a lip)
+    if (game.physics.overlapSphere(from, 0.2, groups(G.ALL, G.WORLD | G.VEHICLE), this.body).length) return false;
+    const down = game.physics.raycast(from, _c.set(0, -1, 0), 1.6 * this.sizeMul, CLIMB_FILTER, this.body);
+    if (!down || down.normal.y < 0.7) return false;
+    const rise = down.point.y - this.position.y; // ledge top relative to his centre
+    if (rise > 0.75 * this.sizeMul || rise < -0.25 * this.sizeMul) return false;
+    const g = -game.physics.gravity * 1.25 * this.gravityMul;
+    const need = Math.max(0.2, down.point.y + R * this.sizeMul + 0.12 - this.position.y);
+    const vy = Math.min(9, Math.sqrt(2 * g * need));
+    this.body.setLinvel({ x: -n.x * 3.4, y: Math.max(this.body.linvel().y, vy), z: -n.z * 3.4 }, true);
+    this.climbCooldown = 0.45;
+    this.jumpBuffer = 0;
+    this.lastJump = game.time;
+    this.model.squash(-0.18);
+    game.events.emit('mantle', {});
+    return true;
   }
 
   private enterClimb(normal: THREE.Vector3) {
@@ -485,6 +642,17 @@ export class Jimothy implements System {
     if (Math.hypot(v.x, v.z) > 0.5) this.facing = Math.atan2(v.x, v.z);
     this.setMode('walk');
     this.body.setLinvel({ x: v.x * 0.7, y: Math.max(v.y, 2.5), z: v.z * 0.7 }, true);
+    this.rollWhoomp(false);
+  }
+
+  /** Feel pass: Tuck & Roll "whoomp": squash into a ball / pop back out, a dust ring, a soft FOV punch. */
+  private rollWhoomp(start: boolean) {
+    const game = this.game;
+    this.model.squash(start ? 0.42 : -0.3);
+    game.sfx('whoosh', this.position, start ? 0.4 : 0.3, start ? 0.65 : 0.95);
+    if (!start) game.sfx('boing', this.position, 0.35, 0.85);
+    if (this.grounded) this.fx('dust', this.feetPoint(new THREE.Vector3()), { scale: start ? 0.75 : 0.6 });
+    game.get<CameraRig>('camera')?.punchFov?.(start ? 3.5 : -2);
   }
 
   private updateRoll(dt: number) {
@@ -646,27 +814,25 @@ export class Jimothy implements System {
 
   tryGrab() {
     const game = this.game;
-    const hand = this.handPoint(new THREE.Vector3());
-    const cols = game.physics.overlapSphere(hand, 0.62, GRAB_FILTER, this.body);
-    let best: Entity | undefined;
-    let bestD = Infinity;
-    let bestCol: RAPIER.Collider | undefined;
-    for (const c of cols) {
-      const e = game.entities.fromCollider(c);
-      if (!e || !e.alive || !e.body) continue;
-      if (!(e.tags.has('grabbable') || e.kind === 'npc' || e.kind === 'vehicle' || e.kind === 'animal' || e.kind === 'slop')) continue;
-      const t = e.body.translation();
-      const d = hand.distanceToSquared(_a.set(t.x, t.y, t.z)) * (e.tags.has('grabbable') ? 0.6 : 1);
-      if (d < bestD) {
-        bestD = d;
-        best = e;
-        bestCol = c;
-      }
-    }
-    if (!best || !best.body) {
+    // Feel pass: soft aim-assist: best grabbable in a ~100° cone within ~1.3 m, then snap-turn to it.
+    const pick = this.pickTarget(
+      GRAB_RANGE,
+      GRAB_CONE,
+      (e) => !e.data.heldByPlayer && (e.tags.has('grabbable') || e.kind === 'npc' || e.kind === 'vehicle' || e.kind === 'animal' || e.kind === 'slop'),
+      (e) => (e.tags.has('grabbable') ? -0.12 : 0), // small things you can carry win ties (old behaviour)
+    );
+    const best = pick?.entity;
+    if (!pick || !best || !best.body) {
+      this.whiff();
       game.events.emit('grabMiss', {});
       return;
     }
+    if (pick.dist > 0.12) this.faceToward(pick.point);
+    const hand = this.handPoint(new THREE.Vector3());
+    // Grip point for drags / hanging: on the thing's surface (pulled a hair toward Jimothy), or his paws if closer.
+    const grip = pick.point.clone();
+    if (grip.distanceToSquared(this.position) > 1e-4) grip.addScaledVector(_c.copy(this.position).sub(grip).normalize(), 0.05);
+    const bestCol: RAPIER.Collider | undefined = pick.collider;
     let target: Entity = best;
     const res = best.onGrab?.(game);
     if (res === false) return;
@@ -677,8 +843,9 @@ export class Jimothy implements System {
       game.sfx('steal', this.position);
     }
     if (!target.body) return;
+    this.model.reach();
     if (target.body.isKinematic() && target.kind === 'vehicle') {
-      this.attachTo(target, hand);
+      this.attachTo(target, hand.distanceTo(grip) < 0.62 ? hand : grip);
       return;
     }
     if (target.mass <= CARRY_MAX_MASS && (target.body.isDynamic() || target !== best)) {
@@ -689,7 +856,7 @@ export class Jimothy implements System {
       const b = target.body;
       const t = b.translation();
       const r = b.rotation();
-      const pt = bestCol ? hand : new THREE.Vector3(t.x, t.y, t.z);
+      const pt = bestCol ? (hand.distanceTo(grip) < 0.62 ? hand : grip) : new THREE.Vector3(t.x, t.y, t.z);
       _q.set(r.x, r.y, r.z, r.w).invert();
       const local = pt.clone().sub(_a.set(t.x, t.y, t.z)).applyQuaternion(_q);
       this.held = { entity: target, kind: 'drag', localPoint: local, prevGroups: [], since: game.time };
@@ -697,6 +864,13 @@ export class Jimothy implements System {
     }
     game.sfx('grab', this.position);
     game.events.emit('grab', { entity: target });
+  }
+
+  /** Feel pass: a readable grab miss: a quick paw swipe at the air + a tiny whoosh (no score, no penalty). */
+  private whiff() {
+    this.model.swipe();
+    this.game.sfx('whoosh', this.position, 0.28, 1.9);
+    this.fx('whoosh', this.handPoint(new THREE.Vector3()), { dir: this.forwardVec(new THREE.Vector3()), scale: 0.6 });
   }
 
   release(thrown: boolean) {
@@ -797,10 +971,24 @@ export class Jimothy implements System {
     if (game.time - this.bonkTime < 0.45) return;
     this.bonkTime = game.time;
     this.bonkHit.clear();
+    // Feel pass: aim-assist the lunge at the best bonkable thing in front and home in on it.
+    this.bonkTarget = null;
+    let reach = 0;
+    if (this.mode === 'walk' || this.mode === 'swim') {
+      const pick = this.pickTarget(BONK_RANGE, BONK_CONE, (e) => !e.data.heldByPlayer && e.kind !== 'player' && (!!e.body?.isDynamic() || !!e.onBonk || e.kind === 'npc'));
+      if (pick) {
+        this.bonkTarget = pick.entity;
+        if (pick.dist > 0.1) this.faceToward(pick.point);
+        reach = pick.dist;
+      }
+    }
     const f = this.forwardVec(_b);
     const v = this.body.linvel();
     if (this.mode === 'walk') {
-      this.body.setLinvel({ x: v.x * 0.3 + f.x * 7.5, y: this.grounded ? 2.6 : v.y, z: v.z * 0.3 + f.z * 7.5 }, true);
+      // a farther target gets a slightly longer lunge; the lunge carries for a moment instead of stopping dead
+      const lunge = 7.5 + THREE.MathUtils.clamp(reach - 0.9, 0, 1.2) * 2.2;
+      this.lungeUntil = reach > 0.95 ? game.time + 0.16 : -10;
+      this.body.setLinvel({ x: v.x * 0.3 + f.x * lunge, y: this.grounded ? 2.6 : v.y, z: v.z * 0.3 + f.z * lunge }, true);
     } else if (this.mode === 'roll') {
       this.body.applyImpulse({ x: f.x * MASS * 7, y: MASS * 1.5, z: f.z * MASS * 7 }, true);
     } else if (this.mode === 'swim') {
@@ -817,9 +1005,35 @@ export class Jimothy implements System {
     // Rolling fast counts as a continuous bonk (bowling!)
     const rollBonk = rolling && this.speed > 6;
     if (since > 0.32 && !rollBonk) return;
+    // Feel pass: keep the lunge pointed at the aim-assist target while it closes in
+    const tgt = since <= 0.32 && !rolling ? this.bonkTarget : null;
+    if (tgt && (!tgt.alive || !tgt.body || this.bonkHit.has(tgt.id))) this.bonkTarget = null;
+    else if (tgt?.body) {
+      const t = tgt.body.translation();
+      const want = Math.atan2(t.x - this.position.x, t.z - this.position.z);
+      this.facing = dampAngle(this.facing, want, 18, game.dt);
+      if (this.mode === 'walk' && game.time < this.lungeUntil) {
+        const v = this.body.linvel();
+        const sp = Math.hypot(v.x, v.z);
+        if (sp > 1) this.body.setLinvel({ x: Math.sin(this.facing) * sp, y: v.y, z: Math.cos(this.facing) * sp }, true);
+      }
+    }
     const f = this.forwardVec(_b);
     const center = _a.copy(this.position).addScaledVector(f, rolling ? 0.2 : 0.42);
     const cols = game.physics.overlapSphere(center, rolling ? 0.55 : 0.58, GRAB_FILTER, this.body);
+    // ...and the target itself always counts once he's reached it (even if the sphere is a hair off)
+    if (this.bonkTarget?.body && since <= 0.32 && !rolling && !this.bonkHit.has(this.bonkTarget.id)) {
+      const b = this.bonkTarget.body;
+      for (let i = 0; i < b.numColliders(); i++) {
+        const c = b.collider(i);
+        const pr = c.projectPoint({ x: this.position.x, y: this.position.y, z: this.position.z }, true);
+        if (pr && Math.hypot(pr.point.x - this.position.x, pr.point.z - this.position.z) < R + 0.42 && Math.abs(pr.point.y - this.position.y) < 1.1) {
+          if (!cols.includes(c)) cols.push(c);
+          break;
+        }
+      }
+    }
+    let first = true;
     for (const c of cols) {
       const e = game.entities.fromCollider(c);
       const key = e ? e.id : -c.handle - 1;
@@ -842,6 +1056,13 @@ export class Jimothy implements System {
       game.events.emit('bonk', { entity: e, impulse, rolling });
       game.sfx(mass > 40 ? 'impact_heavy' : 'bonk', point);
       game.get<CameraRig>('camera')?.shake(0.25);
+      // Feel pass: freeze-frame + camera punch. Bonks always; while bowling only people / heavy stuff (rate-limited).
+      if (first && (!rolling || e?.kind === 'npc' || mass > 40)) {
+        first = false;
+        const heavy = e?.kind === 'npc' || mass > 40;
+        this.feelHit(rolling ? 0.35 : heavy ? 0.9 : 0.45, _c.set(f.x, 0, f.z));
+      }
+      if (e && e === this.bonkTarget) this.bonkTarget = null;
     }
   }
 
@@ -859,7 +1080,11 @@ export class Jimothy implements System {
     }
     const water = game.get<any>('water');
     const hand = this.handPoint(new THREE.Vector3()).add(_a.set(0, -0.2, 0));
-    let vol = this.mode === 'swim' ? water?.volumeAt?.(this.position) : water?.nearWater?.(hand, 0.95);
+    // Feel pass: be generous: water near his paws OR anywhere within a step of his body (puddles are tiny)
+    let vol =
+      this.mode === 'swim'
+        ? water?.volumeAt?.(this.position)
+        : (water?.nearWater?.(hand, WASH_REACH_HAND) ?? water?.nearWater?.(this.feetPoint(new THREE.Vector3()), WASH_REACH_BODY));
     // Seattle rule: when it rains on you, the whole city is a sink
     if (!vol && game.get<any>('weather')?.rainingOnPlayer) vol = { kind: 'rain', name: 'Rain', surfaceY: this.position.y - 0.3 };
     if (!vol) {
@@ -872,7 +1097,16 @@ export class Jimothy implements System {
       }
       return;
     }
-    if (!this.washing) game.events.emit('washStart', { volume: vol });
+    if (!this.washing) {
+      // Feel pass: turn to what he's about to wash (a face / slop in front), else to the water itself
+      if (!(this.held && this.held.kind === 'carry')) {
+        const front = this.pickWashTarget();
+        if (front) {
+          if (front.dist > 0.12) this.faceToward(front.point);
+        } else if (vol.center && this.mode === 'walk') this.faceToward(this.nearestWaterPoint(vol, _c));
+      } else if (vol.center && this.mode === 'walk') this.faceToward(this.nearestWaterPoint(vol, _c));
+      game.events.emit('washStart', { volume: vol });
+    }
     this.washing = true;
     this.washProgress += dt / WASH_TIME;
     game.events.emit('washing', { position: hand, dt, volume: vol });
@@ -892,12 +1126,21 @@ export class Jimothy implements System {
       game.events.emit('wash', { entity: e, kind: 'item', water: vol?.kind });
       return;
     }
-    // Wash whatever is in front of us (NPC faces, slop, washable props)
+    // Wash whatever is in front of us (NPC faces, slop, washable props): aim-assisted, like grabbing
+    const pick = this.pickWashTarget();
+    if (pick) {
+      const e = pick.entity;
+      if (e.onWash) e.onWash(game);
+      else defaultWash(game, e);
+      game.events.emit('wash', { entity: e, kind: e.kind, water: vol?.kind });
+      return;
+    }
+    // (legacy fallback: anything washable right at his paws, e.g. things without a body-shaped collider)
     const hand = this.handPoint(new THREE.Vector3());
     const cols = game.physics.overlapSphere(hand, 0.75, GRAB_FILTER, this.body);
     for (const c of cols) {
       const e = game.entities.fromCollider(c);
-      if (!e || !e.alive) continue;
+      if (!e || !e.alive || e.data.heldByPlayer) continue;
       if (e.onWash || e.tags.has('washable')) {
         if (e.onWash) e.onWash(game);
         else defaultWash(game, e);
@@ -907,6 +1150,32 @@ export class Jimothy implements System {
     }
     game.events.emit('wash', { kind: 'hands', water: vol?.kind });
     game.score(5, 'Hand Hygiene');
+  }
+
+  /** Feel pass: the washable thing in front of him (faces, slop, props), aim-assisted. Specials (onWash) win ties. */
+  private pickWashTarget() {
+    return this.pickTarget(
+      WASH_TARGET_RANGE,
+      WASH_TARGET_CONE,
+      (e) => !e.data.heldByPlayer && (!!e.onWash || e.tags.has('washable')),
+      (e) => (e.onWash ? -0.1 : 0),
+    );
+  }
+
+  /** Nearest point of a water volume's surface edge to Jimothy (for turning toward it). */
+  private nearestWaterPoint(v: any, out: THREE.Vector3) {
+    const p = this.position;
+    const c = v.center as THREE.Vector3;
+    if (v.radius != null) {
+      const dx = p.x - c.x;
+      const dz = p.z - c.z;
+      const l = Math.hypot(dx, dz) || 1;
+      const r = Math.min(l, v.radius);
+      return out.set(c.x + (dx / l) * r, v.surfaceY ?? p.y, c.z + (dz / l) * r);
+    }
+    const hx = v.halfX ?? 0;
+    const hz = v.halfZ ?? 0;
+    return out.set(THREE.MathUtils.clamp(p.x, c.x - hx, c.x + hx), v.surfaceY ?? p.y, THREE.MathUtils.clamp(p.z, c.z - hz, c.z + hz));
   }
 
   // ---------------------------------------------------------------- post physics
@@ -929,6 +1198,8 @@ export class Jimothy implements System {
     if (dv > 15 && (this.mode === 'walk' || this.mode === 'climb' || this.mode === 'swim' || this.mode === 'hang')) {
       this.ragdoll('impact', 1.4);
       game.get<CameraRig>('camera')?.shake(0.6);
+      // Feel pass: big hit = freeze-frame + camera shove along the hit
+      this.feelHit(1, _c.copy(this.velocity).sub(this.vBefore).setY(0));
       game.events.emit('playerImpact', { strength: dv });
     }
 

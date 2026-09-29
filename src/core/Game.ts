@@ -121,7 +121,13 @@ export class Game {
       this.fpsAccum = 0;
       this.fpsFrames = 0;
     }
-    const dt = rawDt * this.timeScale;
+    let dt = rawDt * this.timeScale;
+    // Feel pass: hit-stop multiplies on top of timeScale (so it never fights SlowMo/PhotoMode, which own timeScale)
+    // and counts down in unscaled frame time, i.e. a fixed number of frames under advance() too.
+    if (this.hitStopLeft > 0) {
+      dt *= this.hitStopScale;
+      this.hitStopLeft -= rawDt;
+    }
     this.dt = dt;
     this.frame++;
 
@@ -156,6 +162,19 @@ export class Game {
   /** Convenience for score popups. */
   score(points: number, label: string, position?: THREE.Vector3) {
     this.events.emit('score', { points, label, position });
+  }
+
+  /** Feel pass: remaining real seconds of hit-stop and the game-time multiplier while it lasts (see hitStop()). */
+  hitStopLeft = 0;
+  hitStopScale = 1;
+  /**
+   * Feel pass: a tiny freeze-frame on bonks / big impacts. For `seconds` of real time the game runs at `scale` speed.
+   * A longer request wins; overlapping ones don't stack. Used by src/player/Jimothy.ts.
+   */
+  hitStop(seconds: number, scale = 0.08) {
+    if (!(seconds > this.hitStopLeft)) return;
+    this.hitStopLeft = Math.min(0.15, seconds);
+    this.hitStopScale = THREE.MathUtils.clamp(scale, 0, 1);
   }
 
   hint(text: string, duration = 2.5) {
