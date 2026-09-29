@@ -5,7 +5,7 @@ QA pass over all 50 objectives ("Instincts"), 2026-09-29 night, against a produc
 teleports to the right place, grabbing real items, washing in real water, bonking real NPCs, riding real cars/dragons,
 real dialogs advanced with key presses. Nothing was completed by emitting gameplay events.
 
-**Result: 50/50 completable. 38 ✅ verified as shipped · 12 ⚠️ fixed in this pass · 0 ❌ blocked.**
+**Result: 50/50 completable. 37 ✅ verified as shipped · 13 ⚠️ fixed in this pass · 0 ❌ blocked.**
 (One secret, *Back From The Void*, is only possible thanks to the new raccoon cannons in `src/gameplay/extras` — see
 its row.)
 
@@ -43,7 +43,7 @@ feedback check and a save/reload check) in ~5 min; long grinds are checked for p
 | 3 | **Money Laundering** — wash cash | ⚠️ | A wad of cash lies on the Pike's Plaice fish counter (west end of the ice display); wash it in the stall sink behind the counter (or any water). | 2 min | There was **no cash in the world** except ~1 % dumpster loot and a random crow gift → added the wad. |
 | 4 | **Water Resistant\*** — wash a phone | ✅ | Grab a person holding a phone (fans, tourists, tech bros) → you steal it → wash it. | 1 min | |
 | 5 | **Dumpster Diver** — dumpster diving ×5 | ⚠️ | Jump onto a dumpster (or drop in from above). Each dumpster pays out once per 15 s. | 1–2 min | Needed 5 *different* dumpsters but town only has 4 → counts dives now. Jumping onto one from the street "fell" only 0.1 m and didn't count (needed 0.6 m) → any real landing counts. |
-| 6 | **Trash Panda Tornado** — tip 20 trash cans | ✅ | Bonk (F / RMB) or roll into cans. 85 cans in town; chain tips count. | 3–5 min | |
+| 6 | **Trash Panda Tornado** — tip 20 trash cans | ⚠️ | Bonk (F / RMB) or roll into cans. 85 cans in town; cans you knock into other cans count. | 3–5 min | Cars and pedestrians tip ~1 can a minute somewhere in town and those counted, so it finished itself after ~30 min of play → only cans Jimothy touched (or that tip within 15 m of him) count now. |
 | 7 | **Round Boy** — roll 500 m | ✅ | Tuck & Roll (Q), hold Sprint. Cumulative. The waterfront promenade is a good car-free runway. | 45 s rolling | Unlocks **Chonk**. |
 | 8 | **Not A Cat** — let someone say "here kitty kitty", turn around | ✅ | Stand with your back to a pedestrian/tourist/fan/tech bro 2–6 m away; when they call "here kitty kitty" and tiptoe closer, turn to face them. | 1–3 min | Global 22 s cooldown + a dice roll, so it can take a few tries. |
 | 9 | **Cryptid Sighting** — get filmed by 12 different people | ⚠️ | Walk up to people with phones/cameras (tourists, fans, tech bros, some pedestrians) and let them notice you. Don't chitter at them — an "awww" interrupts filming. | 5–10 min | Target was 25 but only ~17–25 people with phones/cameras exist per game, spread over the whole map → 12. Counts accumulate across sessions. |
@@ -89,7 +89,7 @@ feedback check and a save/reload check) in ~5 min; long grinds are checked for p
 | # | Instinct | Status | How to do it | Time | Notes |
 |---|---|---|---|---|---|
 | 36 | **Strike!** — bowl over 5 people in one roll | ✅ | Stay in roll mode and bowl through people; one roll can last as long as you like (the market/waterfront crowds are best). | 1–2 min | Slow rolls knock people down without a "bonk", now those count too. |
-| 37 | **Chain Reaction** — ragdoll 5 people within 5 s | ⚠️ | Carry a propane tank from a Hills backyard BBQ to a crowd — the Jimothy Summer ceremony crowd at City Hall (6 people) or the graduation crowd (5) — and throw it (Bonk while carrying) into them. | 5 min | Was 10 people: the whole town has ~60 people spread over 360×360 m (never 10 in one place). Also explosion knockdowns didn't count at all (NPCs report them as cause *impact*, not by the player). Now 5, counting explosions; traffic/falls don't count. |
+| 37 | **Chain Reaction** — ragdoll 5 people within 5 s | ⚠️ | Carry a propane tank from a Hills backyard BBQ to a crowd — the Jimothy Summer ceremony crowd at City Hall (6 people) or the graduation crowd (5) — and throw it (Bonk while carrying) into them. | 5 min | Was 10 people: the whole town has ~60 people spread over 360×360 m (never 10 in one place). Also explosion knockdowns didn't count at all (NPCs report them as cause *impact*, not by the player). Now 5, counting explosions; traffic accidents, falls and anything > 30 m away don't count (they used to creep it up while idling). |
 | 38 | **Kaboom** — blow something up | ✅ | Bonk a propane tank (Hills BBQs) twice, or throw it. | 30 s | |
 | 39 | **Car Surfer** — hang onto a moving car 10 s | ✅ | Stand beside a road and grab the side of a passing car; Jump/E to let go. | 1 min | |
 | 40 | **Leap of Faith** — fall 25 m and walk it off | ⚠️ | Jump off the Space Noodle, a tall roof, or out of the Slop Dragon / a cannon flight. | 1 min after the Noodle | Falls were measured from the highest point **while climbing**, so climbing *down* a 25 m wall counted, and respawning (H) mid-fall "landed" a 60 m drop at spawn → now measured from where he lets go. |
@@ -143,7 +143,7 @@ All 12 unlock toasts + sounds were seen in the QA run.
 
 | File | Why |
 |---|---|
-| `src/gameplay/content/ObjectiveContent.ts` | wash10 / stickyFingers count distinct things; dumpsterDiver counts dives; Strike also counts roll knockdowns; Chain Reaction ignores traffic/falls but counts explosions; launch tracking rewritten (live progress, teleport-proof); Human Made needs you to look at the mural (or photograph it); saves above a lowered target complete on load; header table updated |
+| `src/gameplay/content/ObjectiveContent.ts` | wash10 / stickyFingers count distinct things; dumpsterDiver counts dives; trash tips and chain-reaction ragdolls must be Jimothy's doing (by him or near him — no more progress from traffic across town); Chain Reaction counts explosion knockdowns; Strike also counts roll knockdowns; launch tracking rewritten (live progress, teleport-proof); Human Made needs you to look at the mural (or photograph it); saves above a lowered target complete on load; header table updated |
 | `src/gameplay/content/objectiveDefs.ts` | targets: Cryptid 25→12, Chain Reaction 10→5, Frequent Flyer 30→8 m; descriptions for Dumpster Diver, Wash Away The Slop, Family Reunion, Crow Deals, Chain Reaction, Frequent Flyer |
 | `src/gameplay/Objectives.ts` | reward popup label "Instinct: …" so the score anti-spam can't shave it |
 | `src/player/Jimothy.ts` | fall height ("land" event) is measured from where he lets go of walls/cars/water, and a respawn/teleport is never a fall |
