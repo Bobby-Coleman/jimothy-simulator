@@ -3,6 +3,7 @@ import type { Game } from '../../../../core/Game';
 import { assetUrl } from '../../../../core/Assets';
 import { cached, canvasTexture } from './textures';
 import { onFrame } from './util';
+import { tagSign } from '../../../signRegistry';
 
 // ------------------------------------------------------------------------------------------- fonts
 
@@ -136,7 +137,7 @@ export class SignAtlas {
       const v = uv.getY(i);
       uv.setXY(i, r.u0 + (r.u1 - r.u0) * u, r.v0 + (r.v1 - r.v0) * v);
     }
-    return g;
+    return tagSign(g, 'atlas.quad', width, height, r.w / r.h);
   }
 
   /** Box whose ±Z faces show the atlas region (sides use the region's edge). */
@@ -160,7 +161,7 @@ export class SignAtlas {
       }
       uv.setXY(i, r.u0 + (r.u1 - r.u0) * u, r.v0 + (r.v1 - r.v0) * v);
     }
-    return g;
+    return tagSign(g, 'atlas.slab', width, height, r.w / r.h, 16);
   }
 }
 
@@ -175,6 +176,15 @@ export function sharedAtlas(game: Game): SignAtlas {
   });
 }
 
+/**
+ * Largest [width, height] (meters) with the atlas rect's aspect that fits in maxW × maxH —
+ * use it for a sign face so its text is never stretched.
+ */
+export function fitRect(r: { w: number; h: number }, maxW: number, maxH: number): [number, number] {
+  const a = r.w / r.h;
+  return maxW / maxH > a ? [maxH * a, maxH] : [maxW, maxW / a];
+}
+
 // ------------------------------------------------------------------------------------------- drawing helpers
 
 export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -185,6 +195,12 @@ export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+
+/** Rendered width of `text` in the current font: the larger of the advance and the glyphs' ink box. */
+export function inkWidth(ctx: CanvasRenderingContext2D, text: string) {
+  const m = ctx.measureText(text);
+  return Math.max(m.width, (m.actualBoundingBoxLeft ?? 0) + (m.actualBoundingBoxRight ?? 0));
 }
 
 /** Fit text into maxWidth by shrinking the font size. Returns the used size. */
@@ -198,10 +214,12 @@ export function fitText(
   font: string,
   opts: { fill?: string; stroke?: string; strokeW?: number; shadow?: string; align?: CanvasTextAlign; weight?: string } = {},
 ) {
-  let s = size;
+  let s = Math.round(size);
   ctx.font = `${opts.weight ?? ''} ${s}px ${font}`;
-  while (ctx.measureText(text).width > maxW && s > 8) {
-    s -= 2;
+  // measure the ink (display fonts overhang their advance) plus the outline stroke / drop shadow
+  const extra = (px: number) => (opts.stroke ? (opts.strokeW ?? px * 0.18) : 0) + (opts.shadow ? px * 0.06 : 0);
+  while (inkWidth(ctx, text) + extra(s) > maxW && s > 8) {
+    s -= s > 40 ? 2 : 1;
     ctx.font = `${opts.weight ?? ''} ${s}px ${font}`;
   }
   ctx.textAlign = opts.align ?? 'center';

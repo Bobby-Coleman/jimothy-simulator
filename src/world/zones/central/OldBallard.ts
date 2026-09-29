@@ -20,7 +20,7 @@ import {
   spawnSandwichBoard,
   spawnCoffeeCup,
 } from './lib/props';
-import { loadFonts, sharedAtlas, type AtlasRect } from './lib/signs';
+import { fitText, loadFonts, sharedAtlas, type AtlasRect } from './lib/signs';
 import { SHOPS, drawShopSign, drawShopWindow, drawYear, drawPlaque, BOARD_JOKES, drawBoard, drawCartSign, drawHomeSign, drawCommonsSign, drawClockFace, drawParkingSign, drawMarketBanner } from './lib/shopart';
 import { muralTexture } from './lib/mural';
 import { applyStripeRow, cached, latticeTexture, loadPBR, plaidTexture, stripeMaterial } from './lib/textures';
@@ -366,7 +366,8 @@ function buildPorchAndDen(game: Game, world: World, batch: Batch) {
   const back = atlas.draw(384, 96, (ctx, w, h) =>
     drawShopSignLite(ctx, w, h, 'GOODWHEEL · DONATIONS', '#1b5fae', '#ffffff'),
   );
-  batch.add(atlas.quad(back, 2.6, 0.65), back.page.mat, { matrix: T(cx, y0 + 3.0, Z0 + 0.03), castShadow: false });
+  // on the wall left of the porch door (x 8.4–9.6), which used to cover its middle
+  batch.add(atlas.quad(back, 2.4, 0.6), back.page.mat, { matrix: T((X0 + 8.4) / 2, y0 + 2.9, Z0 + 0.03), castShadow: false });
   // steps down to the alley on the east end
   for (let i = 0; i < 4; i++) {
     const top = deckY - 0.3 * (i + 1);
@@ -532,8 +533,9 @@ async function buildPlaza(game: Game, world: World, batch: Batch) {
   for (let i = 0; i < 14; i++) bushes.push({ geo: new THREE.IcosahedronGeometry(0.08, 0), color: r.pick([0xff6fa8, 0xffd23f, 0xb36bff, 0xffffff]), matrix: T(r.range(-1.1, 1.1), r.range(1.2, 1.5), r.range(-0.7, 0.7)) });
   batch.add(mergeColored(bushes), cached('mat:foliage', () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true })), { matrix: T(29.6, y, 19.6) });
   // trees + grates along the east edge
-  placeBatched(world, batch, streetTree(2), [{ x: 31.0, y, z: 14.8, ry: 0.4 }], { collider: new THREE.Vector3(0.36, 3, 0.36) });
-  placeBatched(world, batch, treeGrate(), [{ x: 31.0, y, z: 14.8, ry: 0 }]);
+  // (kept south of the Jimothy Commons wall sign at z 14.9–18.1 so its canopy does not hide the sign)
+  placeBatched(world, batch, streetTree(2), [{ x: 31.0, y, z: 11.7, ry: 0.4 }], { collider: new THREE.Vector3(0.36, 3, 0.36) });
+  placeBatched(world, batch, treeGrate(), [{ x: 31.0, y, z: 11.7, ry: 0 }]);
   placeBatched(world, batch, bikeRack(), [{ x: 19.4, y, z: 10.3, ry: Math.PI / 2 }], { collider: new THREE.Vector3(2.2, 0.9, 0.2) });
   // café set
   spawnCafeTable(game, new THREE.Vector3(26.2, y, 16.2));
@@ -658,17 +660,14 @@ function buildAlleyStuff(game: Game, world: World, batch: Batch, water?: WaterSy
     ctx.strokeStyle = '#c62f2f';
     ctx.lineWidth = 10;
     ctx.strokeRect(6, 6, w - 12, h - 12);
-    ctx.fillStyle = '#c62f2f';
-    ctx.font = `bold ${h * 0.2}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText('NO', w / 2, h * 0.3);
-    ctx.fillText('PARKING', w / 2, h * 0.52);
-    ctx.font = `bold ${h * 0.08}px sans-serif`;
-    ctx.fillStyle = '#333';
-    ctx.fillText('(raccoons exempt)', w / 2, h * 0.78);
+    // fitted inside the red border (PARKING used to run off both edges)
+    fitText(ctx, 'NO', w / 2, h * 0.27, w - 36, h * 0.2, 'sans-serif', { fill: '#c62f2f', weight: 'bold' });
+    fitText(ctx, 'PARKING', w / 2, h * 0.49, w - 36, h * 0.2, 'sans-serif', { fill: '#c62f2f', weight: 'bold' });
+    fitText(ctx, '(raccoons exempt)', w / 2, h * 0.76, w - 36, h * 0.08, 'sans-serif', { fill: '#333', weight: 'bold' });
   });
   batch.add(new THREE.CylinderGeometry(0.04, 0.04, 2.6, 6), fm, { matrix: T(-20, y + 1.3, ALLEY_S.z1 - 0.3), color: 0x6c747d });
-  batch.add(atlas.slab(np, 0.45, 0.56, 0.02), np.page.mat, { matrix: T(-20, y + 2.3, ALLEY_S.z1 - 0.3) });
+  // mounted on the alley side of its pole (the pole used to run straight through the lettering)
+  batch.add(atlas.slab(np, 0.45, 0.56, 0.02), np.page.mat, { matrix: T(-20, y + 2.3, ALLEY_S.z1 - 0.3 - 0.055, Math.PI) });
   world.collider(new THREE.Vector3(-20, y + 1.3, ALLEY_S.z1 - 0.3), new THREE.Vector3(0.1, 2.6, 0.1));
   // a utility pole with a transformer at each end of the south alley
   for (const x of [-46, 46]) {
@@ -759,7 +758,7 @@ function buildParkingLotDecor(game: Game, world: World, batch: Batch) {
     z = 31.2;
   const y = roadY(x, z);
   batch.add(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 8), fm, { matrix: T(x, y + 1.3, z), color: 0x6c747d });
-  batch.add(atlas.slab(sign, 1.2, 0.75, 0.03), sign.page.mat, { matrix: T(x, y + 2.35, z, Math.PI) });
+  batch.add(atlas.slab(sign, 1.2, 0.75, 0.03), sign.page.mat, { matrix: T(x, y + 2.35, z - 0.075, Math.PI) }); // in front of its pole, not skewered on it
   world.collider(new THREE.Vector3(x, y + 1.3, z), new THREE.Vector3(0.12, 2.6, 0.12));
   // parking lot lamps
   const lamps: Xf[] = [
@@ -772,7 +771,8 @@ function buildParkingLotDecor(game: Game, world: World, batch: Batch) {
 
 // ============================================================================================ street furniture
 
-const CLOCK = { x: -3, z: -7.3 };
+// on the party wall between the bakery and Ink Different, clear of both sign bands
+const CLOCK = { x: -8, z: -7.3 };
 
 function buildStreetFurniture(game: Game, world: World, batch: Batch, rng: Rng) {
   const atlas = sharedAtlas(game);
@@ -781,22 +781,24 @@ function buildStreetFurniture(game: Game, world: World, batch: Batch, rng: Rng) 
   const treeXf: Xf[][] = [[], [], [], []];
   const grates: Xf[] = [];
   const meters: Xf[] = [];
+  // Lamps and street trees stand on the party walls between shops (alternating), never in front of a
+  // shop's sign band: their globes/canopies used to hide the storefront names from the street.
+  const shopBounds: Record<number, number[]> = { [-1]: [-44, -32, -22, -8, 4, 16, 28, 40], [1]: [-42, -30, -18, 2, 18, 32, 44] };
   for (const side of [-1, 1]) {
     const z = side * 6.35;
-    for (let x = -47; x <= 47; x += 14) {
-      if (side > 0 && x > 20 && x < 30) continue;
-      const y = walkY(x, z);
-      lampXf.push({ x, y, z, ry: 0 });
-      pools.push({ x, y: y - 0.13, z: side * 5.2, r: 4.2 });
-    }
-    for (let x = -40; x <= 40; x += 14) {
-      if (side > 0 && x > 16 && x < 34) continue;
-      if (side < 0 && Math.abs(x - CLOCK.x) < 3) continue;
-      const tz = side * 6.7;
-      const y = walkY(x, tz);
-      treeXf[rng.int(0, 2)].push({ x, y, z: tz, ry: rng.range(0, 6.28), s: rng.range(0.85, 1.0) });
-      grates.push({ x, y, z: tz, ry: 0 });
-    }
+    shopBounds[side].forEach((x, i) => {
+      if (side < 0 && Math.abs(x - CLOCK.x) < 3) return; // the street clock stands on this one
+      if (i % 2 === 0) {
+        const y = walkY(x, z);
+        lampXf.push({ x, y, z, ry: 0 });
+        pools.push({ x, y: y - 0.13, z: side * 5.2, r: 4.2 });
+      } else {
+        const tz = side * 6.7;
+        const y = walkY(x, tz);
+        treeXf[rng.int(0, 2)].push({ x, y, z: tz, ry: rng.range(0, 6.28), s: rng.range(0.85, 1.0) });
+        grates.push({ x, y, z: tz, ry: 0 });
+      }
+    });
     for (let x = -44 + 3.25; x <= 44; x += 6.5) {
       if (x > 19 && x < 31) continue;
       if (rng.chance(0.3)) continue;

@@ -202,8 +202,11 @@ export function raceArch(world: World, origin: THREE.Vector3, yaw: number, title
     const post = mesh(once('archPost', () => new THREE.CylinderGeometry(0.1, 0.12, 3.6, 10)), postM, (s * width) / 2, 1.8, 0);
     g.add(post);
   }
-  const tex = bannerTexture(title, 'JIMOTHY NIGHT · TEE-HEE PARK', { bg: '#ff8a65', bg2: '#e0533d', fg: '#fff', border: '#fff' }, 1024, 200);
-  const banner = signBoard(width + 0.4, 0.95, tex, 0xffffff);
+  // the banner hangs between the posts (it used to be 0.4 m wider, so they ran through it) and its canvas has the
+  // banner's own aspect (a fixed 1024×200 stretched the lettering ~50 % wide)
+  const bw = width - 0.3;
+  const tex = bannerTexture(title, 'JIMOTHY NIGHT · TEE-HEE PARK', { bg: '#ff8a65', bg2: '#e0533d', fg: '#fff', border: '#fff' }, 1024, Math.round((1024 * 0.95) / bw));
+  const banner = signBoard(bw, 0.95, tex, 0xffffff);
   banner.position.set(0, 3.3, 0);
   g.add(banner);
   const back = banner.clone();

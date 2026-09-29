@@ -11,6 +11,7 @@ import type { Game } from '../../../core/Game';
 import type { World } from '../../World';
 import { RAPIER, G, groups } from '../../../core/Physics';
 import { assetUrl } from '../../../core/Assets';
+import { registerSignYaw } from '../../signRegistry';
 
 export const UP = new THREE.Vector3(0, 1, 0);
 const _v = new THREE.Vector3();
@@ -803,11 +804,13 @@ export function canvasTexture(w: number, h: number, draw: (ctx: CanvasRenderingC
 
 /** Draw text that shrinks to fit `maxW`. */
 export function fitText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, size: number, font: string, weight = '') {
-  let s = size;
+  let s = Math.round(size);
   do {
     ctx.font = `${weight} ${s}px ${font}`.trim();
-    if (ctx.measureText(text).width <= maxW) break;
-    s -= 2;
+    // ink box, not just the advance: display fonts overhang it
+    const m = ctx.measureText(text);
+    if (Math.max(m.width, (m.actualBoundingBoxLeft ?? 0) + (m.actualBoundingBoxRight ?? 0)) <= maxW) break;
+    s -= s > 40 ? 2 : 1;
   } while (s > 8);
   ctx.fillText(text, x, y);
   return s;
@@ -850,6 +853,8 @@ export function signPanel(
     asBox?: boolean;
     name?: string;
     doubleSided?: boolean;
+    /** Push the board this far along its facing, e.g. post radius + depth / 2 to sit in front of a post. */
+    standoff?: number;
   } = {},
 ): THREE.Mesh {
   const depth = opts.depth ?? 0.08;
@@ -862,6 +867,13 @@ export function signPanel(
   const rot = new THREE.Euler(opts.tilt ?? 0, rotY, 0, 'YXZ');
   const quat = new THREE.Quaternion().setFromEuler(rot);
   const center = new THREE.Vector3(x, y, z);
+  // mount the board in front of a post at (x, z) instead of skewering it: shift it forward by `standoff`
+  if (opts.standoff) center.add(new THREE.Vector3(0, 0, opts.standoff).applyQuaternion(quat));
+  {
+    const im = tex.image as { width?: number; height?: number } | undefined;
+    const fo = center.clone().add(new THREE.Vector3(0, 0, depth / 2).applyQuaternion(quat));
+    registerSignYaw(opts.name ?? 'north.signPanel', fo.toArray(), rotY, w, h, im?.width && im.height ? im.width / im.height : undefined, opts.tilt ?? 0);
+  }
   let mesh: THREE.Mesh;
   if (opts.asBox) {
     const side = world.material(opts.back ?? 0x55585e, { roughness: 0.7 });

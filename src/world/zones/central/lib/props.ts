@@ -275,10 +275,11 @@ export function spawnSandwichBoard(game: Game, atlas: SignAtlas, rect: AtlasRect
     const fv = rect.v0 + (rect.v1 - rect.v0) * 0.5;
     const frameParts = [
       T(0, 0.96, 0).multiply(new THREE.Matrix4().makeScale(0.66, 0.04, 0.04)),
-      TR(-0.31, 0.49, 0.14, 0.28, 0, 0).multiply(new THREE.Matrix4().makeScale(0.04, 1.0, 0.04)),
-      TR(0.31, 0.49, 0.14, 0.28, 0, 0).multiply(new THREE.Matrix4().makeScale(0.04, 1.0, 0.04)),
-      TR(-0.31, 0.49, -0.14, -0.28, 0, 0).multiply(new THREE.Matrix4().makeScale(0.04, 1.0, 0.04)),
-      TR(0.31, 0.49, -0.14, -0.28, 0, 0).multiply(new THREE.Matrix4().makeScale(0.04, 1.0, 0.04)),
+      // legs lean the same way as the boards they hold (they used to lean the other way and cross through them)
+      TR(-0.31, 0.49, 0.14, -0.28, 0, 0).multiply(new THREE.Matrix4().makeScale(0.04, 1.0, 0.04)),
+      TR(0.31, 0.49, 0.14, -0.28, 0, 0).multiply(new THREE.Matrix4().makeScale(0.04, 1.0, 0.04)),
+      TR(-0.31, 0.49, -0.14, 0.28, 0, 0).multiply(new THREE.Matrix4().makeScale(0.04, 1.0, 0.04)),
+      TR(0.31, 0.49, -0.14, 0.28, 0, 0).multiply(new THREE.Matrix4().makeScale(0.04, 1.0, 0.04)),
     ].map((m) => {
       const g = new THREE.BoxGeometry(1, 1, 1).applyMatrix4(m);
       const uv = g.getAttribute('uv') as THREE.BufferAttribute;
@@ -286,7 +287,8 @@ export function spawnSandwichBoard(game: Game, atlas: SignAtlas, rect: AtlasRect
       return g;
     });
     const f1 = atlas.quad(rect, 0.58, 0.82).applyMatrix4(TR(0, 0.5, 0.155, -0.28, 0, 0));
-    const f2 = atlas.quad(rect, 0.58, 0.82).applyMatrix4(TR(0, 0.5, -0.155, 0.28, Math.PI, 0));
+    // (YXZ: pitch first, then the half turn: -0.28 leans this face's top in toward the ridge too, like an A)
+    const f2 = atlas.quad(rect, 0.58, 0.82).applyMatrix4(TR(0, 0.5, -0.155, -0.28, Math.PI, 0));
     return mergeGeometries([...frameParts, f1, f2].map((g) => normalise(g)), false)!;
   });
   return noShadow(spawnProp(game, { name: 'Sandwich Board', object: mesh(geo, rect.page.mat), mass: 6, tags: ['grabbable', 'washable'], size: new THREE.Vector3(0.66, 1.0, 0.5) }, pos, rotY));

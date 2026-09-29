@@ -27,12 +27,17 @@ export function fitText(
   size: number,
   opts: { weight?: string; font?: string; color?: string; stroke?: string; strokeW?: number; align?: CanvasTextAlign } = {},
 ) {
-  let s = size;
+  let s = Math.round(size);
   const font = opts.font ?? SIGN_FONT;
   const weight = opts.weight ?? '900';
   ctx.font = `${weight} ${s}px ${font}`;
-  while (s > 8 && ctx.measureText(text).width > maxW) {
-    s -= 2;
+  // ink box (display fonts overhang their advance) + outline stroke must fit maxW
+  const width = () => {
+    const m = ctx.measureText(text);
+    return Math.max(m.width, (m.actualBoundingBoxLeft ?? 0) + (m.actualBoundingBoxRight ?? 0)) + (opts.stroke ? (opts.strokeW ?? Math.max(2, s * 0.12)) : 0);
+  };
+  while (s > 8 && width() > maxW) {
+    s -= s > 40 ? 2 : 1;
     ctx.font = `${weight} ${s}px ${font}`;
   }
   ctx.textAlign = opts.align ?? 'center';

@@ -530,7 +530,8 @@ function frontPlaza(kit: Kit, b: Batch) {
     fitText(ctx, 'He is round enough.', w / 2, 425, w * 0.8, 62, FONT_ROUND, { fill: '#c62828' });
     fitText(ctx, '(He is perfect.)', w / 2, 520, w * 0.8, 56, FONT_ROUND, { fill: '#1f6b3a' });
   });
-  for (const dx of [-0.8, 0.8]) b.cyl([-3.6 + dx, 1.05, 76.3], 0.05, 2.1, 0x5d6770, { seg: 8, collide: true, mat: 'metal' });
+  // posts behind the board (they used to poke through its face)
+  for (const dx of [-0.8, 0.8]) b.cyl([-3.6 + dx, 1.05, 76.3 + 0.08], 0.05, 2.1, 0x5d6770, { seg: 8, collide: true, mat: 'metal' });
   kit.sign(b, { pos: [-3.6, 2.15, 76.3], rotY: Math.PI, w: 1.8, h: 1.28, tex: t, frame: 0x5d6770, depth: 0.05, border: 0.04 });
   // planters & lamps
   const r = rng(4);
@@ -579,8 +580,9 @@ function fishCart(kit: Kit, b: Batch, x: number, z: number, rotY: number, title:
   }
   b.cyl(L(0.9, 1.6, -0.3), 0.04, 1.3, 0xdddddd, { seg: 6, collide: false });
   b.cyl(L(0.9, 2.35, -0.3), 1.35, 0.35, 0xe63946, { rTop: 0.05, seg: 8, collide: false, mat: 'glossy' });
-  const t = kit.textSign([{ text: title, px: 60, color: '#fff', stroke: '#1b1d24' }, { text: sub, px: 28, color: '#fff8f0', font: FONT_ROUND }], { w: 2.3, h: 0.6, bg: color });
-  kit.sign(b, { pos: L(0, 0.55, 0.57), rotY, w: 2.2, h: 0.55, tex: t, depth: 0.02, collide: false, back: false });
+  // the board fits between the wheels (they used to cover its lower half)
+  const t = kit.textSign([{ text: title, px: 60, color: '#fff', stroke: '#1b1d24' }, { text: sub, px: 28, color: '#fff8f0', font: FONT_ROUND }], { w: 1.16, h: 0.62, bg: color });
+  kit.sign(b, { pos: L(0, 0.52, 0.57), rotY, w: 1.16, h: 0.62, tex: t, depth: 0.02, collide: false, back: false });
 }
 
 // ------------------------------------------------------------------ the Gum Wall (Post Alley)
@@ -688,7 +690,7 @@ function gumWall(kit: Kit, b: Batch) {
     ],
     { w: 1.4, h: 0.9, bg: '#ffd23a', border: '#1b1d24' },
   );
-  b.cyl([-25.6, 0.8, 79.2], 0.05, 1.6, 0x333333, { seg: 6, collide: false });
+  b.cyl([-25.6, 0.8, 79.2 + 0.07], 0.05, 1.6, 0x333333, { seg: 6, collide: false }); // behind the board, not through it
   kit.sign(b, { pos: [-25.6, 1.75, 79.2], rotY: Math.PI, w: 1.4, h: 0.9, tex: warn, frame: 0x1b1d24, depth: 0.04 });
 }
 
@@ -753,7 +755,8 @@ function park(kit: Kit, b: Batch) {
     b.box([x, 1.2, z - 1.23], [2.4, 0.9, 0.06], 0x2b2f38, { collide: false, mat: 'glossy' });
     b.box([x, 0.95, z - 1.45], [2.8, 0.08, 0.5], 0xd9c7a6, { collide: true }); // polish: solid counter (the food on it used to drop through)
     const t = kit.textSign([{ text: name, px: 64, color: '#fff', stroke: '#1b1d24' }, { text: sub, px: 26, color: '#fff', font: FONT_ROUND }], { w: 3.4, h: 0.8, bg: col });
-    kit.sign(b, { pos: [x, 3.35, z - 0.9], rotY: Math.PI, w: 3.4, h: 0.8, tex: t, depth: 0.06, collide: false });
+    // stands on the front edge of the roof so the overhang does not hide its lower line from the promenade
+    kit.sign(b, { pos: [x, 3.4, z - 1.42], rotY: Math.PI, w: 3.4, h: 0.8, tex: t, depth: 0.06, collide: false });
   });
   P.hotDog(game, -22.5, 0.99, 152.4, 0.3);
   P.cottonCandy(game, 21.6, 0.99, 152.4, 0x9fd8ff);
@@ -967,8 +970,9 @@ function boardwalk(kit: Kit, b: Batch) {
   P.trashCan(game, 16, DECK, 158.6, 0x2f5a7a);
   // WATERFRONT sign
   const t = kit.textSign([{ text: 'BALLARD-ISH WATERFRONT', px: 70, color: '#fff', stroke: '#0c2a40' }, { text: 'Salmon Bay · Boats · Seagulls with attitude', px: 30, color: '#bfe6ff', font: FONT_ROUND }], { w: 6, h: 1.2, bg: '#1f5f8b', border: '#ffd35a' });
-  for (const dx of [-2.6, 2.6]) b.cyl([-20 + dx, 1.4, 156], 0.1, 2.8, 0x173a55, { seg: 8, collide: true });
-  kit.sign(b, { pos: [-20, 3.1, 156], rotY: Math.PI, w: 6, h: 1.2, tex: t, frame: 0x173a55 });
+  // centred in the gap between the Chowder-ish and Fish & Chips kiosks (at x = -20 the kiosk hid it from the promenade)
+  for (const dx of [-2.6, 2.6]) b.cyl([-30 + dx, 1.4, 156 + 0.18], 0.1, 2.8, 0x173a55, { seg: 8, collide: true });
+  kit.sign(b, { pos: [-30, 3.1, 156], rotY: Math.PI, w: 6, h: 1.2, tex: t, frame: 0x173a55 });
   // gulls: perched on piles/railings + a lazy circling flock
   perched(kit, BIRD.gull(), [
     [-47, DECK + 1.05, BW.z1 - 0.2, 0.2, 1.3],
@@ -1045,7 +1049,7 @@ function piers(kit: Kit, b: Batch) {
   b.box([14.9, PONT.y + 0.12, 169.4], [0.5, 0.24, 0.8], 0x9aa3ad, { mat: 'metal' });
   const hint = kit.textSign([{ text: 'Did something squeak down here?', px: 30, color: '#333', font: FONT_ROUND }], { w: 1.5, h: 0.3, bg: '#f7efe0', pxPerM: 200 });
   kit.sign(b, { pos: [19, PONT.y + 0.7, 176.3], rotY: Math.PI, w: 1.4, h: 0.28, tex: hint, depth: 0.02, collide: false });
-  b.cyl([19, PONT.y + 0.35, 176.3], 0.03, 0.7, 0x5a4632, { seg: 5, collide: false });
+  b.cyl([19, PONT.y + 0.35, 176.3 + 0.045], 0.03, 0.7, 0x5a4632, { seg: 5, collide: false }); // behind the board, not through it
 
   // Pier C marina with finger docks
   deck(kit, b, PIER_C.x0, PIER_C.x1, PIER_C.z0, PIER_C.z1, { fascia: ['w', 'e', 's'], uvRot: true });
@@ -1165,10 +1169,11 @@ function ferry(kit: Kit, b: Batch) {
   // name boards on the hull sides
   const name = canvasTex(1024, 200, (ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
-    fitText(ctx, 'M/V ROUND BOY', w / 2, h * 0.42, w * 0.92, 130, FONT_TITLE, { fill: '#0f6b3e' });
+    // white outline: the title overlaps the hull's green stripe, where green-on-green lettering vanished
+    fitText(ctx, 'M/V ROUND BOY', w / 2, h * 0.42, w * 0.92, 130, FONT_TITLE, { fill: '#0f6b3e', stroke: '#ffffff', strokeW: 14 });
     fitText(ctx, 'BALLARD-ISH FERRIES', w / 2, h * 0.86, w * 0.6, 40, FONT_ROUND, { fill: '#0f6b3e' });
   });
-  for (const s of [-1, 1]) kit.sign(b, { pos: [s * (hw + 0.05), -0.1, zc], rotY: (s * Math.PI) / 2, w: 8, h: 1.56, tex: name, depth: 0.01, transparent: true, back: false, collide: false });
+  for (const s of [-1, 1]) kit.sign(b, { pos: [s * (hw + 0.05), -0.1, zc], rotY: (s * Math.PI) / 2, w: 8, h: 1.56, tex: name, depth: 0.03, transparent: true, back: false, collide: false });
   // cars parked on the car deck
   void Promise.all([kit.kenney('car-kit', 'sedan'), kit.kenney('car-kit', 'van'), kit.kenney('car-kit', 'taxi')]).then((cars) => {
     const spots: [number, number][] = [

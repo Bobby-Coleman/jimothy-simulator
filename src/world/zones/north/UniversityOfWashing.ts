@@ -524,7 +524,9 @@ function libraryTowerLadder(world: World, b: Batch, lib: HallInfo) {
 }
 
 function hallPlaque(world: World, b: Batch, h: HallInfo, name: string) {
-  const tex = canvasTexture(1024, 160, (ctx, w, hh) => {
+  const PW = Math.min(7.5, name.length * 0.42);
+  // canvas aspect = plaque aspect (it used to be a fixed 1024×160, stretching the letters)
+  const tex = canvasTexture(Math.min(2048, Math.round((160 * PW) / 0.9)), 160, (ctx, w, hh) => {
     ctx.fillStyle = '#efe7d6';
     ctx.fillRect(0, 0, w, hh);
     ctx.strokeStyle = '#b9ab8e';
@@ -537,8 +539,11 @@ function hallPlaque(world: World, b: Batch, h: HallInfo, name: string) {
     fitText(ctx, name.split('').join(' '), w / 2, hh / 2 + 4, w - 60, 88, "'Lilita One', serif");
     ctx.restore();
   });
-  const p = h.plaque.pos;
-  signPanel(world, tex, p.x, p.y, p.z, Math.min(7.5, name.length * 0.42), 0.9, h.plaque.rotY, { back: 0xe6dcc6, depth: 0.08, collide: false, batch: b });
+  const p = h.plaque.pos.clone();
+  // Halls without a tower have buttresses along the facade (0.7 m proud, one right behind the plaque's middle):
+  // mount the plaque across the buttress fronts instead of on the wall between them, where they hid its lettering.
+  if (!h.towerTop) p.add(new THREE.Vector3(Math.sin(h.plaque.rotY), 0, Math.cos(h.plaque.rotY)).multiplyScalar(0.73));
+  signPanel(world, tex, p.x, p.y, p.z, PW, 0.9, h.plaque.rotY, { back: 0xe6dcc6, depth: 0.08, collide: false, batch: b });
 }
 
 function entranceSign(game: Game, world: World, b: Batch, x: number, z: number) {
@@ -608,7 +613,8 @@ function entranceSign(game: Game, world: World, b: Batch, x: number, z: number) 
     fitText(ctx, 'EST. 1861   ·   LUX SIT LAUNDRY', w / 2 + 110, h * 0.78, w - 520, 64, "'Nunito', sans-serif", '900');
   });
   const pp = f.p(0, 1.35, 0.52);
-  signPanel(world, tex, pp.x, pp.y, pp.z, W - 1.2, 1.9, face, { back: 0xe6dcc6, depth: 0.06, collide: false, lit: true, game, batch: b });
+  // face width = canvas aspect × height (it was W - 1.2 = 14.8 m wide, stretching the lettering ~20 %)
+  signPanel(world, tex, pp.x, pp.y, pp.z, 1.9 * (2048 / 320), 1.9, face, { back: 0xe6dcc6, depth: 0.06, collide: false, lit: true, game, batch: b });
   // flower bed in front
   const fb = f.p(0, 0, 1.6);
   b.add('leaves', GEO.box, f.mat(0, maxG - f.y + 0.2, 1.6, W, 0.35, 1.4), 0x3f7a3a);

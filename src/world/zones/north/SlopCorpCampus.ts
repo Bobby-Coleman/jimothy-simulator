@@ -288,7 +288,8 @@ function buildHQ(game: Game, world: World, b: Batch, m: CurtainMats) {
     ['SCALE IS ALL YOU NEED', '(PLEASE INVEST)'],
   ];
   posters.forEach(([a, c], i) => {
-    const px = HQ.x - 12 + i * 3.3 + (i >= 2 ? 11 : 0);
+    // mirrored pairs either side of the door, clear of the canopy columns at ±5.5 (one used to stand in front of a poster)
+    const px = HQ.x + (i < 2 ? -12 + i * 3.3 : 8.7 + (i - 2) * 3.3);
     const pt = posterTex(a, c, i);
     signPanel(world, pt, px, g0 + 2.1, fz + 0.08, 2.4, 3.2, 0, { back: 0x10131a, depth: 0.04, collide: false, batch: b });
   });

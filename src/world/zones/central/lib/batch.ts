@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { makeShadowOnly } from '../../../shadowOnly';
+import { registerTagged } from '../../../signRegistry';
 
 export interface BatchAddOpts {
   /** Transform applied to (a clone of) the geometry. */
@@ -52,6 +53,7 @@ export class Batch {
   add(geo: THREE.BufferGeometry, mat: THREE.Material, opts: BatchAddOpts = {}) {
     let g = geo.clone();
     if (opts.matrix) g.applyMatrix4(opts.matrix);
+    registerTagged(g);
     g = normalise(g);
     if (typeof opts.uv === 'number') worldUV(g, opts.uv);
     const col = _col.set(opts.color ?? 0xffffff);

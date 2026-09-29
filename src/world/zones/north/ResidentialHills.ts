@@ -923,8 +923,9 @@ function furryPark(game: Game, world: World, mats: MatSet, b: Batch, zCres: numb
   });
   const sy = world.heightAt(ox - 9.5, zs - 0.9);
   signPanel(world, tex, ox - 9.5, sy + 1.2, zs - 0.9, 2.4, 1.2, 0, { back: 0x4a3220, depth: 0.12, batch: b });
-  b.box('wood', ox - 10.6, sy + 0.6, zs - 0.9, 0.14, 1.2, 0.14, 0x4a3220);
-  b.box('wood', ox - 8.4, sy + 0.6, zs - 0.9, 0.14, 1.2, 0.14, 0x4a3220);
+  // posts behind the board (they used to stick out through its face over the lettering)
+  b.box('wood', ox - 10.6, sy + 0.9, zs - 0.9 - 0.13, 0.14, 1.8, 0.14, 0x4a3220);
+  b.box('wood', ox - 8.4, sy + 0.9, zs - 0.9 - 0.13, 0.14, 1.8, 0.14, 0x4a3220);
   // "Round Form #7" bronze sculpture of a very round raccoon
   const sx = ox + 9,
     sz = oz - 6.5;
@@ -1018,7 +1019,7 @@ function dannysLawn(game: Game, world: World, mats: MatSet, b: Batch, water: Wat
   const sx = x0 - 0.15,
     sz = zS - 1.4;
   const sy = world.heightAt(sx, sz);
-  signPanel(world, tex, sx, sy + 0.95, sz, 1.0, 0.62, Math.PI / 2, { back: 0xffffff, depth: 0.04, collide: false, batch: b });
+  signPanel(world, tex, sx, sy + 0.95, sz, 1.0, 0.62, Math.PI / 2, { back: 0xffffff, depth: 0.04, collide: false, batch: b, standoff: 0.06 });
   b.box('wood', sx, sy + 0.4, sz, 0.06, 0.8, 0.06, 0x7a5c40);
   sprinkler(game, world, mats, water, cx + 0.8, pz + (pz > zc ? 1.5 : -1.5));
 }
@@ -1129,7 +1130,8 @@ function roseTrellis(game: Game, world: World, b: Batch, info: HouseInfo, left: 
 
 function streetSign(world: World, b: Batch, x: number, z: number, a: string, c: string) {
   const y = world.heightAt(x, z);
-  b.add('metal', GEO.cyl8, trs(x, y + 1.6, z, 0.08, 3.2, 0.08), 0x6d767a);
+  // the post stops under the blades (it used to run up through both of them)
+  b.add('metal', GEO.cyl8, trs(x, y + 1.28, z, 0.08, 2.56, 0.08), 0x6d767a);
   world.collider(new THREE.Vector3(x, y + 1.6, z), new THREE.Vector3(0.12, 3.2, 0.12));
   const mk = (text: string) =>
     canvasTexture(512, 112, (ctx, w, h) => {
@@ -1146,10 +1148,10 @@ function streetSign(world: World, b: Batch, x: number, z: number, a: string, c: 
       fitText(ctx, text, w / 2, h / 2 + 3, w - 40, 70, "'Lilita One', sans-serif");
     });
   const ta = mk(a);
-  signPanel(world, ta, x, y + 3.05, z, 1.6, 0.35, Math.PI / 2, { back: 0x1f6b3a, depth: 0.04, collide: false, batch: b, doubleSided: true });
+  signPanel(world, ta, x, y + 3.11, z, 1.6, 0.35, Math.PI / 2, { back: 0x1f6b3a, depth: 0.04, collide: false, batch: b, doubleSided: true });
   if (c) {
     const tc = mk(c);
-    signPanel(world, tc, x, y + 2.68, z, 1.6, 0.35, 0, { back: 0x1f6b3a, depth: 0.04, collide: false, batch: b, doubleSided: true });
+    signPanel(world, tc, x, y + 2.74, z, 1.6, 0.35, 0, { back: 0x1f6b3a, depth: 0.04, collide: false, batch: b, doubleSided: true });
   }
 }
 
@@ -1201,7 +1203,7 @@ function warningSign(world: World, b: Batch, x: number, z: number, ry: number) {
     ctx.textAlign = 'center';
     fitText(ctx, '21% GRADE', w / 2, h / 2 + 96, 230, 48, "'Lilita One', sans-serif");
   });
-  signPanel(world, tex, x, y + 2.35, z, 1.2, 1.2, Math.PI + ry, { back: 0x6d767a, depth: 0.03, collide: false, batch: b });
+  signPanel(world, tex, x, y + 2.35, z, 1.2, 1.2, Math.PI + ry, { back: 0x6d767a, depth: 0.03, collide: false, batch: b, standoff: 0.06 });
 }
 
 function slowSign(world: World, b: Batch, x: number, z: number, ry: number) {
@@ -1222,7 +1224,7 @@ function slowSign(world: World, b: Batch, x: number, z: number, ry: number) {
     fitText(ctx, 'ROUND BOYS', w / 2, h * 0.52, w - 70, 70, "'Lilita One', sans-serif");
     fitText(ctx, 'AT PLAY', w / 2, h * 0.76, w - 90, 70, "'Lilita One', sans-serif");
   });
-  signPanel(world, tex, x, y + 2.3, z, 1.05, 0.82, ry, { back: 0x6d767a, depth: 0.03, collide: false, batch: b });
+  signPanel(world, tex, x, y + 2.3, z, 1.05, 0.82, ry, { back: 0x6d767a, depth: 0.03, collide: false, batch: b, standoff: 0.06 });
 }
 
 /** Radar speed sign: shows Jimothy's speed as he rolls down Tumble St (faces uphill). */
@@ -1296,16 +1298,17 @@ function littleLibrary(world: World, b: Batch, x: number, z: number) {
   const rr = rng(77);
   for (let i = 0; i < 4; i++) b.box('plain', x + 0.1, y + 1.33, z - 0.15 + i * 0.09, 0.3, 0.26, 0.07, pick(rr, [0x2d4a7a, 0xf2c14e, 0x3d8b3d, 0xd8342c]));
   world.collider(new THREE.Vector3(x, y + 0.9, z), new THREE.Vector3(0.7, 1.8, 0.5));
-  const tex = canvasTexture(256, 96, (ctx, w, h) => {
+  const tex = canvasTexture(512, 192, (ctx, w, h) => {
     ctx.fillStyle = '#f6efe0';
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = '#5b2a2a';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    fitText(ctx, 'LITTLE FREE LIBRARY', w / 2, h * 0.36, w - 16, 30, "'Lilita One', sans-serif");
-    fitText(ctx, 'take a book • wash a book', w / 2, h * 0.74, w - 20, 22, "'Nunito', sans-serif", '800');
+    fitText(ctx, 'LITTLE FREE LIBRARY', w / 2, h * 0.36, w - 40, 60, "'Lilita One', sans-serif");
+    fitText(ctx, 'take a book • wash a book', w / 2, h * 0.74, w - 48, 44, "'Nunito', sans-serif", '800');
   });
-  signPanel(world, tex, x + 0.02, y + 1.82, z, 0.62, 0.23, Math.PI / 2, { collide: false, depth: 0.02, batch: b });
+  // a board on the post under the box, facing the path (it used to sit inside the roof, invisible)
+  signPanel(world, tex, x + 0.08, y + 0.98, z, 0.62, 0.23, Math.PI / 2, { collide: false, depth: 0.02, batch: b });
 }
 
 /** Road paint ("ROLL", "SLOW"), readable by someone heading downhill (south). */

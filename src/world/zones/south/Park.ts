@@ -752,8 +752,9 @@ function picnic(kit: Kit, b: Batch) {
   for (const s of [-0.8, 0.8]) b.geo(GEO.cyl(1, 14), [cx + s, 0.35, cz + 0.58], [Math.PI / 2, 0, 0], [0.32, 0.08, 0.32], 0x333333, {});
   b.cyl([cx, 2.1, cz], 0.04, 1.8, 0xdddddd, { seg: 6, collide: false });
   b.cyl([cx, 3.0, cz], 1.4, 0.5, 0x7ec8ff, { rTop: 0.05, seg: 10, collide: false, mat: 'glossy' });
-  const sgn = kit.textSign([{ text: 'COTTON CANDY', px: 70, color: '#ff4fa3', stroke: '#fff' }, { text: 'washes off easy!*', px: 34, color: '#555', font: FONT_ROUND }], { w: 2, h: 0.7, bg: '#fff7fb', border: '#ff8fc4' });
-  kit.sign(b, { pos: [cx, 0.8, cz + 0.57], w: 1.9, h: 0.62, tex: sgn, depth: 0.02, collide: false });
+  // sized to sit above the wheels (their tops at y 0.67 used to cover the lower half of the lettering)
+  const sgn = kit.textSign([{ text: 'COTTON CANDY', px: 70, color: '#ff4fa3', stroke: '#fff' }, { text: 'washes off easy!*', px: 34, color: '#555', font: FONT_ROUND }], { w: 1.56, h: 0.5, bg: '#fff7fb', border: '#ff8fc4' });
+  kit.sign(b, { pos: [cx, 0.94, cz + 0.57], w: 1.56, h: 0.5, tex: sgn, depth: 0.02, collide: false });
   P.cottonCandy(game, cx - 0.6, 1.27, cz - 0.1, 0xff9fd2);
   P.cottonCandy(game, cx, 1.27, cz - 0.15, 0x9fd8ff);
   P.cottonCandy(game, cx + 0.6, 1.27, cz - 0.1, 0xc9a0ff);
@@ -922,7 +923,7 @@ function furniture(kit: Kit, b: Batch) {
     const [x, z] = onLoop(a, 25);
     L.push([x, 0, z]);
   }
-  L.push([-70, 0, -1.2], [-75, 0, 4], [-89, 0, 4], [-89, 0, -4], [-75, 0, -4], [-93, 0, -35], [-94.5, 0, -46], [-98, 0, 28], [-73, 0, 38], [-86.5, 0, 47], [-140, 0, -14], [-160, 0, -9.5], [-140.5, 0, 34.5]);
+  L.push([-70, 0, -1.2], [-75, 0, 4], [-89, 0, 4], [-89, 0, -4], [-75, 0, -4], [-93, 0, -35], [-94.5, 0, -46], [-98, 0, 28], [-73, 0, 38], [-86.5, 0, 47], [-141.3, 0, -12.1], [-160, 0, -9.5], [-140.5, 0, 34.5]);
   lamps(kit, b, L, { style: 'park' });
 }
 
@@ -998,7 +999,8 @@ function signs(kit: Kit, b: Batch) {
   });
   const sx = -68.8;
   const sz = 7.5;
-  for (const dz of [-2.3, 2.3]) b.cyl([sx, 1.1, sz + dz], 0.14, 2.2, 0x5a3d26, { seg: 8, collide: true });
+  // posts flank the two-sided board (they used to run through both faces)
+  for (const dz of [-2.72, 2.72]) b.cyl([sx, 1.4, sz + dz], 0.14, 2.8, 0x5a3d26, { seg: 8, collide: true });
   kit.sign(b, { pos: [sx, 2.3, sz], rotY: Math.PI / 2, w: 5, h: 1.75, tex, frame: 0x5a3d26, back: true });
   // Gas works plaque
   const t2 = kit.textSign(

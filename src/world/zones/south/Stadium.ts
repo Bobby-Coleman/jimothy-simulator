@@ -301,8 +301,11 @@ function outfieldWall(kit: Kit, b: Batch) {
   }
   // ads facing home plate
   ADS.forEach(([t1, t2, bg, fg], i) => {
-    const am = A_L + ((A_R - A_L) * (i + 0.5 + i * 0.35)) / (ADS.length + ADS.length * 0.35);
-    const [x, z] = onArc(am, Rw - 0.32);
+    // (kept ≥ 9 m of arc from the foul poles, which used to stand in front of the end ads' lettering)
+    const margin = 9 / Rw;
+    const am = Math.min(A_R - margin, Math.max(A_L + margin, A_L + ((A_R - A_L) * (i + 0.5 + i * 0.35)) / (ADS.length + ADS.length * 0.35)));
+    // far enough off the faceted wall that the flat ad's ends are not buried in the neighbouring wall segments
+    const [x, z] = onArc(am, Rw - 0.45);
     const tex = kit.textSign([{ text: t1, px: 70, color: fg, stroke: 'rgba(0,0,0,0.35)' }, { text: t2, px: 30, color: fg, font: FONT_ROUND }], { w: 5.2, h: 1.6, bg, pxPerM: 110 });
     kit.sign(b, { pos: [x, 1.7, z], rotY: -am - Math.PI / 2, w: 5.2, h: 1.6, tex, depth: 0.02, collide: false, back: false });
   });
@@ -331,8 +334,9 @@ function banner(kit: Kit, b: Batch, a: number, title: string, sub: string, check
     b.cyl([x, top / 2, z], 0.14, top, 0xff6f61, { seg: 8, collide: true, mat: 'glossy' });
   const cx = (ix + ox) / 2;
   const cz = (iz + oz) / 2;
-  const w = Math.hypot(ox - ix, oz - iz) + 0.4;
-  const tex = canvasTex(1024, 256, (ctx, W, Hh) => {
+  // hangs between the two posts (it used to overlap them, so they ran through its face); canvas matches its aspect
+  const w = Math.hypot(ox - ix, oz - iz) - 0.3;
+  const tex = canvasTex(Math.round((256 * w) / 1.2), 256, (ctx, W, Hh) => {
     if (checker) {
       for (let i = 0; i < 32; i++)
         for (let j = 0; j < 8; j++) {
@@ -397,6 +401,11 @@ const ROW_D = 0.95;
 const ROW_H = 0.45;
 
 /** A straight section of tiered stands whose FRONT edge runs from a to c; rows go back along `back`. */
+/** Stadium light-tower masts (outside the stands and beyond the outfield). */
+function lightTowerSpots(): [number, number][] {
+  return [at(22, D3, 21, N3), at(42, D3, 21, N3), at(22, D1, 21, N1), at(42, D1, 21, N1), onArc(A_L + 0.45, FR + 13), onArc(A_R - 0.45, FR + 13)];
+}
+
 function section(kit: Kit, b: Batch, seats: Seat[], a: [number, number], c: [number, number], back: { x: number; z: number }, rows = ROWS, o: { wall?: boolean; accent?: number; banners?: boolean } = {}) {
   const dx = c[0] - a[0];
   const dz = c[1] - a[1];
@@ -435,7 +444,16 @@ function section(kit: Kit, b: Batch, seats: Seat[], a: [number, number], c: [num
       const tex = bannerTextures();
       const n = Math.max(1, Math.floor(L / 7));
       for (let i = 0; i < n; i++) {
-        const s = ((i + 0.5) * L) / n;
+        let s = ((i + 0.5) * L) / n;
+        // slide along the wall to clear light-tower masts and the main-gate pillars (plaza(): [97,150], [101,162])
+        // standing just outside it: they used to hide two banners
+        for (const [tx, tz] of [...lightTowerSpots(), [97, 150], [101, 162]]) {
+          const ox = tx - (a[0] + ux * s + back.x * (bd + 0.3));
+          const oz = tz - (a[1] + uz * s + back.z * (bd + 0.3));
+          const along = ox * ux + oz * uz;
+          if (Math.abs(ox * back.x + oz * back.z) < 5 && Math.abs(along) < 2.8) s += (along > 0 ? -1 : 1) * (2.8 - Math.abs(along));
+        }
+        s = Math.min(L - 0.5, Math.max(0.5, s));
         const bx = a[0] + ux * s + back.x * (bd + 0.3);
         const bz = a[1] + uz * s + back.z * (bd + 0.3);
         kit.sign(b, { pos: [bx, top - 2.3, bz], rotY: Math.atan2(back.x, back.z), w: 2, h: 3.6, tex: tex[i % tex.length], depth: 0.02, collide: false, back: false });
@@ -682,7 +700,7 @@ function lightTowers(kit: Kit, b: Batch) {
   const beamMat = new THREE.MeshBasicMaterial({ color: 0xfff4d0, vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: true });
   kit.glow(beamMat, 0, 0.018, 'opacity'); // lighting pass: 0.03 → 0.018, the cones still read but no longer haze the view
   const target = new THREE.Vector3(FC.x, 0, FC.z + 8);
-  const spots: [number, number][] = [at(22, D3, 21, N3), at(42, D3, 21, N3), at(22, D1, 21, N1), at(42, D1, 21, N1), onArc(A_L + 0.45, FR + 13), onArc(A_R - 0.45, FR + 13)];
+  const spots = lightTowerSpots();
   const Ht = 24;
   spots.forEach(([x, z], i) => {
     b.cyl([x, Ht / 2, z], 0.35, Ht, 0x5d6770, { rTop: 0.25, seg: 10, collide: true, mat: 'metal' });
@@ -748,15 +766,19 @@ function plaza(kit: Kit, b: Batch) {
   const gw = Math.hypot(g1[0] - g0[0], g1[1] - g0[1]);
   const gRot = Math.atan2(g1[1] - g0[1], g1[0] - g0[0]);
   b.box([gx, 5.8, gz], [gw + 1.4, 1.6, 0.6], 0xb9b3a7, { rotY: -gRot, mat: 'concrete' });
-  const gt = canvasTex(1400, 220, (ctx, w, h) => {
+  // fits between the two (axis-aligned, so diagonally wider) pillars, which used to cover both ends of it;
+  // canvas aspect = board aspect so the lettering is not stretched
+  const gsw = gw - 1.7;
+  const gt = canvasTex(Math.round((220 * gsw) / 1.5), 220, (ctx, w, h) => {
     ctx.fillStyle = '#0f8a93';
     ctx.fillRect(0, 0, w, h);
-    fitText(ctx, 'TEE-HEE PARK', w * 0.3, h * 0.5, w * 0.5, 150, FONT_TITLE, { fill: '#fff', stroke: '#0b4a50', strokeW: 12 });
-    fitText(ctx, 'HOME OF THE BALLARD BARNACLES', w * 0.74, h * 0.36, w * 0.44, 56, FONT_ROUND, { fill: '#ffd23a' });
-    fitText(ctx, 'TONIGHT: JIMOTHY NIGHT', w * 0.74, h * 0.7, w * 0.44, 56, FONT_ROUND, { fill: '#fff' });
+    // two columns with a gutter between them (the title used to run into the subtitle column)
+    fitText(ctx, 'TEE-HEE PARK', w * 0.28, h * 0.5, w * 0.46, 150, FONT_TITLE, { fill: '#fff', stroke: '#0b4a50', strokeW: 12 });
+    fitText(ctx, 'HOME OF THE BALLARD BARNACLES', w * 0.76, h * 0.34, w * 0.4, 56, FONT_ROUND, { fill: '#ffd23a' });
+    fitText(ctx, 'TONIGHT: JIMOTHY NIGHT', w * 0.76, h * 0.7, w * 0.4, 56, FONT_ROUND, { fill: '#fff' });
   });
   const faceRot = -gRot; // readable from the plaza (outside)
-  kit.sign(b, { pos: [gx, 5.8, gz], rotY: faceRot, w: gw + 1, h: 1.5, tex: gt, depth: 0.62, emissive: [0.35, 1.6] });
+  kit.sign(b, { pos: [gx, 5.8, gz], rotY: faceRot, w: gsw, h: 1.5, tex: gt, depth: 0.62, emissive: [0.35, 1.6] });
   // ticket booth + turnstiles
   b.box([87, 1.3, 147.5], [3, 2.6, 2.4], 0xf6efe0, { mat: 'siding' });
   b.box([87, 2.75, 147.5], [3.4, 0.3, 2.8], TEAL, { mat: 'glossy' });
@@ -864,7 +886,15 @@ function giantBobblehead(kit: Kit, b: Batch, x: number, z: number) {
     ],
     { w: 2.4, h: 1, bg: '#0f8a93', border: '#ffd23a' },
   );
-  kit.sign(b, { pos: [x - 2.45, 0.75, z - 0.85], rotY: -Math.PI / 2 + 0.35, w: 1.6, h: 0.66, tex: t, depth: 0.03, collide: false, back: false });
+  // Free-standing on two posts in front of the plinth, facing the fans arriving from the west. (It used to lean
+  // half inside the 2.4 m stone plinth, which hid its right side.)
+  const sy = -Math.PI / 2 + 0.35;
+  const fx = Math.sin(sy),
+    fz = Math.cos(sy);
+  const px = x + fx * 3.5,
+    pz = z + fz * 3.5;
+  for (const s of [-0.8, 0.8]) b.cyl([px + Math.cos(sy) * s - fx * 0.06, 0.72, pz - Math.sin(sy) * s - fz * 0.06], 0.045, 1.44, 0x1d3557, { seg: 6, collide: false });
+  kit.sign(b, { pos: [px, 1.05, pz], rotY: sy, w: 1.92, h: 0.8, tex: t, depth: 0.03, collide: false, back: false });
   kit.world.poi.set('bobblehead:s12', V(x, 1.5 + 0.95 * S + 0.45 * S + 0.55 * S + 0.35, z));
   kit.world.poi.set('giantBobblehead', V(x + 3, 0.2, z + 3));
 }

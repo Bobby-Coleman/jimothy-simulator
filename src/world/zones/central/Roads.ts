@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Game } from '../../../core/Game';
 import type { World, ZoneBuilder } from '../../World';
 import { terrainHeight } from '../../terrain';
+import { tagSign } from '../../signRegistry';
 import { Batch, mergeColored, T, TR } from './lib/batch';
 import {
   ROAD,
@@ -305,7 +306,8 @@ export const CentralRoads: ZoneBuilder = {
         addSignalsAt(world, batch, signalMats, x, z);
         const ns = AVENUES.find((a) => a.f.axis === 'z' && a.f.c === x)!;
         const ew = AVENUES.find((a) => a.f.axis === 'x' && a.f.c === z)!;
-        addStreetSign(world, batch, x + 5.1, z + 5.1, bladeRects.get(ew.name)!, bladeRects.get(ns.name)!);
+        // 1.3 m up the sidewalk from the corner signal pole (it used to share its spot: the mast ran through both blades)
+        addStreetSign(world, batch, x + 5.1, z + 6.4, bladeRects.get(ew.name)!, bladeRects.get(ns.name)!);
       }
     }
     // Old Ballard Ave blades at the T-junctions
@@ -384,10 +386,11 @@ function buildBusStop(
   batch.add(q1, ad.page.glowMat, { matrix: M.clone().multiply(TR(1.67, 1.15, -0.05, 0, Math.PI / 2, 0)) });
   batch.add(q1, ad.page.glowMat, { matrix: M.clone().multiply(TR(1.53, 1.15, -0.05, 0, -Math.PI / 2, 0)) });
   // bus stop sign pole
-  const pole = mergeColored([{ geo: new THREE.CylinderGeometry(0.045, 0.05, 2.9, 8), color: 0x6c747d, matrix: T(-2.2, 1.45, 0.75) }]);
+  const pole = mergeColored([{ geo: new THREE.CylinderGeometry(0.045, 0.05, 3.2, 8), color: 0x6c747d, matrix: T(-2.2, 1.6, 0.75) }]);
   batch.add(pole, fm, { matrix: M });
   const sq = atlas.slab(sign, 0.55, 0.72, 0.03);
-  batch.add(sq, sign.page.mat, { matrix: M.clone().multiply(TR(-2.2, 2.55, 0.75, 0, Math.PI / 2, 0)) });
+  // flag-mounted beside the pole (not skewered by it), above the shelter roof line (2.52) so the roof never hides it
+  batch.add(sq, sign.page.mat, { matrix: M.clone().multiply(TR(-2.2, 2.85, 0.75 - 0.05 - 0.275, 0, Math.PI / 2, 0)) });
   // colliders: roof, back pane, side pane, ad panel, bench
   const col = (lx: number, ly: number, lz: number, sx: number, sy: number, sz: number) => {
     const p = new THREE.Vector3(lx, ly, lz).applyMatrix4(M);
@@ -470,11 +473,14 @@ function addStreetSign(
 ) {
   const y = walkY(x, z);
   const fm = furnMat();
-  batch.add(mergeColored([{ geo: new THREE.CylinderGeometry(0.05, 0.06, 3.4, 8), color: 0x56606a, matrix: T(0, 1.7, 0) }]), fm, { matrix: T(x, y, z) });
+  // the pole ends under the blades (it used to run up through the lower one)
+  batch.add(mergeColored([{ geo: new THREE.CylinderGeometry(0.05, 0.06, 3.04, 8), color: 0x56606a, matrix: T(0, 1.52, 0) }]), fm, { matrix: T(x, y, z) });
   const a = new THREE.BoxGeometry(1.6, 0.3, 0.03);
   const b = new THREE.BoxGeometry(1.6, 0.3, 0.03);
   mapBox(a, bladeA);
   mapBox(b, bladeB);
+  tagSign(a, 'streetBlade', 1.6, 0.3, bladeA.w / bladeA.h, 16);
+  tagSign(b, 'streetBlade', 1.6, 0.3, bladeB.w / bladeB.h, 16);
   batch.add(a, bladeA.page.mat, { matrix: T(x, y + 3.2, z, 0) });
   batch.add(b, bladeB.page.mat, { matrix: T(x, y + 3.52, z, Math.PI / 2) });
   world.collider(new THREE.Vector3(x, y + 1.7, z), new THREE.Vector3(0.12, 3.4, 0.12));
