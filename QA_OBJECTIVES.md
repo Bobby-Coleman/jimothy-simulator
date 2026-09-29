@@ -58,6 +58,28 @@ so it gets 3 tries). Build + serve first:
 | 17 | **Catch of the Day** | ✅ | Pike's Plaice fish stall: stand in the aisle, the fishmonger lobs a fish every ~8 s; walk under the ring with empty paws (or grab it mid-air). | 30 s | |
 | 18 | **Bobblehead Collector** — 10 golden bobbleheads | ⚠️ | Follow the light beams (standing near one shows a route hint). Bare walls tire Jimothy after ~7 m of climbing (~11 m sprinting, hold Shift); standing on a ledge refills stamina in ~2 s. Spots: grunge-shop roof (Old Ballard: sprint-climb the east end of the donut shop next door, rest on its roof, climb the Grunge & Sons side wall; or from the first fire-escape landing at the back), alley by the east dumpster, **top of the street clock** (climb the shop front behind it and wall-jump across), Space Noodle restaurant roof (up the Noodle's east ladder, rest on the deck, climb the 4.5 m of glass just north of the west door), City Hall dome (up the grand steps, climb the stepped pier at a front corner of the portico, rest on its ledge, sprint up the rest and pull up onto the pediment, rest, walk up it and hop the parapet; hop onto the drum plinth, rest, sprint up the drum and dome), the Jimothy statue's head (City Hall plaza), Grandma Rosie's roof ridge (climb her back wall, ~5 m, and walk up the shingles; the porch roof bonks your head), UW library tower (sprint-climb the brick buttress in the nook west of the tower, rest on its stone top, climb onto the slates, walk up beside the tower, climb its last ~5 m), crow's nest in the crow tree (jump for the rope ladder dangling from the nest), top of a gasworks tower (sprint-climb the fat valve pipe standing against its east-northeast side, rest on its top, climb the last ~7.5 m). | 20–30 min | The gasworks one sat on the tallest tower, whose catwalk blocks climbers from below (unreachable) → moved to the neighbouring tower without a catwalk. Climbing nerf (bare walls ≈ 7 m): helper ladders were added, then most were taken out again for challenge (kept: crow's-nest rope ladder, Space Noodle ladder, SlopCorp billboard mast ladder). Ladder-free routes, scripted from the ground with real stamina (careful = rest + sprint, naive = one straight climb at walking pace): Grunge 9.7 s, lowest stamina 21% (naive: donut front tops out 1 m short; front of the Grunge 8 m short; no rest on the donut roof: 0.4 m short); City Hall 19.7 s, 9% (naive: pier 1.6 m short, south facade 7.7 m short walking, 4.4 m short sprinting); UW library 13.8 s, 19% (naive: buttress 1.3 m short, facade 6 m short); gasworks 9.6 s, 8% (naive: riser 1.5 m short, east face 8 m short, no rest on the riser: 4 m short); Rosie back wall 1.9 s of climbing, 38%; Noodle glass 1.7 s, 44%. Unlocks **Bobblehead**. |
 
+### The Big Roll (bowling-ball race, added after the QA pass)
+
+Start: the roof of **Hilltop Lanes**, a retro bowling alley on the lawn behind the Furry Park viewpoint (top of Tumble St,
+Residential Hills; map icon 🏁). Stairs up its west side (≈6 s walk from the lawn, no climbing). Stand on the START
+pad and Tuck & Roll (Q): 3-2-1-GO, roll down the roof lane and off the kicker, which throws him over the viewpoint onto
+Tumble St. Checkpoint rings (visual only; the next one is gold with a light beam, HUD arrow + distance):
+**1 Air Mail** (Tumble St landing) · **2 Speed Trap** (radar sign; reads out your mph) · **3 Farmers Market** (between
+the tent poles) · **4 Back Alley** · **5 Jaywalk** (across the x = 60 avenue) · **6 Noodle Lawn** (between the Space
+Noodle and City Hall) · **7 City Hall Lap** (east lawn) · **Finish: The Pins** (boulevard south of City Hall; ten giant
+pins topple, all ten = STRIKE bonus). Rules: gates count only in order and only while he's a ball (unrolling is allowed,
+the clock keeps running, HUD says "UNTUCKED!"); reaching a later gate early says "Missed checkpoint N"; > 45 m off the
+route for 6 s, 2:30 on the clock, a cutscene or a dialog cancels; **H** during a race (or ≤ 25 s after) = back on the roof
+for an instant retry. Speed boosts (Zoomies, espresso, Space Jimothy's low gravity) are allowed but cap the medal at
+Bronze. Records: `localStorage['jimothy.bigroll.v1']` (best clean time + best medal), shown on the roof's medal board.
+
+| # | Instinct | Status | How to do it | Time | Notes |
+|---|---|---|---|---|---|
+| BR1 | **The Big Roll** — finish (Bronze Pin) | ✅ | See above. Any finish inside 2:30. | 1–2 min | `obj_bigRoll`: walks up the stairs, then the scripted line. |
+| BR2 | **The Big Roll: Silver Pin** — under 0:52 | ✅ | Hold Sprint while rolling; don't stop. | 1 min | Comfortable with sprint held. |
+| BR3 | **The Big Roll: Gold Pin** — under 0:40 | ✅ | Sprint the whole way, hit the kicker straight, hug the insides, dodge the avenue traffic. | a few tries | ~20 % slower than the scripted line. |
+| BR4 | **The Big Roll: Platinum Pin** — under 0:34 | ✅ | A near-perfect run: dead-centre kicker, cut from the bottom of Tumble St diagonally to the market, tight past the tent poles and round City Hall, no car/pole/tourist hits. | many tries | Tuned by script: best scripted run **32.9 s**, typical 33–36 s (cars and pedestrians vary); the best splits of several runs add up to ~31.5 s. Platinum is ~3 % above the best scripted run. |
+
 ### Slop Patrol
 
 | # | Instinct | Status | How to do it | Time | Notes |

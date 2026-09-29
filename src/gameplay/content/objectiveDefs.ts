@@ -24,6 +24,11 @@ export const OBJECTIVES: ObjectiveDef[] = [
   { id: 'marathon', category: 'raccoon', points: 1500, target: 2000, title: 'Tiny Legs, Big Journey', desc: 'Walk 2 km. Those little legs are doing their very best.', reward: 'zoomies' },
   { id: 'catchOfTheDay', category: 'raccoon', points: 750, title: 'Catch of the Day', desc: "Catch a flying fish at Pike's Plaice Market." },
   { id: 'bobbleheadCollector', category: 'raccoon', points: 5000, target: 10, title: 'Bobblehead Collector', desc: 'Find all 10 golden Jimothy bobbleheads. Limited edition!', reward: 'bobblehead' },
+  // THE BIG ROLL (src/gameplay/bigroll): a bowling-ball race from the Hilltop Lanes roof; one Instinct per medal
+  { id: 'bigRoll', category: 'raccoon', points: 2000, title: 'The Big Roll', desc: 'Bowl yourself from the Hilltop Lanes roof across town through every checkpoint. Bronze Pin for finishing.' },
+  { id: 'bigRollSilver', category: 'raccoon', points: 2500, title: 'The Big Roll: Silver Pin', desc: 'Finish The Big Roll in under 0:52. Less sightseeing.' },
+  { id: 'bigRollGold', category: 'raccoon', points: 3500, title: 'The Big Roll: Gold Pin', desc: 'Finish The Big Roll in under 0:40. Hold sprint and cut the corners.' },
+  { id: 'bigRollPlatinum', category: 'raccoon', points: 6000, title: 'The Big Roll: Platinum Pin', desc: 'Finish The Big Roll in under 0:34. A perfect line, no bumps, no cars. Bowling legends only.' },
 
   // ------------------------------------------------------------------ AI slop
   { id: 'washSlop', category: 'slop', points: 2000, target: 10, title: 'Wash Away The Slop', desc: 'Wash away 10 Slopothys (slop signs count too). Soap: the original content filter.' },
