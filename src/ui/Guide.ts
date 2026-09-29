@@ -236,6 +236,11 @@ const DEFS: Def[] = [
   },
   { id: 'notACat', rank: 23, how: "Wait near people until someone says 'here kitty kitty'. Then turn around." },
   { id: 'cryptid', rank: 24, how: 'Let people film you. Tourists love a blurry cryptid.' },
+  // chaos toys
+  { id: 'tripleShot', rank: 4.5, poi: 'espressoStand', place: 'Bean Me Up Espresso', how: '{grab} Grab a triple shot at the raccoon-height window. Then another. Then another.' },
+  { id: 'hydrantHydraulics', rank: 6.5, poi: 'hydrant', place: 'Fire hydrant', how: '{bonk} Bonk a fire hydrant. Ride the geyser. Wash stuff in the puddle.' },
+  { id: 'tourStrike', rank: 13.5, poi: 'tourGroup', place: 'Tour group', how: 'Tuck & Roll {roll} into the tour group at the Space Noodle. Sprint for a PERFECT GAME.' },
+  { id: 'carAlarmChoir', rank: 25, poi: 'parkedCars', place: 'Parked cars', how: '{bonk} Set off three car alarms at once on Old Ballard Ave. Nobody will make eye contact.' },
 ];
 
 /** Big-map POIs that stand for a guide entry even when it has no poi (click-to-track). */

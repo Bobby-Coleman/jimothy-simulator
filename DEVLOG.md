@@ -82,3 +82,17 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
   (first load 34.7 MB → 13.6 MB), single shadow proxy for Jimothy, soak test (6 simulated minutes of random input:
   no errors, no NaNs).
 * Second polish wave started: game feel & forgiveness, visual beauty pass + README screenshots, more slapstick toys.
+
+## 03:00–03:55 — Second polish wave
+* **Game feel** (measured with scripted random approaches): soft aim-assist for grab/bonk/wash — grab success
+  82% → 91% (NPCs 100%), wash-near-water 88% → 100%; hit-stop + camera kicks, Tuck & Roll squash/pop, ledge vaults,
+  gentle camera auto-follow, zero camera-in-geometry spots on an 18-spot tour; combos reward variety, not spam.
+* **Art**: screen-space AO on high, warm split-tone grade, real golden hour, stylised sky with a deep-blue night,
+  rim-lit fluffier fur, two-layer water with sky fresnel, softer rain — at ~the same frame cost. README screenshots
+  in `docs/screenshots/`.
+* **Chaos toys**: 21 hydrants burst into rideable geysers (with washable puddles), 25 parked cars with alarms (the
+  bystanders do the Seattle Freeze), Bean Me Up Espresso → Espresso Mode (and a caffeine crash), a tour group at the
+  Space Noodle for bowling. +4 Instincts (54 total). All added to the guide and the map.
+* Lead: a "Janitor" quietly removes old far-away runtime litter so long sessions don't slow down; two more
+  5-minute soak tests (0 errors); cleaned up stray preview servers.
+* Final wave started: fresh-eyes playthrough review + fixes, night/golden-hour lighting fixes.
