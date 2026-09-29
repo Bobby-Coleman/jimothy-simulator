@@ -493,9 +493,12 @@ export class HeartCtx {
       }
       return false;
     };
-    for (let i = 0; i < 12; i++) {
-      const a = a0 + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 6);
-      if (!blocked(a)) return a;
+    // Both sides of the preferred angle first (a0 and a0 + π are equally good "side-on" views of two
+    // characters facing each other), then progressively further round; last resort: the original angle.
+    const P = Math.PI;
+    const offsets = [0, P, P / 6, -P / 6, P + P / 6, P - P / 6, P / 3, -P / 3, P + P / 3, P - P / 3, P / 2, -P / 2];
+    for (const o of offsets) {
+      if (!blocked(a0 + o)) return a0 + o;
     }
     return a0;
   }
