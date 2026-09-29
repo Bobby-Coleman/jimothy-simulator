@@ -732,11 +732,42 @@ def _boundary_verts(m):
     return np.array(sorted(b), dtype=np.int64)
 
 
+def sdf_mesh(sdf, bmin, bmax, h, target_tris=None, symmetric=False, relax_iters=2, mat='Fur'):
+    """Mesh an SDF inside a box (surface nets) and optionally decimate through Blender."""
+    m = surface_nets(sdf, bmin, bmax, h, relax_iters=relax_iters)
+    if target_tris is not None and m.tri_count() > target_tris:
+        m = bl_decimate(m, target_tris=target_tris, symmetric=symmetric)
+    m.set_mat(mat)
+    return m
+
+
+def sdf_clump(cones, h=0.004, k=0.01, target_tris=None, mat='Fur', extra=None):
+    """Soft fur clump / tuft cluster: smooth union of round cones.
+    cones: list of (a, b, r_a, r_b). Returns Mesh with attr 'base' = distance to the nearest cone base."""
+    def f(P):
+        d = None
+        for a, b, ra, rb in cones:
+            di = sd_round_cone(P, a, b, ra, rb)
+            d = di if d is None else smin(d, di, k)
+        if extra is not None:
+            d = extra(P, d)
+        return d
+    pts = np.array([c[0] for c in cones] + [c[1] for c in cones])
+    rmax = max(max(c[2], c[3]) for c in cones)
+    bmin = pts.min(axis=0) - rmax - 3 * h - k
+    bmax = pts.max(axis=0) + rmax + 3 * h + k
+    m = sdf_mesh(f, bmin, bmax, h, target_tris, mat=mat)
+    bases = np.array([c[0] for c in cones])
+    dist = np.min(np.linalg.norm(m.V[:, None, :] - bases[None, :, :], axis=2), axis=1)
+    m.attrs['base'] = dist
+    return m
+
+
 # ----------------------------------------------------------------------------------------------
 # Blender helpers: decimation of numpy meshes
 # ----------------------------------------------------------------------------------------------
 
-def bl_decimate(mesh, ratio=None, target_tris=None, symmetric=False, weights=None):
+def bl_decimate(mesh, ratio=None, target_tris=None, symmetric=False, weights=None, protect=4.0):
     """Collapse-decimate a Mesh through Blender. Returns a new Mesh (triangles), material = first."""
     if target_tris is not None:
         ratio = min(1.0, target_tris / max(1, mesh.tri_count()))
@@ -754,11 +785,13 @@ def bl_decimate(mesh, ratio=None, target_tris=None, symmetric=False, weights=Non
     mod.symmetry_axis = 'X'
     mod.use_collapse_triangulate = True
     if weights is not None:
+        # `weights` = importance (1 = protect). Blender's collapse decimator adds extra cost to
+        # edges with LOW vertex-group weight, so we pass the inverted value.
         vg = ob.vertex_groups.new(name='w')
         for i, w in enumerate(weights):
-            vg.add([i], float(w), 'REPLACE')
+            vg.add([i], float(1.0 - w), 'REPLACE')
         mod.vertex_group = 'w'
-        mod.vertex_group_factor = 10.0
+        mod.vertex_group_factor = protect
     dg = bpy.context.evaluated_depsgraph_get()
     ev = ob.evaluated_get(dg)
     me2 = bpy.data.meshes.new_from_object(ev)
@@ -769,6 +802,9 @@ def bl_decimate(mesh, ratio=None, target_tris=None, symmetric=False, weights=Non
     bpy.data.meshes.remove(me)
     bpy.data.meshes.remove(me2)
     out = Mesh(V.reshape(-1, 3), F, mesh.FM[0] if mesh.FM else 'Fur')
+    if target_tris is not None and weights is not None and out.tri_count() > target_tris * 1.03:
+        # weighted pass could not reach the budget: finish with an unweighted pass
+        out = bl_decimate(out, target_tris=target_tris, symmetric=symmetric)
     return out
 
 
@@ -834,7 +870,11 @@ class Model:
         def rec(p, depth):
             tris = p.mesh.tri_count() if p.mesh is not None else 0
             loc = p.M[:3, 3]
-            lines.append('%s%-10s pivot=(%.3f, %.3f, %.3f) tris=%d' % ('  ' * depth, p.name, loc[0], loc[1], loc[2], tris))
+            bb = ''
+            if p.mesh is not None and len(p.mesh.V):
+                lo, hi = p.mesh.bbox()
+                bb = ' bbox=(%.3f,%.3f,%.3f)..(%.3f,%.3f,%.3f)' % (*lo, *hi)
+            lines.append('%s%-10s pivot=(%.3f, %.3f, %.3f) tris=%d%s' % ('  ' * depth, p.name, loc[0], loc[1], loc[2], tris, bb))
             for c in p.children:
                 rec(c, depth + 1)
         rec(self.root, 0)
@@ -1021,7 +1061,6 @@ def export_glb(path, root_obj):
 # ----------------------------------------------------------------------------------------------
 
 def world_bounds(objs):
-    import mathutils
     lo = np.array([1e9] * 3)
     hi = -lo
     for o in objs:
@@ -1054,7 +1093,8 @@ def add_sun(name, from_dir_game, energy=3.0, angle_deg=8, shadow=True):
     return ob
 
 
-def setup_preview_scene(bg='#dcdcdc', floor=True, floor_z=None, sun_strength=3.2):
+def setup_preview_scene(bg='#d2d2d2', floor=True, floor_z=None, sun_strength=3.3, world_strength=0.9,
+                        view_transform='Standard'):
     scene = bpy.context.scene
     scene.render.engine = 'BLENDER_EEVEE'
     try:
@@ -1066,7 +1106,7 @@ def setup_preview_scene(bg='#dcdcdc', floor=True, floor_z=None, sun_strength=3.2
             setattr(scene.eevee, attr, val)
         except Exception:
             pass
-    scene.view_settings.view_transform = 'Standard'
+    scene.view_settings.view_transform = view_transform
     scene.view_settings.look = 'None'
     scene.render.film_transparent = False
     world = bpy.data.worlds.new('PreviewWorld')
@@ -1079,19 +1119,44 @@ def setup_preview_scene(bg='#dcdcdc', floor=True, floor_z=None, sun_strength=3.2
     for n in world.node_tree.nodes:
         if n.type == 'BACKGROUND':
             n.inputs['Color'].default_value = (float(bgc[0]), float(bgc[1]), float(bgc[2]), 1.0)
-            n.inputs['Strength'].default_value = 0.85
+            n.inputs['Strength'].default_value = world_strength
     # key light (sun) from front / viewer-left / above; rim light from behind; weak fill.
-    add_sun('Key', from_dir_game=(-0.55, 0.75, 0.75), energy=sun_strength, angle_deg=8)
-    add_sun('Rim', from_dir_game=(0.4, 0.6, -0.9), energy=1.6, angle_deg=15)
-    add_sun('Fill', from_dir_game=(0.9, 0.2, 0.4), energy=0.6, angle_deg=30, shadow=False)
+    add_sun('Key', from_dir_game=(-0.55, 0.75, 0.75), energy=sun_strength, angle_deg=10)
+    add_sun('Rim', from_dir_game=(0.4, 0.6, -0.9), energy=1.3, angle_deg=15)
+    add_sun('Fill', from_dir_game=(0.9, 0.2, 0.4), energy=0.45, angle_deg=30, shadow=False)
     if floor:
+        # studio sweep: flat floor that curves up into a cylindrical wall (no visible horizon)
+        z0 = floor_z if floor_z is not None else 0.0
+        R0, rc = 8.0, 5.0
+        prof = [(0.5, 0.0), (2.0, 0.0), (4.5, 0.0), (R0, 0.0)]
+        for k in range(1, 15):
+            a = (k / 14) * (math.pi / 2)
+            prof.append((R0 + rc * math.sin(a), rc * (1 - math.cos(a))))
+        prof.append((R0 + rc, 30.0))
+        seg = 72
+        verts, faces = [], []
+        for (r, z) in prof:
+            for i in range(seg):
+                a = 2 * math.pi * i / seg
+                verts.append((r * math.cos(a), r * math.sin(a), z0 + z))
+        for j in range(len(prof) - 1):
+            for i in range(seg):
+                a0 = j * seg + i
+                a1 = j * seg + (i + 1) % seg
+                b0 = a0 + seg
+                b1 = a1 + seg
+                faces.append((a0, b0, b1, a1))
+        centre = len(verts)
+        verts.append((0.0, 0.0, z0))
+        for i in range(seg):
+            faces.append((centre, i, (i + 1) % seg))
         me = bpy.data.meshes.new('Floor')
-        s = 20
-        z = floor_z if floor_z is not None else 0.0
-        me.from_pydata([(-s, -s, z), (s, -s, z), (s, s, z), (-s, s, z)], [], [(0, 1, 2, 3)])
+        me.from_pydata(verts, [], faces)
+        me.polygons.foreach_set('use_smooth', np.ones(len(me.polygons), dtype=bool))
+        me.update()
         fl = bpy.data.objects.new('Floor', me)
         scene.collection.objects.link(fl)
-        fm = make_material('_floor', bg, rough=0.9, spec=0.2)
+        fm = make_material('_floor', bg, rough=0.95, spec=0.1)
         me.materials.append(fm)
     return scene
 
@@ -1124,7 +1189,6 @@ def render_views(objs, out_path, views=('front', 'three_quarter', 'side', 'back'
         a = math.radians(az.get(v, 0.0))
         el = math.radians(70.0 if v == 'top' else elevation)
         dg = np.array([math.sin(a) * math.cos(el), math.sin(el), math.cos(a) * math.cos(el)])  # game dir
-        pos_g = centre_g = None
         # centre is in Blender space already (from world_bounds)
         d_b = np.array([dg[0], -dg[2], dg[1]])
         pos = centre + d_b * dist
