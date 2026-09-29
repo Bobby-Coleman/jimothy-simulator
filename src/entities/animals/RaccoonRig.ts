@@ -218,6 +218,7 @@ export class RaccoonRig {
     // Level-of-detail bookkeeping: fur shells, and which meshes are worth a shadow.
     this.shells = [];
     this.shadowMeshes = [];
+    this.tiny = [];
     model.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -229,6 +230,10 @@ export class RaccoonRig {
       const part = PART_RE.test(mesh.name) ? mesh.name : (mesh.parent?.name ?? '');
       const tier = /^(Body|Head)$/.test(part) ? 2 : /^(Leg|Arm|Tail[123]$)/.test(part) ? 1 : 0;
       this.shadowMeshes.push({ mesh, tier });
+      // tiny face details: not worth a draw call once the animal is a few pixels tall
+      const matName = (mesh.material as THREE.Material)?.name ?? '';
+      if (/EyeHighlight/i.test(matName) || part === 'Mouth') this.tiny.push({ mesh, from: 1 });
+      else if (part === 'Nose') this.tiny.push({ mesh, from: 2 });
     });
     this.detail = -1;
     this.setDetail(0);
@@ -236,6 +241,7 @@ export class RaccoonRig {
 
   private shells: THREE.Object3D[] = [];
   private shadowMeshes: { mesh: THREE.Mesh; tier: number }[] = [];
+  private tiny: { mesh: THREE.Mesh; from: number }[] = [];
   private detail = -1;
 
   /**
@@ -247,6 +253,7 @@ export class RaccoonRig {
     this.detail = level;
     for (const s of this.shells) s.visible = level === 0;
     for (const m of this.shadowMeshes) m.mesh.castShadow = level === 0 ? m.tier >= 1 : level === 1 ? m.tier >= 2 : false;
+    for (const t of this.tiny) t.mesh.visible = level < t.from;
   }
 
   get detailLevel() {

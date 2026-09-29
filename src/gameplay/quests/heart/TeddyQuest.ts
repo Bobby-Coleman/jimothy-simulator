@@ -269,10 +269,12 @@ export class TeddyQuest implements HeartQuest {
     const ctx = this.ctx;
     const game = ctx.game;
     const player = ctx.player;
+    if (this.done) return;
+    // mark done *before* releasing: the release event re-enters through the kid's 'give' hook
+    this.done = true;
+    this.teddy = null;
     if (player?.held?.entity === t) player.release(false);
     destroyProp(game, t);
-    this.teddy = null;
-    this.done = true;
     this.becomeHappy();
     this.say('You washed him! Thank you, Jimothy!', 3.5);
     game.events.emit('teddyReturned', {});

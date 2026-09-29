@@ -395,6 +395,18 @@ export abstract class Animal {
 
   /** The visual root the emote bubble follows. */
   protected visualRoot: THREE.Object3D | null = null;
+  private ceilT = Math.random() * 0.5;
+
+  /** Keep the emote bubble under low ceilings (Mom's den is under a porch). Call every frame; cheap. */
+  protected fitEmote(dt: number) {
+    this.ceilT -= dt;
+    if (this.ceilT > 0 || !this.emote) return;
+    this.ceilT = 0.4;
+    const from = _v.set(this.pos.x, this.pos.y + 0.3, this.pos.z);
+    const hit = this.game.physics.raycast(from, UP, this.cfg.emoteY + 0.4, WORLD_ONLY);
+    const room = hit ? hit.distance + 0.3 - 0.42 : this.cfg.emoteY;
+    this.emote.height = THREE.MathUtils.clamp(room, this.cfg.emoteY * 0.55, this.cfg.emoteY);
+  }
 
   /** Hearts above us (FX system or fallback). */
   hearts(count = 5, yOff = 0) {
@@ -457,6 +469,7 @@ export abstract class RaccoonAnimal extends Animal {
     const cur = this.rig.detailLevel;
     const lvl = camD < (cur === 0 ? 17 : 15) ? 0 : camD < (cur === 2 ? 42 : 46) ? 1 : 2;
     this.rig.setDetail(lvl as 0 | 1 | 2);
+    this.fitEmote(dt);
     this.emote.update(dt, game.time);
     // Far away: animate at a quarter rate (the pose barely reads at that size)
     this.animAcc += dt;

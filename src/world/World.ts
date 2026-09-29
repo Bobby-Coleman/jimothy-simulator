@@ -68,6 +68,8 @@ export class World implements System {
       } catch (err) {
         console.error(`[world] zone "${z.name}" failed to build`, err);
       }
+      // Make this zone's colliders visible to raycasts done by later zones / systems during setup
+      game.physics.refreshQueries();
     }
   }
 

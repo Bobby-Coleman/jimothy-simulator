@@ -120,6 +120,17 @@ export class Physics {
     }
   }
 
+  /**
+   * Newly created colliders are invisible to scene queries (raycasts) until the next physics step.
+   * Call this after building lots of static geometry so later setup code can raycast against it.
+   */
+  refreshQueries() {
+    const dt = this.world.timestep;
+    this.world.timestep = 1e-6;
+    this.world.step(this.eventQueue);
+    this.world.timestep = dt;
+  }
+
   onContactForce(fn: (info: ContactForceInfo) => void) {
     this.contactHandlers.push(fn);
   }

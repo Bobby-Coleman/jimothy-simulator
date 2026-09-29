@@ -604,12 +604,12 @@ function buildBillboard(game: Game, world: World, b: Batch) {
   const g = world.heightAt(BILL.x, BILL.z);
   const W = 18,
     Hh = 7.9;
-  const bottom = g + 9;
+  const bottom = 9; // frame-local height of the face bottom (the frame origin already sits on the ground)
   const f = new Frame(BILL.x, g, BILL.z, yaw);
   // two big steel columns + truss + service ladder
   for (const s of [-1, 1]) {
-    f.geo(b, 'metal', GEO.cyl8, s * 5, (bottom - g) / 2 + 0.5, -0.7, 0.8, bottom - g + 1, 0.8, 0x9aa3ad);
-    f.collider(game, s * 5, (bottom - g) / 2 + 0.5, -0.7, 0.8, bottom - g + 1, 0.8);
+    f.geo(b, 'metal', GEO.cyl8, s * 5, bottom / 2 + 0.5, -0.7, 0.8, bottom + 1, 0.8, 0x9aa3ad);
+    f.collider(game, s * 5, bottom / 2 + 0.5, -0.7, 0.8, bottom + 1, 0.8);
     f.box(b, 'concrete', s * 5, 0.3, -0.7, 1.6, 0.6, 1.6, 0xc9ccd0);
   }
   for (let i = 0; i < 4; i++) f.box(b, 'metal', 0, bottom - 0.9 - i * 2.1, -0.7, 10, 0.14, 0.14, 0x8a929a, 0, 0, i % 2 ? 0.35 : -0.35);
@@ -625,7 +625,7 @@ function buildBillboard(game: Game, world: World, b: Batch) {
     f.box(b, 'lamp', i * 3.8, bottom - 2.05, 0.45, 0.6, 0.18, 0.4, 0xfff4d0, 0, -0.9);
   }
   // service ladder up the left column
-  for (let k = 0; k < Math.floor((bottom - g) / 0.4); k++) f.box(b, 'metal', -5, 0.5 + k * 0.4, -0.2, 0.6, 0.05, 0.05, 0xcfd6dc);
+  for (let k = 0; k < Math.floor(bottom / 0.4); k++) f.box(b, 'metal', -5, 0.5 + k * 0.4, -0.2, 0.6, 0.05, 0.05, 0xcfd6dc);
   return { top: f.p(0, bottom + Hh + 0.2, -0.3) };
 }
 

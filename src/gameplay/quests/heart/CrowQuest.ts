@@ -114,10 +114,15 @@ export class CrowQuest implements HeartQuest {
     }
   }
 
+  private given = new Set<string>();
+
   private pickGift(): GiftDef {
-    if (!this.lastGift) return GIFTS[0]; // the first present is always the iconic golden bottle cap
-    const opts = GIFTS.filter((g) => g.kind !== this.lastGift);
-    return opts[Math.floor(Math.random() * opts.length)];
+    // the first present is always the iconic golden bottle cap; then something new each time if possible
+    let opts = !this.lastGift ? [GIFTS[0]] : GIFTS.filter((g) => !this.given.has(g.kind));
+    if (!opts.length) opts = GIFTS.filter((g) => g.kind !== this.lastGift);
+    const pick = opts[Math.floor(Math.random() * opts.length)];
+    this.given.add(pick.kind);
+    return pick;
   }
 
   private startDeal(crow: Crow, item: Entity) {
