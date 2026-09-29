@@ -1281,46 +1281,49 @@ const objScenarios = {
     });
   },
   async obj_chainReaction() {
-    // Best effort: lob a propane tank into the Jimothy Summer crowd (6 people) from the podium.
+    // Lob a propane tank (from a Hills BBQ) into the Jimothy Summer crowd (6 people) at City Hall. A throw can land
+    // a little off, so up to 3 tries with 3 tanks (the ceremony can be replayed).
     return ev(async () => {
       T.resetObj('chainReaction');
       T.release();
       const S = T.g.get('landmarks').get('summer');
-      const tank = T.nearestEntity((e) => e.alive && e.tags.has('propane'), new T.V(-24.6, 0, -122.6));
-      if (!tank) return { pass: false, detail: 'no propane tank' };
-      T.grabEnt(tank, 0.8);
-      T.p.teleport(new T.V(100, 1, -30), Math.PI / 2);
-      let w = 0;
-      while (S.state !== 'idle' && w < 80) { T.step(1); w++; }
-      const pod = S.podium;
-      T.tp(111, 0, Math.PI / 2);
       const cam = T.g.get('camera');
-      for (let k = 0; k < 150 && S.state !== 'speech'; k++) {
-        cam.snapBehind(Math.atan2(pod.x - T.p.position.x, pod.z - T.p.position.z));
-        T.g.input.virtual.move.set(0, 1);
+      const tries = [];
+      for (let attempt = 0; attempt < 3 && !T.O.isDone('chainReaction'); attempt++) {
+        const tank = T.nearestEntity((e) => e.alive && e.tags.has('propane') && !e.data.armed, new T.V(-24.6, 0, -122.6));
+        if (!tank) break;
+        T.grabEnt(tank, 0.8);
+        T.p.teleport(new T.V(100, 1, -30), Math.PI / 2);
+        for (let w = 0; S.state !== 'idle' && w < 80; w++) T.step(1);
+        const pod = S.podium;
+        T.tp(111, 0, Math.PI / 2);
+        for (let k = 0; k < 150 && S.state !== 'speech'; k++) {
+          cam.snapBehind(Math.atan2(pod.x - T.p.position.x, pod.z - T.p.position.z));
+          T.g.input.virtual.move.set(0, 1);
+          T.step(0.1);
+        }
+        T.idle();
+        await T.closeDialogs();
         T.step(0.1);
+        const A = S.crowd.actors.filter((a) => a.alive);
+        const c = A.reduce((acc, a) => acc.add(a.position), new T.V()).multiplyScalar(1 / Math.max(1, A.length));
+        // step down toward them until ~6 m away, then a low lob (lands ~6 m out)
+        for (let k = 0; k < 40 && Math.hypot(c.x - T.p.position.x, c.z - T.p.position.z) > 6; k++) {
+          cam.snapBehind(Math.atan2(c.x - T.p.position.x, c.z - T.p.position.z));
+          T.g.input.virtual.move.set(0, 1);
+          T.step(0.1);
+        }
+        T.idle();
+        const d = Math.hypot(c.x - T.p.position.x, c.z - T.p.position.z);
+        const f = Math.atan2(c.x - T.p.position.x, c.z - T.p.position.z);
+        T.p.facing = f;
+        cam.snapBehind(f);
+        cam.pitch = 0.25;
+        T.press('bonk'); // throw
+        T.step(6);
+        tries.push({ crowd: A.length, dist: +d.toFixed(1), best: T.O.get('chainReaction').progress });
       }
-      T.idle();
-      await T.closeDialogs();
-      T.step(0.1);
-      const A = S.crowd.actors.filter((a) => a.alive);
-      const c = A.reduce((acc, a) => acc.add(a.position), new T.V()).multiplyScalar(1 / Math.max(1, A.length));
-      // step down toward them until ~6 m away, then a low lob (lands ~6 m out)
-      for (let k = 0; k < 40 && Math.hypot(c.x - T.p.position.x, c.z - T.p.position.z) > 6; k++) {
-        cam.snapBehind(Math.atan2(c.x - T.p.position.x, c.z - T.p.position.z));
-        T.g.input.virtual.move.set(0, 1);
-        T.step(0.1);
-      }
-      T.idle();
-      const d = Math.hypot(c.x - T.p.position.x, c.z - T.p.position.z);
-      const f = Math.atan2(c.x - T.p.position.x, c.z - T.p.position.z);
-      T.p.facing = f;
-      cam.snapBehind(f);
-      cam.pitch = 0.25;
-      const boom0 = T.count('explosion');
-      T.press('bonk'); // throw
-      T.step(6);
-      return T.result('chainReaction', { crowd: A.length, dist: +d.toFixed(1), exploded: T.count('explosion') > boom0, bestEffort: true });
+      return T.result('chainReaction', { tries });
     });
   },
   async obj_strike() {

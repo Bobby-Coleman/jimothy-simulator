@@ -17,7 +17,7 @@ import { OBJECTIVES } from './objectiveDefs';
  * Trigger table (event payloads are read defensively; other systems may omit fields):
  *   wash10              'wash' (kind != 'hands') ×10 unique things   cottonCandy     'cottonCandyGone' | wash/itemWashed of cotton candy
  *   moneyLaundering     wash/itemWashed of cash                      deepClean       wash/itemWashed of a phone
- *   dumpsterDiver       'dumpsterDive' ×5 (items: 15 s cooldown/bin) trashTornado    'trashTipped' ×20
+ *   dumpsterDiver       'dumpsterDive' ×5 (items: 15 s cooldown/bin) trashTornado    'trashTipped' ×20 (by/near Jimothy)
  *   roundBoy            player.stats.rolled (cumulative, 500 m)      notACat         'notACat'
  *   cryptid             'filmed' {by} ×12 unique people              fiveFingerDisc. 'steal'/'grab' of a pizza
  *   stickyFingers       'steal' ×10 unique items                     stickySituation 'gumWall'
@@ -34,7 +34,7 @@ import { OBJECTIVES } from './objectiveDefs';
  *   salmonRun           'salmonRunWon'                               rookieCard      'collectible' {kind:'rookieCard'} | grab
  *   awww                'chitter' near 15 unique NPCs                localCelebrity  score total 100k
  *   strike              'bonk' {rolling} | 'npcRagdoll' {cause:'roll'} on 5 NPCs in one roll
- *   chainReaction       'npcRagdoll' (not traffic/falls/faints) ×5 unique in 5 s
+ *   chainReaction       'npcRagdoll' (byPlayer, or ≤ 30 m and not traffic/falls) ×5 unique in 5 s
  *   kaboom              'explosion'                                  carSurfer       'hanging' while moving, 10 s
  *   leapOfFaith         'land' | 'leapOfFaith' {height ≥ 25}         frequentFlyer   8 m rise while airborne (live; teleports reset)
  *   jaywalker           'hitByCar' | playerRagdoll cause car         flopEra         'playerRagdoll' ×25
@@ -162,6 +162,11 @@ export class ObjectiveContent implements System {
     const q = a >= target ? target : Math.floor(a / step) * step;
     if (q > o.progress) this.obj!.set(id, q);
   }
+  private nearPlayer(e: Entity | undefined, r: number) {
+    const pl = this.game.get<Jimothy>('player');
+    const v = e ? entityPos(e, new THREE.Vector3()) : null;
+    return !!pl && !!v && v.distanceTo(pl.position) < r;
+  }
   private keyOf(p: any, fallback: string) {
     return p?.id ?? p?.entity?.id ?? p?.by?.id ?? p?.kit?.id ?? `${fallback}@${this.game.time.toFixed(2)}`;
   }
@@ -207,6 +212,9 @@ export class ObjectiveContent implements System {
     // handful of dumpsters in town, so "5 different dumpsters" was impossible.
     on('dumpsterDive', () => this.add('dumpsterDiver'));
     on('trashTipped', (p) => {
+      // Jimothy's doing only: traffic and pedestrians knock over ~1 can a minute somewhere in town, which would
+      // finish this on its own in half an hour. (Chain tips next to him still count.)
+      if (!p.entity?.data?.disturbedByPlayer && !this.nearPlayer(p.entity, 15)) return;
       const id: number | undefined = p.entity?.id;
       if (id != null) {
         const last = this.recentTrash.get(id) ?? -99;
@@ -323,9 +331,9 @@ export class ObjectiveContent implements System {
         this.rollHits.add(p.entity.id);
         this.set('strike', this.rollHits.size);
       }
-      // Jimothy's chaos only: traffic knocking people over across town isn't his chain reaction. (Don't use
-      // byPlayer: explosion knockdowns arrive via Npc.onBonk as cause 'impact' with byPlayer false.)
-      if (/vehicle|fall|faint|script/.test(String(p.cause ?? ''))) return;
+      // Jimothy's chaos only: traffic/falls across town aren't his chain reaction. (byPlayer alone isn't enough:
+      // explosion knockdowns arrive via Npc.onBonk as cause 'impact' with byPlayer false, landmark crowds omit it.)
+      if (p.byPlayer !== true && (/vehicle|fall|faint|script/.test(String(p.cause ?? '')) || !this.nearPlayer(p.entity, 30))) return;
       const t = this.game.time;
       this.ragdolls.push({ t, id: p.entity?.id ?? `r${t}` });
       while (this.ragdolls.length && t - this.ragdolls[0].t > 5) this.ragdolls.shift();

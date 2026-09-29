@@ -15,6 +15,7 @@ import { SlowMoSystem } from './gameplay/SlowMo';
 import { DebugStats } from './core/DebugStats';
 import { PhotoModeSystem } from './gameplay/PhotoMode';
 import { MapSystem } from './gameplay/MapSystem';
+import { NewsTicker } from './ui/NewsTicker';
 import { StaticBatcher } from './world/StaticBatcher';
 import { DetailCuller } from './world/DetailCuller';
 import { AutoQuality } from './core/AutoQuality';
@@ -75,6 +76,7 @@ export function registerSystems(game: Game) {
   game.add(new FxSystem());
   game.add(new UI());
   game.add(new MapSystem());
+  game.add(new NewsTicker());
   game.add(new DebugStats());
   game.add(new StaticBatcher());
   game.add(new DetailCuller());

@@ -273,7 +273,11 @@ export class StaticBatcher implements System {
   name = 'batcher';
   private t = 0;
   private snapshot = new Map<THREE.Mesh, THREE.Matrix4>();
-  private phase: 'wait' | 'snap' | 'done' = 'wait';
+  private phase: 'wait' | 'snap' | 'proxies' | 'done' = 'wait';
+  // Shadow proxies are built one frame after the visual merge (splits the one-time hitch in two)
+  private out: THREE.Group | null = null;
+  private proxySrc: THREE.Mesh[] = [];
+  private shadowOff: THREE.Mesh[] = [];
   enabled = true;
   report: Record<string, number> = {};
 
@@ -290,12 +294,24 @@ export class StaticBatcher implements System {
       this.takeSnapshot(game);
       this.phase = 'snap';
     } else if (this.phase === 'snap' && this.t > 3) {
-      this.phase = 'done';
+      this.phase = 'proxies';
       try {
         this.merge(game);
       } catch (err) {
         console.warn('[batcher] merge failed (continuing unbatched)', err);
       }
+    } else if (this.phase === 'proxies') {
+      this.phase = 'done';
+      try {
+        this.buildProxies(game);
+      } catch (err) {
+        console.warn('[batcher] shadow proxies failed (static meshes keep casting)', err);
+      }
+      console.info('[batcher]', this.report);
+      // The map captures the world top-down; refresh it now that everything is final
+      game.events.emit('worldBatched', this.report);
+      // …and compile every remaining shader in the background so new areas don't hitch when they come into view
+      warmShaders(game);
     }
   }
 
@@ -325,7 +341,6 @@ export class StaticBatcher implements System {
 
   merge(game: Game) {
     const t0 = performance.now();
-    const world = game.get<World>('world')!;
     const meshes = this.candidates(game).filter((m) => {
       const s = this.snapshot.get(m);
       return s && s.equals(m.matrixWorld);
@@ -354,6 +369,71 @@ export class StaticBatcher implements System {
     out.name = 'static-batched';
     let removed = 0;
     let created = 0;
+    let proxied = 0;
+    for (const [key, arr] of groups) {
+      if (arr.length < 2) {
+        // Singletons stay as they are, but their shadow can still move into a proxy (next frame)
+        const m = arr[0];
+        if (proxyable(m)) {
+          this.proxySrc.push(m);
+          this.shadowOff.push(m);
+          proxied++;
+        }
+        continue;
+      }
+      const geos: THREE.BufferGeometry[] = [];
+      for (const m of arr) geos.push(prepForMerge(m));
+      let merged: THREE.BufferGeometry | null = null;
+      try {
+        merged = mergeGeometries(geos, false);
+      } catch {
+        merged = null;
+      }
+      for (const g of geos) g.dispose();
+      if (!merged) continue;
+      merged.computeBoundingSphere();
+      merged.computeBoundingBox();
+      const first = arr[0];
+      const mesh = new THREE.Mesh(merged, matFor.get(key)!);
+      const shadowByProxy = arr.some((m) => m.castShadow) && proxyable(first);
+      // until the proxies exist (next frame) the batch casts its own shadow
+      mesh.castShadow = first.castShadow || shadowByProxy;
+      if (shadowByProxy) this.shadowOff.push(mesh);
+      mesh.receiveShadow = first.receiveShadow;
+      mesh.renderOrder = first.renderOrder;
+      mesh.name = 'batch';
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      out.add(mesh);
+      created++;
+      for (const m of arr) {
+        if (shadowByProxy && m.castShadow) {
+          this.proxySrc.push(m);
+          proxied++;
+        }
+        m.visible = false; // keep the object (others may reference it), just stop drawing it
+        m.userData.batched = true;
+        removed++;
+      }
+    }
+    game.scene.add(out);
+    this.out = out;
+    this.report = {
+      candidates: meshes.length,
+      groups: groups.size,
+      merged: removed,
+      batches: created,
+      shadowProxied: proxied,
+      ms: Math.round(performance.now() - t0),
+    };
+  }
+
+  /** Second frame: fold every recorded static shadow caster into shadow-only proxies per 48 m cell. */
+  private buildProxies(game: Game) {
+    const t0 = performance.now();
+    const world = game.get<World>('world')!;
+    const out = this.out!;
+    const c = new THREE.Vector3();
     // shadow proxy buckets: cell|depthSide → world-space position geometries
     const proxyGeos = new Map<string, { side: THREE.Side; geos: THREE.BufferGeometry[] }>();
     const addProxy = (m: THREE.Mesh) => {
@@ -375,7 +455,6 @@ export class StaticBatcher implements System {
       g.applyMatrix4(m.matrixWorld);
       b.geos.push(g);
     };
-    let proxied = 0;
     // Zone builders' own shadow proxies (central lib/batch.ts: one per 120 m chunk, up to ~110k tris each) are
     // re-cut into our 48 m cells, so the shadow pass only draws the triangles near Jimothy.
     let recut = 0;
@@ -398,50 +477,7 @@ export class StaticBatcher implements System {
       recut++;
     });
     const tRecut = performance.now() - tRecut0;
-    for (const [key, arr] of groups) {
-      if (arr.length < 2) {
-        // Singletons stay as they are, but their shadow can still move into a proxy
-        const m = arr[0];
-        if (proxyable(m)) {
-          addProxy(m);
-          m.castShadow = false;
-          proxied++;
-        }
-        continue;
-      }
-      const geos: THREE.BufferGeometry[] = [];
-      for (const m of arr) geos.push(prepForMerge(m));
-      let merged: THREE.BufferGeometry | null = null;
-      try {
-        merged = mergeGeometries(geos, false);
-      } catch {
-        merged = null;
-      }
-      for (const g of geos) g.dispose();
-      if (!merged) continue;
-      merged.computeBoundingSphere();
-      merged.computeBoundingBox();
-      const first = arr[0];
-      const mesh = new THREE.Mesh(merged, matFor.get(key)!);
-      const shadowByProxy = arr.some((m) => m.castShadow) && proxyable(first);
-      mesh.castShadow = first.castShadow && !shadowByProxy;
-      mesh.receiveShadow = first.receiveShadow;
-      mesh.renderOrder = first.renderOrder;
-      mesh.name = 'batch';
-      mesh.matrixAutoUpdate = false;
-      mesh.updateMatrix();
-      out.add(mesh);
-      created++;
-      for (const m of arr) {
-        if (shadowByProxy && m.castShadow) {
-          addProxy(m);
-          proxied++;
-        }
-        m.visible = false; // keep the object (others may reference it), just stop drawing it
-        m.userData.batched = true;
-        removed++;
-      }
-    }
+    for (const m of this.proxySrc) addProxy(m);
     const tProxy0 = performance.now();
     // Build the shadow-only proxies
     let proxies = 0;
@@ -470,23 +506,16 @@ export class StaticBatcher implements System {
       proxies++;
     }
     const tProxy = performance.now() - tProxy0;
-    game.scene.add(out);
-    this.report = {
-      candidates: meshes.length,
-      groups: groups.size,
-      merged: removed,
-      batches: created,
-      shadowProxied: proxied,
+    // the proxies cast now: the originals stop
+    for (const m of this.shadowOff) m.castShadow = false;
+    this.proxySrc = [];
+    this.shadowOff = [];
+    Object.assign(this.report, {
       shadowProxies: proxies,
       proxiesRecut: recut,
-      ms: Math.round(performance.now() - t0),
+      msProxyFrame: Math.round(performance.now() - t0),
       msRecut: Math.round(tRecut),
       msProxies: Math.round(tProxy),
-    };
-    console.info('[batcher]', this.report);
-    // The map captures the world top-down; refresh it now that everything is final
-    game.events.emit('worldBatched', this.report);
-    // …and compile every remaining shader in the background so new areas don't hitch when they come into view
-    warmShaders(game);
+    });
   }
 }
