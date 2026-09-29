@@ -68,3 +68,40 @@ Files in `public/assets/fonts/`, unmodified TTFs, license texts alongside.
 
 ## Build tooling (not shipped)
 [glTF-Transform](https://gltf-transform.dev) (MIT) is used only by `tools/catalog.mjs` to measure models.
+
+## Audio — sound effects: Kenney (<https://kenney.nl>) — CC0 1.0
+Created/distributed by **Kenney** (www.kenney.nl). Each asset page states "License: Creative Commons CC0" (<https://creativecommons.org/publicdomain/zero/1.0/>),
+as does the `License.txt` in every pack. Only the files the game uses are copied, unmodified (OGG Vorbis), into `public/assets/audio/sfx/<folder>/`;
+at runtime stereo effects are down-mixed to mono and variations are loudness-evened. Re-fetch / re-copy: `node tools/audio/fetch-assets.mjs`.
+
+| Pack (version) | Files | Folder | Asset page | Download used |
+|---|---|---|---|---|
+| Impact Sounds (1.0) | 90 | `sfx/impact/` | [kenney.nl/assets/impact-sounds](https://kenney.nl/assets/impact-sounds) | <https://kenney.nl/media/pages/assets/impact-sounds/87b4ddecda-1677589768/kenney_impact-sounds.zip> |
+| RPG Audio | 17 | `sfx/rpg/` | [kenney.nl/assets/rpg-audio](https://kenney.nl/assets/rpg-audio) | <https://kenney.nl/media/pages/assets/rpg-audio/8e99002d76-1677590336/kenney_rpg-audio.zip> |
+| Interface Sounds | 16 | `sfx/interface/` | [kenney.nl/assets/interface-sounds](https://kenney.nl/assets/interface-sounds) | <https://kenney.nl/media/pages/assets/interface-sounds/fa43c1dd4d-1677589452/kenney_interface-sounds.zip> |
+| Sci-fi Sounds | 7 | `sfx/scifi/` | [kenney.nl/assets/sci-fi-sounds](https://kenney.nl/assets/sci-fi-sounds) | <https://kenney.nl/media/pages/assets/sci-fi-sounds/6b296f9ecf-1677589334/kenney_sci-fi-sounds.zip> |
+| Music Jingles | 8 | `sfx/jingles/` | [kenney.nl/assets/music-jingles](https://kenney.nl/assets/music-jingles) | <https://kenney.nl/media/pages/assets/music-jingles/f37e530b9e-1677590399/kenney_music-jingles.zip> |
+| Voiceover Pack #1 | 5 | `sfx/voice/` | [kenney.nl/assets/voiceover-pack](https://kenney.nl/assets/voiceover-pack) | <https://kenney.nl/media/pages/assets/voiceover-pack/3f7f168698-1677589897/kenney_voiceover-pack.zip> |
+
+Voiceover lines were renamed `male_*.ogg` / `female_*.ogg` (performers as credited in the pack's `Credits.txt`); the game runs them through
+our `slopify` processor at load time (stutter, pitch warble, ring-mod, bitcrush) to make SlopBot / Slopothy "AI" speech.
+
+## Audio — music: OpenGameArt.org — CC0 1.0
+Each page below lists **License(s): CC0** (verified on the page; two are dual-licensed OGA-BY/CC0 and are used under CC0).
+Files are unmodified (renamed) in `public/assets/audio/music/`; loudness is evened at runtime with a per-file gain.
+
+| File | Title | Author (OGA user) | Page | Theme |
+|---|---|---|---|---|
+| `respectable_bounce.ogg` | A respectable amount of Bounce | Some Weirdo | <https://opengameart.org/content/a-respectable-amount-of-bounce> | title |
+| `banana_track.ogg` | Banana Track | skrjablin | <https://opengameart.org/content/banana-track> | day |
+| `wacky_workings.ogg` | Wacky Workings | Fupi | <https://opengameart.org/content/wacky-workings> | day |
+| `trouble_in_the_garden.ogg` | Trouble in the Garden | HaelDB (OGA-BY 3.0 / CC0 — used as CC0) | <https://opengameart.org/content/trouble-in-the-garden> | day |
+| `wacky_wobblings.ogg` | Wacky Wobblings | Fupi | <https://opengameart.org/content/wacky-wobblings> | day |
+| `chill_lofi_loop.ogg` | Chill lofi inspired [loop edit] | qubodup, loop edit of [Chill lofi inspired](https://opengameart.org/content/chill-lofi-inspired) by omfgdude (also CC0) | <https://opengameart.org/content/chill-lofi-inspired-loop-edit> | night |
+| `napping_on_a_cloud.ogg` | Napping on a Cloud | congusbongus | <https://opengameart.org/content/napping-on-a-cloud> | night |
+| `ai_contact.mp3` | Ai Contact | Of Far Different Nature | <https://opengameart.org/content/ai-contact> (the CC0 original on that page — not the later CC-BY loop re-release) | slop |
+| `dialup_song.ogg` | Dialup Song | Fupi | <https://opengameart.org/content/dialup-song> | slop |
+
+## Audio — our own
+Jimothy's voice (chitters, trills, purrs, hisses, squeaks, happy chirps, kit peeps), crowd reactions, cartoon screams, water/washing, glitch/slop
+sounds, fanfares and most cartoon effects are synthesized procedurally at load time by our own code (`src/audio/synth/`) — no samples involved.

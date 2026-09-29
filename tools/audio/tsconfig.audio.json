@@ -1,0 +1,5 @@
+{
+  "//": "Typecheck only the audio module: npx tsc --noEmit -p tools/audio/tsconfig.audio.json",
+  "extends": "../../tsconfig.json",
+  "include": ["../../src/audio/**/*.ts"]
+}

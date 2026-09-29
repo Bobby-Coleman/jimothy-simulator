@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jimothy Simulator — Audio Test</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --bg: #111823;
+        --panel: #1a2433;
+        --edge: #2c3a50;
+        --text: #e8eef7;
+        --muted: #8fa3bd;
+        --accent: #ffb547;
+        --ok: #6fd39b;
+        --bad: #ff6b6b;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; }
+      header { position: sticky; top: 0; z-index: 2; background: #0c121bee; backdrop-filter: blur(6px); border-bottom: 1px solid var(--edge); padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+      h1 { font-size: 17px; margin: 0; }
+      h1 span { color: var(--accent); }
+      #status { color: var(--muted); font: 12px ui-monospace, Consolas, monospace; }
+      main { padding: 12px 16px 60px; max-width: 1400px; margin: 0 auto; }
+      section { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 10px 12px 12px; margin: 12px 0; }
+      h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 8px; }
+      .grid { display: flex; flex-wrap: wrap; gap: 6px; }
+      button { background: #26344a; color: var(--text); border: 1px solid #3a4d6b; border-radius: 7px; padding: 6px 10px; font: inherit; cursor: pointer; }
+      button:hover { background: #30425e; border-color: var(--accent); }
+      button.on { background: #5a3d10; border-color: var(--accent); }
+      button.missing { opacity: 0.45; border-style: dashed; }
+      button small { color: var(--muted); margin-left: 4px; }
+      #unlock { background: var(--accent); color: #1b1300; font-weight: 700; border: 0; }
+      label { color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+      input[type='range'] { width: 110px; }
+      select { background: #26344a; color: var(--text); border: 1px solid #3a4d6b; border-radius: 6px; padding: 5px; }
+      .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+      table { border-collapse: collapse; width: 100%; font: 12px ui-monospace, Consolas, monospace; }
+      td, th { border-bottom: 1px solid var(--edge); padding: 3px 6px; text-align: left; }
+      .bad { color: var(--bad); }
+      .ok { color: var(--ok); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Jimothy Simulator <span>Audio Test</span></h1>
+      <button id="unlock">Enable audio</button>
+      <label>Master <input id="vol-master" type="range" min="0" max="1" step="0.01" value="0.9" /></label>
+      <label>SFX <input id="vol-sfx" type="range" min="0" max="1" step="0.01" value="1" /></label>
+      <label>Music <input id="vol-music" type="range" min="0" max="1" step="0.01" value="0.6" /></label>
+      <div id="status">loading…</div>
+    </header>
+    <main>
+      <section>
+        <h2>Music</h2>
+        <div class="grid" id="music"></div>
+        <p class="hint">Crossfades between themes. Day/night/slop are playlists (next track when one ends). Sources &amp; licenses: CREDITS.md.</p>
+      </section>
+      <section>
+        <h2>Positional &amp; stress</h2>
+        <div class="grid">
+          <select id="pos-key"></select>
+          <button data-pos="-6,0,0">Left 6 m</button>
+          <button data-pos="6,0,0">Right 6 m</button>
+          <button data-pos="0,0,-12">Front 12 m</button>
+          <button data-pos="0,0,6">Behind 6 m</button>
+          <button data-pos="0,0,-45">Far 45 m</button>
+          <button data-pos="0,0,-80">Out of range 80 m</button>
+          <button id="orbit">Orbiting loop</button>
+          <button id="stress">Stress: 40 bell + impact hits</button>
+          <button id="stopall">Stop all SFX</button>
+        </div>
+        <p class="hint">Listener at the origin facing −Z. Shift-click any sound button to play it at a random spot 3–30 m away.</p>
+      </section>
+      <div id="sounds"></div>
+      <section id="report-section" hidden>
+        <h2>Buffer report</h2>
+        <div id="report"></div>
+      </section>
+    </main>
+    <script type="module" src="/src/audio/audioTest.ts"></script>
+  </body>
+</html>

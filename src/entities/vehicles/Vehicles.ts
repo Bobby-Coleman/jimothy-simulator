@@ -293,6 +293,7 @@ export class VehicleSystem implements System {
   }
 
   private onExplosion(e: { position: THREE.Vector3; radius?: number; force?: number }) {
+    if (!e || !e.position) return;
     const r = (e.radius ?? 7) + 2;
     for (const car of this.cars) {
       if (car.wrecked) continue;
