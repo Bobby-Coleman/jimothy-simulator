@@ -42,8 +42,9 @@ No install, no login. Keyboard + mouse, gamepad, or touch (phones/tablets).
   Slop Dragon you can ride, SlopBot™ offering to generate you a raccoon instead, a billboard that needs a good wash,
   and a data center with a very large plug.
 * **Goat-Sim chaos**: ~60 ragdolling pedestrians, traffic, trampolines, propane BBQs, raccoon cannons, a Ferris wheel,
-  dumpster diving, the KRCN breaking-news ticker reacting to everything you do, 50 Instincts (objectives),
-  12 mutators, 10 golden bobbleheads, photo mode, slow-mo, day/night and Seattle weather.
+  rideable hydrant geysers, car alarms, Espresso Mode, bowling a tour group with a round boy, dumpster diving, the KRCN
+  breaking-news ticker reacting to everything you do, 54 Instincts (objectives), 12 mutators, 10 golden bobbleheads,
+  photo mode, slow-mo, day/night and Seattle weather.
 
 ## Controls
 

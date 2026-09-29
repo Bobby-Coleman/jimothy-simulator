@@ -65,7 +65,7 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * QA wave started: objectives audit, world polish + performance, first-time-player UX + mobile.
 
 ## 01:20–03:00 — QA wave + extras
-* **Objectives audit**: all 50 Instincts achievable through real play (37 verified as-is, 13 fixed, targets rebalanced);
+* **Objectives audit**: all 50 Instincts (at the time) achievable through real play (37 verified as-is, 13 fixed, targets rebalanced);
   `QA_OBJECTIVES.md` hint sheet; `tools/playtest.mjs --group obj` plays every one (52/52 passing).
 * **World polish + performance**: worst street-level draw calls 826 → 486 on high (every spot < 500), shadow pass
   halved, a 5.4 s startup freeze (map capture compiling ~50 shaders) removed, shader warm-up after load, night
