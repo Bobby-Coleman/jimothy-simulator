@@ -33,3 +33,16 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
   city is a sink — Jimothy can wash anything anywhere.
 * **Map**: minimap + full map (M) rendered from a top-down capture of the world.
 * Slow-mo (T), respawn (H), performance overlay (F3 / `?stats`), instanced fur (130 → 13 draw calls).
+
+## 00:10–00:45 — Integration wave
+* Landed from helpers: Blender raccoons (Jimothy/Mom/kit/Danny/Slopothy + hats), full audio (91 sound keys — raccoon
+  chitters, washing, crowds and slop glitches are original synthesis; CC0 music themes), the whole UI (title,
+  phone-camera intro of the viral moment, HUD, menus, SlopBot, dialogue, touch controls), NPC humans with ragdolls,
+  48 objectives + 12 mutators + 10 golden bobbleheads, zones: road grid, Old Ballard (spawn/den), Downtown with the
+  Space Noodle, the park, the Locks, the Residential Hills.
+* Performance pass: static-geometry batcher, distance culling for small props, no shadows on tiny props,
+  quality-scaled shadow box, first-visit auto quality. Spawn view went from ~1,300 to ~780 draw calls while the
+  world doubled in size.
+* Seattle-summer day cycle (sunrise 5:30, sunset 21:00). The intro plays at 7:42 PM golden hour like the real clip,
+  then cuts to "The next morning… Jimothy is internet famous."
+* Touch-friendly minimap (tap to open the big map).
