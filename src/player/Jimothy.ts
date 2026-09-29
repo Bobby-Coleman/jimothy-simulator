@@ -537,6 +537,12 @@ export class Jimothy implements System {
 
     this.body.setLinvel({ x: vx, y: vy, z: vz }, true);
     this.body.setGravityScale((vy < 0 ? 1.8 : 1.25) * this.gravityMul, true);
+    // Standing still on a walkable slope (roofs, hills): his collider is frictionless while walking, so gravity used to
+    // make him creep downhill. Idle + grounded on an incline → hold him in place (barely any gravity, no drift).
+    if (this.grounded && !plat && wish.lengthSq() < 0.01 && this.groundNormal.y < 0.995 && game.time - this.lastJump > 0.3) {
+      this.body.setGravityScale(0.05 * this.gravityMul, true);
+      if (Math.hypot(vx, vz) < 0.6) this.body.setLinvel({ x: vx * 0.5, y: Math.min(vy, 0), z: vz * 0.5 }, true);
+    }
 
     if (wish.lengthSq() > 0.01) this.facing = dampAngle(this.facing, Math.atan2(wish.x, wish.z), 13, dt);
 

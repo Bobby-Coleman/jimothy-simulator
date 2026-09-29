@@ -155,3 +155,19 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
   (`world.addLadder`) keeps ladders at the old rate: Space Noodle maintenance ladder, SlopCorp billboard ladder,
   new service ladders on the catwalk-free gasworks towers. Bobblehead perches that relied on long wall climbs got
   ladders/ledges (see QA_OBJECTIVES.md).
+
+## Playtest batch 3 (from the human)
+* **Pause menu → Fullscreen / Exit fullscreen** (hidden where the browser can't; falls back to a "try F11" label).
+* **Title-screen music player** instead of a fixed title track: every in-game track, with title, author and a link
+  to the author's OpenGameArt profile; prev / play-pause / next, auto-advance. Credits page lists them all too.
+* **NPC phones ×2** (they read as specks at street distance).
+* **SlopCorp billboard, rebuilt**: an invisible 153 kg wash sensor filled the old catwalk — the ground check and the
+  camera both hit it (Jimothy was never "grounded" up there → constant climbing; camera jammed at 0.2 m). Now: a
+  1.85 m catwalk with a water gutter, thin unclimbable rails, a service-mast ladder that actually reaches it, and
+  signposted washing. Engine fix so it can't recur: raycasts and sphere casts ignore sensors.
+* **City Hall geometry pass**: the pediment's collider was a flat slab (he sank 1.8 m into the ridge) → convex hull
+  of the drawn prism; roof cornice, portico cornice, dome, lantern, drum plinth, column bases/capitals and doors got
+  colliders that match their visuals (probe mismatches 3,940 → 270, remainder intentional).
+* **Proximity hints**: linger ~2 s near where an unfinished Instinct happens and its hint appears under the goal
+  pill (36 of 54 Instincts; never secrets, never during cutscenes/menus).
+* Standing still on a sloped roof no longer creeps downhill.
