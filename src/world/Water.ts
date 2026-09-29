@@ -85,7 +85,7 @@ export class WaterSystem implements System {
     const color = key === 'bay' ? 0x2b6f8f : key === 'pond' ? 0x3f7d6a : key === 'puddle' ? 0x6d7f8c : key === 'coolant' ? 0x39e6ff : 0x6fc3e0;
     m = new THREE.MeshStandardMaterial({
       color,
-      roughness: key === 'puddle' ? 0.12 : 0.06,
+      roughness: key === 'puddle' ? 0.14 : 0.1,
       metalness: 0.05,
       transparent: true,
       opacity: key === 'puddle' ? 0.6 : key === 'bay' ? 0.88 : 0.78,

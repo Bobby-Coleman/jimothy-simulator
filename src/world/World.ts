@@ -85,11 +85,10 @@ export class World implements System {
     geo.rotateX(-Math.PI / 2);
     const pos = geo.getAttribute('position') as THREE.BufferAttribute;
     const colors = new Float32Array(pos.count * 3);
-    const grass = new THREE.Color(0x6aa84f);
-    const grass2 = new THREE.Color(0x86b85a);
-    const dirt = new THREE.Color(0x8d7a5b);
-    const sand = new THREE.Color(0xc9b98f);
-    const rock = new THREE.Color(0x6f6a64);
+    // splat weights: x = grass, y = dirt, z = sand
+    const splat = new Float32Array(pos.count * 3);
+    const tintA = new THREE.Color(0xcfeeb0);
+    const tintB = new THREE.Color(0xf4f7c0);
     const c = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
@@ -97,15 +96,25 @@ export class World implements System {
       const h = terrainHeight(x, z);
       pos.setY(i, h);
       const noise = Math.sin(x * 0.13) * Math.sin(z * 0.11) * 0.5 + Math.sin(x * 0.037 + z * 0.041) * 0.5;
-      c.copy(grass).lerp(grass2, 0.5 + noise * 0.5);
-      if (h < -0.4) c.lerp(dirt, THREE.MathUtils.clamp((-0.4 - h) / 1.2, 0, 1));
-      if (z > MAP.seawallZ - 2) c.lerp(sand, 0.6).lerp(rock, THREE.MathUtils.clamp((h + 2) / -5, 0, 1));
+      // Macro tint to break up tiling (Goat-Sim-ish sunny greens)
+      c.copy(tintA).lerp(tintB, 0.5 + noise * 0.45);
       colors.set([c.r, c.g, c.b], i * 3);
+      let g = 1,
+        d = 0,
+        s = 0;
+      if (h < -0.35) d = THREE.MathUtils.clamp((-0.35 - h) / 1.0, 0, 1);
+      d = Math.max(d, THREE.MathUtils.clamp(noise * 1.6 - 1.1, 0, 0.45)); // occasional worn patches
+      if (z > MAP.seawallZ - 3) s = THREE.MathUtils.clamp((z - (MAP.seawallZ - 3)) / 3, 0, 1);
+      g = Math.max(0, 1 - d - s);
+      const sum = g + d + s || 1;
+      splat.set([g / sum, d / sum, s / sum], i * 3);
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute('splat', new THREE.BufferAttribute(splat, 3));
     geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, color: 0xa6d46e });
     this.terrain = new THREE.Mesh(geo, mat);
+    this.applyTerrainTextures(mat, half * 2);
     this.terrain.receiveShadow = true;
     this.terrain.name = 'terrain';
     this.game.scene.add(this.terrain);
@@ -125,6 +134,67 @@ export class World implements System {
       .setFriction(0.9)
       .setCollisionGroups(groups(G.WORLD));
     this.game.physics.staticCollider(cd);
+  }
+
+  /** Grass/dirt/sand splat blending with anti-tiling; falls back to flat colors until textures load. */
+  private applyTerrainTextures(mat: THREE.MeshStandardMaterial, size: number) {
+    const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+    white.needsUpdate = true;
+    const uniforms = {
+      tDirt: { value: white as THREE.Texture },
+      tSand: { value: white as THREE.Texture },
+      uTexOn: { value: 0 },
+    };
+    mat.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute vec3 splat;\nvarying vec3 vSplat;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSplat = splat;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform sampler2D tDirt;\nuniform sampler2D tSand;\nuniform float uTexOn;\nvarying vec3 vSplat;')
+        .replace(
+          '#include <map_fragment>',
+          `#ifdef USE_MAP
+            vec4 gA = texture2D( map, vMapUv );
+            vec4 gB = texture2D( map, vMapUv * 0.231 + 0.37 );
+            vec4 grassC = mix( gA, gB, 0.4 );
+            // Re-colour the (dry) photo grass into lush Goat-Sim green, keeping its detail
+            float gl = dot( grassC.rgb, vec3( 0.3, 0.59, 0.11 ) );
+            grassC.rgb = mix( vec3( gl ), grassC.rgb, 0.25 ) * vec3( 0.5, 1.0, 0.3 ) * 1.22;
+            vec4 dirtC = texture2D( tDirt, vMapUv * 0.8 );
+            vec4 sandC = texture2D( tSand, vMapUv * 0.7 );
+            vec4 texC = grassC * vSplat.x + dirtC * vSplat.y + sandC * vSplat.z;
+            // Without textures loaded, tint by splat colors instead
+            vec4 flatC = vec4( vec3(0.55, 0.78, 0.36) * vSplat.x + vec3(0.55, 0.45, 0.32) * vSplat.y + vec3(0.85, 0.78, 0.58) * vSplat.z, 1.0 );
+            diffuseColor *= mix( flatC, texC * 1.9, uTexOn );
+          #endif`,
+        );
+    };
+    mat.customProgramCacheKey = () => 'terrain-splat';
+    // A 1×1 map so USE_MAP is defined from the start (keeps a single shader variant)
+    const placeholder = white.clone();
+    placeholder.needsUpdate = true;
+    mat.map = placeholder;
+    mat.color.set(0xffffff);
+    const rep = size / 7;
+    const a = this.game.assets;
+    Promise.all([
+      a.tryTexture('assets/textures/grass/color.jpg', { repeat: rep }),
+      a.tryTexture('assets/textures/grass/normal.jpg', { srgb: false, repeat: rep }),
+      a.tryTexture('assets/textures/dirt/color.jpg'),
+      a.tryTexture('assets/textures/sand/color.jpg'),
+    ]).then(([grass, normal, dirt, sand]) => {
+      if (!grass || !dirt || !sand) return;
+      mat.map = grass;
+      if (normal) {
+        mat.normalMap = normal;
+        mat.normalScale.set(0.6, 0.6);
+      }
+      uniforms.tDirt.value = dirt;
+      uniforms.tSand.value = sand;
+      uniforms.uTexOn.value = 1;
+      mat.needsUpdate = true;
+    });
   }
 
   private buildBay() {

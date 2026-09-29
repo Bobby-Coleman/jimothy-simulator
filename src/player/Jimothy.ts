@@ -90,6 +90,10 @@ export class Jimothy implements System {
   private vBefore = new THREE.Vector3();
   private washHintCooldown = 0;
   private hangTarget: { entity: Entity; local: THREE.Vector3 } | null = null;
+  /** Seconds since the player last gave input. */
+  idleTime = 0;
+  /** 0..1, set to 1 in water and dries over time. */
+  wetness = 0;
 
   async init(game: Game) {
     this.game = game;
@@ -178,6 +182,7 @@ export class Jimothy implements System {
     const fall = this.airPeakY - this.position.y;
     if (fall > this.stats.maxFall) this.stats.maxFall = fall;
     this.game.events.emit('land', { height: fall });
+    this.model.squash(Math.min(0.45, 0.08 + fall * 0.05));
     if (fall > 1.2) this.game.sfx('land', this.position, Math.min(1, fall / 6));
     this.airPeakY = this.position.y;
   }
@@ -277,6 +282,11 @@ export class Jimothy implements System {
         }
       }
       if (inp.held('flop') && this.mode !== 'ragdoll') this.ragdoll('flop', 0.4);
+      if (inp.pressed('respawn')) {
+        this.respawn();
+        game.hint('Jimothy has been gently returned to his den.', 2);
+        game.events.emit('respawn', {});
+      }
       if (inp.pressed('chitter')) {
         this.chitterTime = game.time;
         game.sfx('chitter', this.position);
@@ -334,8 +344,10 @@ export class Jimothy implements System {
     let vx = v.x;
     let vz = v.z;
     let vy = v.y;
-    const tx = wish.x * max;
-    const tz = wish.z * max;
+    // Ride moving platforms (cars, boats): desired velocity is relative to what we stand on
+    const plat = this.grounded ? (this.groundEntity?.data?.velocity as THREE.Vector3 | undefined) : undefined;
+    const tx = wish.x * max + (plat?.x ?? 0);
+    const tz = wish.z * max + (plat?.z ?? 0);
     const accel = this.grounded ? (wish.lengthSq() > 0.01 ? 42 : 34) : 11;
     const dx = tx - vx;
     const dz = tz - vz;
@@ -360,6 +372,7 @@ export class Jimothy implements System {
       this.grounded = false;
       game.sfx('jump', this.position, 0.6);
       game.events.emit('jump', {});
+      this.model.squash(-0.22);
     } else if (this.grounded && vy > 0 && game.time - this.lastJump > 0.3) {
       // keep feet planted when walking down slopes / off small bumps
       vy = Math.min(vy, 0.5);
@@ -886,6 +899,11 @@ export class Jimothy implements System {
     const game = this.game;
     const t = this.body.translation();
     const v = this.body.linvel();
+    if (!Number.isFinite(t.x + t.y + t.z + v.x + v.y + v.z)) {
+      console.warn("[player] NaN physics state; respawning");
+      this.respawn();
+      return;
+    }
     this.position.set(t.x, t.y, t.z);
     this.velocity.set(v.x, v.y, v.z);
     this.speed = Math.hypot(v.x, v.z);
@@ -928,6 +946,12 @@ export class Jimothy implements System {
       pivot.position.set(0, this.mode === 'swim' ? -0.05 : 0.02, 0);
     }
 
+    const inp = game.input;
+    if (inp.move.lengthSq() > 0.01 || inp.held('jump') || inp.held('grab') || inp.held('bonk') || inp.held('wash') || this.speed > 0.5 || this.mode !== 'walk') this.idleTime = 0;
+    else this.idleTime += dt;
+    if (this.mode === 'swim') this.wetness = 1;
+    else this.wetness = Math.max(0, this.wetness - dt / 14);
+    this.model.setWetness(this.wetness);
     const anim: AnimState = {
       mode: this.mode,
       speed: this.mode === 'climb' ? this.climbSpeed : this.speed,
@@ -940,6 +964,8 @@ export class Jimothy implements System {
       sinceChitter: game.time - this.chitterTime,
       sinceBonk: game.time - this.bonkTime,
       climbSpeed: this.climbSpeed,
+      idleTime: this.idleTime,
+      night: game.get<any>('environment')?.nightFactor ?? 0,
     };
     this.model.animate(dt, anim);
 

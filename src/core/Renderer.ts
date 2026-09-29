@@ -11,7 +11,25 @@ import {
   ToneMappingMode,
   HueSaturationEffect,
   BrightnessContrastEffect,
+  Effect,
 } from 'postprocessing';
+
+/**
+ * Clamps HDR colours (and squashes NaN/Inf, which D3D maps to the clamp bounds) BEFORE bloom.
+ * Without this, one Inf pixel (e.g. a sun glint on smooth water overflowing half floats) gets
+ * smeared by the bloom blur over the entire screen.
+ */
+class SanitizeEffect extends Effect {
+  constructor() {
+    super(
+      'SanitizeEffect',
+      `void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+        vec3 c = max(min(inputColor.rgb, vec3(40.0)), vec3(0.0));
+        outputColor = vec4(c, inputColor.a);
+      }`,
+    );
+  }
+}
 
 export type Quality = 'low' | 'medium' | 'high';
 
@@ -51,6 +69,7 @@ export class Renderer {
     this.composer = new EffectComposer(r, { frameBufferType: THREE.HalfFloatType });
     this.renderPass = new RenderPass(scene, camera);
     this.composer.addPass(this.renderPass);
+    this.composer.addPass(new EffectPass(camera, new SanitizeEffect()));
 
     this.bloom = new BloomEffect({
       intensity: 0.55,

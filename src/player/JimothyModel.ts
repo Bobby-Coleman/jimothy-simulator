@@ -14,6 +14,10 @@ export interface AnimState {
   sinceChitter: number;
   sinceBonk: number;
   climbSpeed: number;
+  /** Seconds without player input/movement (idle animations). */
+  idleTime?: number;
+  /** 0..1 night factor (eyeshine). */
+  night?: number;
 }
 
 type PartName =
@@ -105,6 +109,43 @@ export class JimothyModel {
     }
     this.headPivot = this.parts.Head ?? null;
     applyFur(model);
+    // Collect materials for wetness / eyeshine effects (clone so we don't touch shared assets)
+    this.furMats = [];
+    this.eyeMats = [];
+    model.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || Array.isArray(m.material)) return;
+      const mat = m.material as THREE.MeshStandardMaterial;
+      if (/^(Fur|Slop)/i.test(mat.name)) {
+        this.furMats.push({ mat, base: mat.color.clone() });
+      } else if (/^Eye$/i.test(mat.name) || o.name === 'EyeL' || o.name === 'EyeR') {
+        if (!mat.userData.eyeClone) {
+          const c = mat.clone();
+          c.userData.eyeClone = true;
+          m.material = c;
+          this.eyeMats.push(c);
+        }
+      }
+    });
+  }
+
+  private furMats: { mat: THREE.MeshStandardMaterial; base: THREE.Color }[] = [];
+  private eyeMats: THREE.MeshStandardMaterial[] = [];
+  private squashV = 0;
+  private squashX = 0;
+  private wetness = 0;
+
+  /** Kick the squash-and-stretch spring: positive = squash (landing), negative = stretch (jump). */
+  squash(amount: number) {
+    this.squashV += amount * 9;
+  }
+
+  /** 0 = dry, 1 = soaked (darker, flatter fur). */
+  setWetness(w: number) {
+    if (Math.abs(w - this.wetness) < 0.01) return;
+    this.wetness = w;
+    const k = 1 - w * 0.35;
+    for (const f of this.furMats) f.mat.color.copy(f.base).multiplyScalar(k);
   }
 
   /** Rotate a part by an euler offset relative to its rest pose. */
@@ -159,6 +200,17 @@ export class JimothyModel {
         } else {
           headYaw = Math.sin(t * 0.7) * 0.25 + Math.sin(t * 1.9) * 0.08;
           headPitch = Math.sin(t * 0.5) * 0.06;
+          // Idle: every so often Jimothy washes his face with his little hands
+          const idle = s.idleTime ?? 0;
+          const cyc = (idle - 4) % 9;
+          if (idle > 4 && cyc < 3.2) {
+            const w = Math.sin(t * 16) * 0.35;
+            armL = -2.2 + w;
+            armR = -2.2 - w;
+            armSpread = -0.45;
+            headPitch = 0.3;
+            headYaw = 0;
+          }
         }
         break;
       case 'swim':
@@ -276,6 +328,19 @@ export class JimothyModel {
     for (const n of ['EyeL', 'EyeR'] as PartName[]) {
       const e = this.parts[n];
       if (e) e.scale.set(1, eyeY, 1);
+    }
+
+    // Squash & stretch spring
+    this.squashV += (-this.squashX * 160 - this.squashV * 14) * dt;
+    this.squashX += this.squashV * dt;
+    const sq = THREE.MathUtils.clamp(this.squashX, -0.35, 0.35);
+    this.pivot.scale.set(1 + sq * 0.55, 1 - sq, 1 + sq * 0.55);
+
+    // Eyeshine: raccoon eyes catch the light at night
+    const night = s.night ?? 0;
+    for (const m of this.eyeMats) {
+      m.emissive.setRGB(0.55, 0.62, 0.28);
+      m.emissiveIntensity = night * 0.9;
     }
 
     // Tail chain

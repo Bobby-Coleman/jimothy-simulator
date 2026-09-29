@@ -12,7 +12,8 @@ export type Action =
   | 'objectives'
   | 'pause'
   | 'camera'
-  | 'slowmo';
+  | 'slowmo'
+  | 'respawn';
 
 const KEYMAP: Record<string, Action> = {
   Space: 'jump',
@@ -29,6 +30,8 @@ const KEYMAP: Record<string, Action> = {
   KeyP: 'pause',
   KeyV: 'camera',
   KeyT: 'slowmo',
+  Backspace: 'respawn',
+  KeyH: 'respawn',
 };
 
 // Standard gamepad mapping

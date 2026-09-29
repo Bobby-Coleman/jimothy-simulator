@@ -130,7 +130,7 @@ export class Game {
       this.time += dt;
       for (const s of this.systems) this.safe(s, 'update', dt);
       this.entities.update(this, dt);
-      this.physics.step(dt);
+      if (dt > 0) this.physics.step(dt);
       for (const s of this.systems) this.safe(s, 'postPhysics', dt);
     }
     for (const s of this.systems) this.safe(s, 'lateUpdate', rawDt);

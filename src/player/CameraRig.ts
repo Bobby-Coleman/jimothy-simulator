@@ -103,6 +103,14 @@ export class CameraRig implements System {
     const speed = player?.speed ?? 0;
     const fov = this.baseFov + THREE.MathUtils.clamp(speed - 7, 0, 18) * 0.7;
     cam.fov += (fov - cam.fov) * (1 - Math.exp(-dt * 4));
+    // NaN guards: one bad frame must never poison the camera forever
+    if (!Number.isFinite(cam.fov)) cam.fov = this.baseFov;
+    if (!Number.isFinite(cam.position.x + cam.position.y + cam.position.z)) {
+      this.pivot.copy(target);
+      cam.position.copy(target).add(_v.set(0, 2, 5));
+      cam.lookAt(target);
+    }
+    if (!Number.isFinite(this.distance)) this.distance = this.targetDistance;
     cam.updateProjectionMatrix();
   }
 }

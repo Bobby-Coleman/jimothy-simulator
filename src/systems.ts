@@ -9,6 +9,10 @@ import { ObjectivesSystem } from './gameplay/Objectives';
 import { MutatorSystem } from './gameplay/Mutators';
 import { MiniHud } from './ui/MiniHud';
 import { registerZones } from './world/zones';
+import { VehicleSystem } from './entities/vehicles/Vehicles';
+import { SlowMoSystem } from './gameplay/SlowMo';
+import { DebugStats } from './core/DebugStats';
+import { PhotoModeSystem } from './gameplay/PhotoMode';
 
 /**
  * Registration order = init order = update order.
@@ -29,7 +33,11 @@ export function registerSystems(game: Game) {
   game.add(new CameraRig());
 
   // --- gameplay systems (NPCs, vehicles, items, quests, slop, ...)
+  game.add(new VehicleSystem());
+  game.add(new SlowMoSystem());
+  game.add(new PhotoModeSystem());
 
   // --- presentation (audio, particles, UI) — keep last
   game.add(new MiniHud());
+  game.add(new DebugStats());
 }
