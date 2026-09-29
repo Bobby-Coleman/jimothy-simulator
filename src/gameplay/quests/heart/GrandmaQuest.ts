@@ -277,7 +277,10 @@ export class GrandmaQuest implements HeartQuest {
     const side = new THREE.Vector3(fwd.z, 0, -fwd.x);
     const sgn = side.dot(new THREE.Vector3(player.position.x - this.porch.x, 0, player.position.z - this.porch.z)) >= 0 ? -1 : 1;
     const f0 = focus().clone();
-    const a = ctx.clearAngle(f0, 4.2, 0.65, Math.atan2(fwd.x, fwd.z) + sgn * 0.45);
+    const a = ctx.clearAngle(f0, 4.2, 0.65, Math.atan2(fwd.x, fwd.z) + sgn * 0.45, 0, [
+      this.porch.clone().setY(this.porch.y + 1.15),
+      player.position.clone().setY(player.position.y + 0.3),
+    ]);
     const base = new THREE.Vector3(f0.x + Math.sin(a) * 4.2, f0.y + 0.65, f0.z + Math.cos(a) * 4.2);
     const cam = new THREE.Vector3();
     // the camera stays on the porch through the dialog and the hat toss; hatOn() ends the scene

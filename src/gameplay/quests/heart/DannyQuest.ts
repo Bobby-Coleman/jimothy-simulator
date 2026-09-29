@@ -132,7 +132,10 @@ export class DannyQuest implements HeartQuest {
     ctx.cutscene({
       duration: 60,
       focus,
-      camPos: ctx.orbit(focus, 3.1, 0.7, Math.atan2(dz, -dx), 0.1),
+      camPos: ctx.orbit(focus, 3.1, 0.7, Math.atan2(dz, -dx), 0.1, [
+        player.position.clone().setY(player.position.y + 0.3),
+        danny.pos.clone().setY(danny.pos.y + 0.75),
+      ]),
       fov: 50,
       onEnd: () => {
         this.playing = false;

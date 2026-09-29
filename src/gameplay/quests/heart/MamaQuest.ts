@@ -156,7 +156,10 @@ export class MamaQuest implements HeartQuest {
     ctx.cutscene({
       duration: 11,
       focus,
-      camPos: ctx.orbit(focus, 2.3, 0.45, a0, 0.09),
+      camPos: ctx.orbit(focus, 2.3, 0.45, a0, 0.09, [
+        player.position.clone().setY(player.position.y + 0.3),
+        mom.pos.clone().setY(mom.pos.y + 0.6),
+      ]),
       fov: 48,
     });
   }

@@ -432,9 +432,9 @@ export class HeartCtx {
    * The start angle is nudged (once) to the nearest angle with a clear view — physics colliders *and* visible
    * meshes (signs, fences without colliders…).
    */
-  orbit(center: () => THREE.Vector3, r: number, h: number, a0: number, speed = 0.12) {
+  orbit(center: () => THREE.Vector3, r: number, h: number, a0: number, speed = 0.12, subjects: THREE.Vector3[] = []) {
     const out = new THREE.Vector3();
-    const start = this.clearAngle(center().clone(), r, h, a0, speed);
+    const start = this.clearAngle(center().clone(), r, h, a0, speed, subjects);
     return (t: number) => {
       const c = center();
       const a = start + t * speed;
@@ -442,8 +442,11 @@ export class HeartCtx {
     };
   }
 
-  /** Angle nearest `a0` from which a camera at (radius r, height h) sees `focus` unobstructed. */
-  clearAngle(focus: THREE.Vector3, r: number, h: number, a0: number, speed = 0): number {
+  /**
+   * Angle nearest `a0` from which a camera at (radius r, height h around `focus`) sees `focus` — and each of
+   * `subjects` (e.g. both characters' heads) — unobstructed.
+   */
+  clearAngle(focus: THREE.Vector3, r: number, h: number, a0: number, speed = 0, subjects: THREE.Vector3[] = []): number {
     const rc = new THREE.Raycaster();
     const player = this.player;
     const skip = new Set<THREE.Object3D>();
@@ -457,30 +460,36 @@ export class HeartCtx {
       return false;
     };
     const targets = this.game.scene.children.filter((c) => !skip.has(c) && c.visible);
+    const sightBlocked = (from: THREE.Vector3, cam: THREE.Vector3, near: number) => {
+      const dir = cam.clone().sub(from);
+      const len = dir.length();
+      if (len < 0.2) return false;
+      if (this.game.physics.sphereCast(from, dir, 0.12, len, groups(G.ALL, G.WORLD | G.VEHICLE))) return true;
+      rc.set(from, dir.normalize());
+      rc.near = near;
+      rc.far = len;
+      let hits: THREE.Intersection[] = [];
+      try {
+        hits = rc.intersectObjects(targets, true);
+      } catch {
+        return false;
+      }
+      for (const hit of hits) {
+        const o = hit.object as THREE.Mesh;
+        if ((o as any).isSprite || (o as any).isPoints || (o as any).isLine || isSkipped(o)) continue;
+        const mat = o.material as THREE.Material | undefined;
+        if (mat && !Array.isArray(mat) && mat.transparent && mat.opacity < 0.6) continue;
+        return true;
+      }
+      return false;
+    };
     const blocked = (a: number) => {
       // check where the camera starts and where it will be a few seconds later
       for (const k of [0, 2.5]) {
         const aa = a + k * speed;
         const cam = new THREE.Vector3(focus.x + Math.sin(aa) * r, focus.y + h, focus.z + Math.cos(aa) * r);
-        const dir = cam.clone().sub(focus);
-        const len = dir.length();
-        if (this.game.physics.sphereCast(focus, dir, 0.15, len, groups(G.ALL, G.WORLD | G.VEHICLE))) return true;
-        rc.set(focus, dir.normalize());
-        rc.near = 0.9;
-        rc.far = len;
-        let hits: THREE.Intersection[] = [];
-        try {
-          hits = rc.intersectObjects(targets, true);
-        } catch {
-          return false;
-        }
-        for (const hit of hits) {
-          const o = hit.object as THREE.Mesh;
-          if ((o as any).isSprite || (o as any).isPoints || (o as any).isLine || isSkipped(o)) continue;
-          const mat = o.material as THREE.Material | undefined;
-          if (mat && !Array.isArray(mat) && mat.transparent && mat.opacity < 0.6) continue;
-          return true;
-        }
+        if (sightBlocked(focus, cam, 0.9)) return true;
+        for (const s of subjects) if (sightBlocked(s, cam, 0.45)) return true;
       }
       return false;
     };

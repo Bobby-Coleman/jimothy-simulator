@@ -321,7 +321,8 @@ export class TeddyQuest implements HeartQuest {
     const focus = () => new THREE.Vector3().copy(this.npc?.position ?? this.kidPos).lerp(player.position, 0.4).setY(player.position.y + 0.45);
     const dx = player.position.x - this.kidPos.x;
     const dz = player.position.z - this.kidPos.z;
-    ctx.cutscene({ duration: 3.6, focus, camPos: ctx.orbit(focus, 3, 0.6, Math.atan2(dz, -dx), 0.12), fov: 52 });
+    const subjects = [player.position.clone().setY(player.position.y + 0.3), this.kidHead(new THREE.Vector3())];
+    ctx.cutscene({ duration: 3.6, focus, camPos: ctx.orbit(focus, 3, 0.6, Math.atan2(dz, -dx), 0.12, subjects), fov: 52 });
   }
 
   private becomeHappy() {
