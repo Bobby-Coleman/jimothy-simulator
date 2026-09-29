@@ -6,6 +6,7 @@ import { MAP } from '../../terrain';
 import { getKit, Batch, tree, bush, bench, rng, canvasTex, fitText, roundRect, FONT_TITLE, FONT_ROUND, FONT_BODY, GEO, type Kit, type V3 } from './kit';
 import { lamps, BIRD, perched } from './decor';
 import * as P from './props';
+import { profileColliders } from '../../profileColliders';
 
 /**
  * SW zone — "The Locks" (Ballard Locks parody): a raised ship canal ("Lake Washing Ship Canal", water +2.4)
@@ -88,10 +89,11 @@ function levee(kit: Kit, b: Batch, water: WaterSystem) {
   wall([WB[0], EB[1]], [Z_N, CANAL_Z0], -0.5);
   wall(PIER, [GATE_UP[0], WALL_END]);
   // coping stones along every water edge (slightly proud, lighter)
-  const cope = (x: number, z0: number, z1: number) => b.box([x, TOP + 0.05, (z0 + z1) / 2], [0.5, 0.12, z1 - z0], 0xe8e4da, { mat: 'concrete', collide: false });
+  // floor pass: coping stones are solid now (they stood 11 cm proud of the wall-top colliders)
+  const cope = (x: number, z0: number, z1: number) => b.box([x, TOP + 0.05, (z0 + z1) / 2], [0.5, 0.12, z1 - z0], 0xe8e4da, { mat: 'concrete' });
   for (const x of [WB[1] - 0.25, EB[0] + 0.25]) cope(x, CANAL_Z0, WALL_END);
   for (const x of [PIER[0] + 0.25, PIER[1] - 0.25]) cope(x, GATE_UP[0], WALL_END);
-  b.box([-130, TOP + 0.05, CANAL_Z0 + 0.25], [16, 0.12, 0.5], 0xe8e4da, { mat: 'concrete', collide: false });
+  b.box([-130, TOP + 0.05, CANAL_Z0 + 0.25], [16, 0.12, 0.5], 0xe8e4da, { mat: 'concrete' });
   // wet/algae bands on the chamber walls (show the different water levels)
   const band = (x: number, z0: number, z1: number, y0: number, y1: number, facing: 1 | -1) =>
     b.box([x + facing * 0.02, (y0 + y1) / 2, (z0 + z1) / 2], [0.04, y1 - y0, z1 - z0], 0x5d6b52, { collide: false, shadow: false, mat: 'concrete' });
@@ -222,7 +224,7 @@ function gates(kit: Kit, b: Batch) {
     [EB[1] - 2, zl + 2.6],
   ]) {
     b.box([x, TOP + 0.7, z], [2.2, 1.4, 1.8], 0x5b7f95, { mat: 'metal' });
-    b.box([x, TOP + 1.45, z], [2.4, 0.1, 2], 0x2f4656, { collide: false });
+    b.box([x, TOP + 1.45, z], [2.4, 0.1, 2], 0x2f4656); // floor pass: solid hut roof
     b.box([x + 1.11, TOP + 0.8, z], [0.02, 0.5, 1.2], 0xffc629, { collide: false });
   }
 }
@@ -306,15 +308,16 @@ async function boats(kit: Kit) {
     const z = 183;
     const r = kit.place(fishing, x, BAY_Y - 0.55, z, 0.04, { size: 7.4 });
     st.bobbers.push({ obj: r.obj, baseY: BAY_Y - 0.55, amp: 0.06, speed: 1.1, phase: 0, roll: 0.02, baseRotX: 0, baseRotZ: 0 });
-    kit.collider([x, BAY_Y + 0.2, z], [r.size.x * 0.85, 1.4, r.size.z * 0.9], 0.04);
-    kit.collider([x, BAY_Y + 1.6, z - r.size.z * 0.12], [r.size.x * 0.5, 1.6, r.size.z * 0.3], 0.04);
+    // floor pass: stepped colliders along the real deck + wheelhouse (the two guessed boxes left the deck and the
+    // wheelhouse roof sunk / floating)
+    profileColliders(kit.world, r.obj, { rotY: 0.04 });
   }
   if (speed) {
     const x = (SMALL[0] + SMALL[1]) / 2;
     const z = 181;
     const r = kit.place(speed, x, CANAL_Y - 0.35, z, Math.PI + 0.03, { size: 5.2 });
     st.bobbers.push({ obj: r.obj, baseY: CANAL_Y - 0.35, amp: 0.05, speed: 1.4, phase: 1, roll: 0.02, baseRotX: 0, baseRotZ: 0 });
-    kit.collider([x, CANAL_Y + 0.15, z], [r.size.x * 0.85, 0.9, r.size.z * 0.9], Math.PI);
+    profileColliders(kit.world, r.obj, { rotY: Math.PI + 0.03 });
   }
 }
 
@@ -644,15 +647,17 @@ function greenhouse(kit: Kit, b: Batch, cx: number, cz: number) {
   const z0 = cz - L / 2;
   const z1 = cz + L / 2;
   const white = 0xf7f7f2;
-  b.decal([cx, 0.02, cz], [W, L], 0xc9c2b2, { mat: 'paving' });
-  b.box([cx, 0.2, cz], [W + 0.3, 0.4, L + 0.3], 0xe0dbcf, { mat: 'concrete', collide: false });
-  kit.collider([cx - W / 2, 0.2, cz], [0.3, 0.4, L]);
-  kit.collider([cx + W / 2, 0.2, cz], [0.3, 0.4, L]);
+  // floor pass: the 0.4 m plinth IS the floor (bench/pots stand on it) but only its two long edges were solid, so
+  // Jimothy walked around inside it 0.4 m deep with the paving decal buried under it. Now: solid plinth, the
+  // paving on top, and a low step outside each door.
+  b.decal([cx, 0.4, cz], [W - 0.2, L - 0.2], 0xc9c2b2, { mat: 'paving' });
+  b.box([cx, 0.2, cz], [W + 0.3, 0.4, L + 0.3], 0xe0dbcf, { mat: 'concrete' });
+  for (const s of [-1, 1]) b.box([cx, 0.1, cz + s * (L / 2 + 0.15 + 0.35)], [2.6, 0.2, 0.7], 0xe0dbcf, { mat: 'concrete' });
   const glass = new THREE.MeshStandardMaterial({ color: 0xd8f3ff, transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.2, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 2 });
   const glassGeo: THREE.BufferGeometry[] = [];
-  const pane = (w: number, h: number, pos: V3, rot: V3) => {
+  const pane = (w: number, h: number, pos: V3, rot: V3, order: THREE.EulerOrder = 'YXZ') => {
     const g = new THREE.PlaneGeometry(w, h);
-    g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(rot[0], rot[1], rot[2], 'YXZ')), new THREE.Vector3(1, 1, 1)));
+    g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(rot[0], rot[1], rot[2], order)), new THREE.Vector3(1, 1, 1)));
     glassGeo.push(g);
   };
   const wallH = H - 0.4;
@@ -691,7 +696,9 @@ function greenhouse(kit: Kit, b: Batch, cx: number, cz: number) {
   for (const s of [-1, 1]) {
     const mx = cx + (s * W) / 4;
     const my = (H + R) / 2;
-    pane(sl, L, [mx, my, cz], [-Math.PI / 2, 0, -s * slope]);
+    // (ZYX: lay the pane flat, then tilt it. With YXZ the tilt only spun it in-plane, leaving a flat glass lid at
+    // y = 5 floating above the sloped roof colliders)
+    pane(sl, L, [mx, my, cz], [-Math.PI / 2, 0, -s * slope], 'ZYX');
     b.kit.colliderQ([mx, my, cz], [sl, 0.12, L], new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -s * slope)));
     for (let z = z0; z <= z1 + 0.01; z += 1.5) b.pipe([cx + (s * W) / 2, H, z], [cx, R, z], 0.05, white, { seg: 5 });
   }
@@ -792,7 +799,10 @@ export function seawall(kit: Kit, b: Batch, x0: number, x1: number, o: { rail?: 
   const z = MAP.seawallZ - 0.1;
   const top = o.top ?? 0.35;
   b.box([(x0 + x1) / 2, (top + MAP.seabedY) / 2, z], [x1 - x0, top - MAP.seabedY, 1.0], 0xcfc9bb, { mat: 'concrete' });
-  b.box([(x0 + x1) / 2, top + 0.06, z - 0.05], [x1 - x0, 0.12, 1.2], 0xe8e4da, { mat: 'concrete', collide: false });
+  // floor pass: the cap is solid (it stood 12 cm proud of the wall collider), and a fill slab bridges the gap where
+  // the coarse terrain heightfield already dips toward the bay under the promenade paving north of the wall
+  b.box([(x0 + x1) / 2, top + 0.06, z - 0.05], [x1 - x0, 0.12, 1.2], 0xe8e4da, { mat: 'concrete' });
+  kit.collider([(x0 + x1) / 2, -0.49, (MAP.seawallZ - 2.2 + z - 0.5) / 2], [x1 - x0, 1.0, z - 0.5 - (MAP.seawallZ - 2.2)]);
   if (o.rail === false) return;
   const len = x1 - x0;
   b.box([(x0 + x1) / 2, top + 1.0, z + 0.35], [len, 0.08, 0.08], 0x2d4250, { collide: false, mat: 'metal' });

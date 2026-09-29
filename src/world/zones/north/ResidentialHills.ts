@@ -34,6 +34,7 @@ import {
   poi,
   refreshQueries,
   groundDecal,
+  surfaceCollider,
   type MatSet,
 } from './kit';
 import { buildHouse, SIDING, ROOFS, type HouseInfo, type HouseStyle } from './house';
@@ -99,11 +100,16 @@ export const ResidentialHills: ZoneBuilder = {
     const walkPts = tumble.filter((p) => p.y > -146.4 && p.y < -66.8);
     const curbPts = tumble.filter((p) => p.y > -147.2);
     for (const s of [-1, 1]) {
-      b.add('sidewalk', ribbon(world, walkPts, s < 0 ? -WALK_OUT : WALK_IN, s < 0 ? -WALK_IN : WALK_OUT, 0.07, { tile: 2.6, across: 1 }), null, 0xe6e2da, { uvTile: 0 });
+      // floor pass: the raised sidewalk + curb are solid (trimesh on the same ribbons); they used to be visual only
+      const walkGeo = ribbon(world, walkPts, s < 0 ? -WALK_OUT : WALK_IN, s < 0 ? -WALK_IN : WALK_OUT, 0.07, { tile: 2.6, across: 1 });
+      const curbGeo = ribbon(world, curbPts, s < 0 ? -ROAD_HW - 0.18 : ROAD_HW, s < 0 ? -ROAD_HW : ROAD_HW + 0.18, 0.14, { tile: 2, across: 1 });
+      surfaceCollider(game, walkGeo);
+      surfaceCollider(game, curbGeo);
+      b.add('sidewalk', walkGeo, null, 0xe6e2da, { uvTile: 0 });
       b.add('concrete', curbWall(world, walkPts, s * WALK_IN, -0.05, 0.07, s < 0 ? 1 : -1), null, 0xcfcac0, { uvTile: 0 });
       b.add('concrete', curbWall(world, walkPts, s * WALK_OUT, -0.05, 0.07, s < 0 ? -1 : 1), null, 0xcfcac0, { uvTile: 0 });
       b.add('concrete', curbWall(world, curbPts, s * ROAD_HW, -0.02, 0.14, s < 0 ? 1 : -1), null, 0xd9d5cc, { uvTile: 0 });
-      b.add('concrete', ribbon(world, curbPts, s < 0 ? -ROAD_HW - 0.18 : ROAD_HW, s < 0 ? -ROAD_HW : ROAD_HW + 0.18, 0.14, { tile: 2, across: 1 }), null, 0xd9d5cc, { uvTile: 0 });
+      b.add('concrete', curbGeo, null, 0xd9d5cc, { uvTile: 0 });
     }
     roadText(world, 'ROLL', 0, -140);
     roadText(world, 'SLOW', 0, -76);
@@ -118,10 +124,14 @@ export const ResidentialHills: ZoneBuilder = {
     // The Crescent runs west→east: right-hand normal = +z (south). South sidewalk is split where Tumble St meets it.
     const crescentS = crescent.filter((p) => Math.abs(p.x) > WALK_OUT + 0.3);
     for (const part of splitRuns(crescentS, (a, c) => Math.abs(a.x - c.x) < 3)) {
-      b.add('sidewalk', ribbon(world, part, 4.4, 6.0, 0.07, { tile: 2.6, across: 1 }), null, 0xe6e2da, { uvTile: 0 });
+      const walkGeo = ribbon(world, part, 4.4, 6.0, 0.07, { tile: 2.6, across: 1 });
+      surfaceCollider(game, walkGeo);
+      b.add('sidewalk', walkGeo, null, 0xe6e2da, { uvTile: 0 });
       b.add('concrete', curbWall(world, part, 3.6, -0.02, 0.14, -1), null, 0xd9d5cc, { uvTile: 0 });
     }
-    b.add('sidewalk', ribbon(world, crescent, -6.0, -4.4, 0.07, { tile: 2.6, across: 1 }), null, 0xe6e2da, { uvTile: 0 });
+    const crescentWalkN = ribbon(world, crescent, -6.0, -4.4, 0.07, { tile: 2.6, across: 1 });
+    surfaceCollider(game, crescentWalkN);
+    b.add('sidewalk', crescentWalkN, null, 0xe6e2da, { uvTile: 0 });
     b.add('concrete', curbWall(world, crescent, -3.6, -0.02, 0.14, 1), null, 0xd9d5cc, { uvTile: 0 });
     const crescentZ = (x: number) => {
       let best = crescent[0];
@@ -828,7 +838,11 @@ function publicStairs(game: Game, world: World, b: Batch, x: number, zBottom: nu
     }
     const len = Math.hypot(runLen, rise);
     const ang = Math.atan2(rise, runLen);
-    colliderBox(game, x, (y0 + y1) / 2 - 0.16, (z0 + z1) / 2, SW, 0.3, len + 0.05, 0, ang);
+    // floor pass: ramp through the nosings, not the back corners (every tread stood up to a riser proud of it);
+    // the shifted ramp no longer covers the top tread, so it gets a flat cap
+    const sh = rise > 0 ? stepRun : 0;
+    colliderBox(game, x, (y0 + y1) / 2 - 0.16, (z0 + z1) / 2 + sh, SW, 0.3, len + 0.05, 0, ang);
+    if (sh > 0) colliderBox(game, x, y1 - 0.15, z1 + sh / 2, SW, 0.3, sh + 0.02);
     for (const s of [-1, 1]) {
       b.add('metal', GEO.cyl8, trs(x + (s * SW) / 2, (y0 + y1) / 2 + 0.9, (z0 + z1) / 2, 0.06, len, 0.06, 0, ang - Math.PI / 2), 0x3b4a45);
       b.add('metal', GEO.cyl8, trs(x + (s * SW) / 2, y0 + 0.45, z0, 0.07, 0.95, 0.07), 0x3b4a45);

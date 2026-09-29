@@ -7,6 +7,7 @@ import { MAP } from '../../terrain';
 import { getKit, Batch, tree, bush, bench, picnicTable, rng, canvasTex, fitText, roundRect, FONT_TITLE, FONT_ROUND, GEO, bake, type Kit, type V3 } from './kit';
 import { lamps, BIRD, perched, flock, swanBoat, kite } from './decor';
 import * as P from './props';
+import { profileColliders } from '../../profileColliders';
 import { spawnItem } from '../../../gameplay/items';
 
 /**
@@ -190,7 +191,8 @@ function pond(kit: Kit, b: Batch, water: WaterSystem) {
     m.rotation.y = ry;
     kit.root.add(m);
     kit.state.bobbers.push({ obj: m, baseY: WATER_Y - 0.05, amp: 0.05, speed: 1.3 + r() * 0.5, phase: r() * 6, roll: 0.03, baseRotX: 0, baseRotZ: 0 });
-    kit.collider([x, WATER_Y - 0.15, z], [1.6, 0.5, 2.6], ry);
+    // floor pass: stepped colliders along the boat's seat/deck/neck (the flat 0.1 m box sank him ~0.4 m)
+    profileColliders(kit.world, m, { rotY: ry, cell: 0.45 });
   }
   // Ducks: a mama duck leading ducklings in a slow circle, plus a few freelancers
   const duckC = V(PX - 1, WATER_Y - 0.02, PZ - 1);
@@ -858,6 +860,7 @@ function fountain(kit: Kit, b: Batch, water: WaterSystem) {
   const prof = [new THREE.Vector2(3.0, 0), new THREE.Vector2(3.5, 0), new THREE.Vector2(3.5, 0.62), new THREE.Vector2(3.3, 0.7), new THREE.Vector2(3.0, 0.62), new THREE.Vector2(3.0, 0.1)];
   b.geo(new THREE.LatheGeometry(prof, 40), [x, 0, z], [0, 0, 0], 1, 0xcfc6b4, { mat: 'stone' });
   b.geo(GEO.cyl(1, 32), [x, 0.08, z], [0, 0, 0], [3.05, 0.1, 3.05], 0x4a90b8, { shadow: false });
+  kit.cylinderCollider([x, 0.065, z], 3.05, 0.13); // floor pass: solid basin floor (was 13 cm walk-in)
   for (let i = 0; i < 20; i++) {
     const a = (i / 20) * Math.PI * 2;
     kit.collider([x + Math.cos(a) * 3.25, 0.35, z + Math.sin(a) * 3.25], [1.1, 0.7, 0.5], -a + Math.PI / 2);

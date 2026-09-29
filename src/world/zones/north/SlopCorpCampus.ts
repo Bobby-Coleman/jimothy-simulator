@@ -207,12 +207,16 @@ function buildHQ(game: Game, world: World, b: Batch, m: CurtainMats) {
   glassBlock(world, m.glass, HQ.x, base, HQ.z, HQ.w, t1 - base, HQ.d, 0);
   b.box('concrete', HQ.x, base + 0.45, HQ.z, HQ.w + 0.3, 0.9, HQ.d + 0.3, 0xd9dde2);
   b.box('metal', HQ.x, t1 + 0.25, HQ.z, HQ.w + 0.8, 0.5, HQ.d + 0.8, 0xe6eaee);
+  // floor pass: the 0.5 m metal ledge slabs sat on top of the glass colliders (Jimothy sank 0.5 m into every setback)
+  colliderBox(game, HQ.x, t1 + 0.25, HQ.z, HQ.w + 0.8, 0.5, HQ.d + 0.8);
   const t2 = t1 + 9;
   glassBlock(world, m.glass, HQ.x - 2, t1 + 0.5, HQ.z + 1, 22, t2 - t1 - 0.5, 15, 0.16);
   b.box('metal', HQ.x - 2, t2 + 0.25, HQ.z + 1, 22.8, 0.5, 15.8, 0xe6eaee, 0.16);
+  colliderBox(game, HQ.x - 2, t2 + 0.25, HQ.z + 1, 22.8, 0.5, 15.8, 0.16);
   const t3 = t2 + 8;
   glassBlock(world, m.glass, HQ.x + 1.5, t2 + 0.5, HQ.z - 0.5, 17, t3 - t2 - 0.5, 12, -0.14);
   b.box('metal', HQ.x + 1.5, t3 + 0.25, HQ.z - 0.5, 17.8, 0.5, 12.8, 0xe6eaee, -0.14);
+  colliderBox(game, HQ.x + 1.5, t3 + 0.25, HQ.z - 0.5, 17.8, 0.5, 12.8, -0.14);
   // roof garden + helipad ring on the top block
   const f3 = new Frame(HQ.x + 1.5, t3 + 0.5, HQ.z - 0.5, -0.14);
   f3.geo(b, 'paint', GEO.cyl, 3, 0.02, 1, 7, 0.04, 7, 0x2f3540);

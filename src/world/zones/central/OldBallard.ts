@@ -25,7 +25,9 @@ import { SHOPS, drawShopSign, drawShopWindow, drawYear, drawPlaque, BOARD_JOKES,
 import { muralTexture } from './lib/mural';
 import { applyStripeRow, cached, latticeTexture, loadPBR, plaidTexture, stripeMaterial } from './lib/textures';
 import { loadMerged } from './lib/models';
-import { cylinderCollider, glowAtNight, onFrame, Rng } from './lib/util';
+import { profileCollidersFromParts } from '../../profileColliders';
+import { boxColliderEuler, cylinderCollider, glowAtNight, onFrame, Rng } from './lib/util';
+import { RAPIER, G, groups } from '../../../core/Physics';
 import { BALLARD } from './Roads';
 
 /**
@@ -362,7 +364,8 @@ function buildPorchAndDen(game: Game, world: World, batch: Batch) {
   world.collider(new THREE.Vector3(X0 + 0.1, deckY + 0.5, cz), new THREE.Vector3(0.1, 1.0, Z1 - Z0));
   // roof over the porch + back door sign
   batch.add(new THREE.BoxGeometry(X1 - X0 + 0.6, 0.12, Z1 - Z0 + 0.4), trim, { matrix: TR(cx, y0 + 3.55, cz + 0.1, 0.12, 0, 0), color: 0x2f5f8f });
-  world.collider(new THREE.Vector3(cx, y0 + 3.55, cz + 0.1), new THREE.Vector3(X1 - X0 + 0.6, 0.14, Z1 - Z0 + 0.4));
+  // floor pass: the collider is tilted like the roof it stands for (it was level, so the raised half sank you 0.1 m+)
+  boxColliderEuler(game, new THREE.Vector3(cx, y0 + 3.55, cz + 0.1), new THREE.Vector3(X1 - X0 + 0.6, 0.14, Z1 - Z0 + 0.4), 0.12, 0, 0);
   const back = atlas.draw(384, 96, (ctx, w, h) =>
     drawShopSignLite(ctx, w, h, 'GOODWHEEL · DONATIONS', '#1b5fae', '#ffffff'),
   );
@@ -723,8 +726,12 @@ function buildMarket(game: Game, world: World, batch: Batch) {
     parts.push({ geo: new THREE.BoxGeometry(2.6, 0.08, 1.0), color: 0xf3efe6, matrix: T(0, 0.85, 0.6) });
     for (const dx of [-1.1, 1.1]) parts.push({ geo: new THREE.BoxGeometry(0.06, 0.85, 0.9), color: 0xbbbbbb, matrix: T(dx, 0.42, 0.6) });
     batch.add(mergeColored(parts), trim, { matrix: T(x, y, z) });
-    batch.add(new THREE.ConeGeometry(2.1, 0.8, 4, 1).rotateY(Math.PI / 4), trim, { matrix: T(x, y + 2.8, z), color: col });
-    const tc = world.collider(new THREE.Vector3(x, y + 2.55, z), new THREE.Vector3(2.9, 0.25, 2.9));
+    const tentGeo = new THREE.ConeGeometry(2.1, 0.8, 4, 1).rotateY(Math.PI / 4);
+    batch.add(tentGeo, trim, { matrix: T(x, y + 2.8, z), color: col });
+    // floor pass: the bouncy collider is the tent's own pyramid (a flat slab at the eaves sank you 0.5 m into the peak)
+    const tentPts = tentGeo.clone().applyMatrix4(T(x, y + 2.8, z)).getAttribute('position').array as Float32Array;
+    const tentDesc = RAPIER.ColliderDesc.convexHull(new Float32Array(tentPts));
+    const tc = tentDesc ? game.physics.staticCollider(tentDesc.setFriction(0.8).setCollisionGroups(groups(G.WORLD))) : world.collider(new THREE.Vector3(x, y + 2.55, z), new THREE.Vector3(2.9, 0.25, 2.9));
     tc.setRestitution(0.9);
     world.collider(new THREE.Vector3(x, y + 0.45, z + 0.6), new THREE.Vector3(2.6, 0.9, 1.0));
     // produce boxes
@@ -904,10 +911,9 @@ async function parkCars(game: Game, world: World, rng: Rng, batch: Batch) {
     carMat ??= model.parts[0].mat;
     const mat = carMat;
     placeBatched(world, batch, model.parts.map((p) => ({ geo: p.geo, mat })), xfs);
-    const size = model.size.clone().multiplyScalar(CAR_SCALE);
-    for (const x of xfs) {
-      world.collider(new THREE.Vector3(x.x, x.y + size.y * 0.38, x.z), new THREE.Vector3(size.x * 0.95, size.y * 0.76, size.z * 0.96), x.ry);
-    }
+    // floor pass: stepped colliders that follow each car's hood/roof line (one 0.76-height box let Jimothy sink
+    // ~0.45 m into every roof)
+    for (const x of xfs) profileCollidersFromParts(world, model.parts, x);
   }
 }
 

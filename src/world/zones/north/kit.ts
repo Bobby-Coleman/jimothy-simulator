@@ -327,10 +327,13 @@ export function roofCollider(game: Game, f: Frame, axis: 'x' | 'z', s: number, w
   const th = Math.atan2(rise, run);
   const L = Math.hypot(run, rise) + 0.12;
   const tc = 0.3;
+  // floor pass: top face 0.2 m above the rafter line = the top of the 0.2 m roof slabs (it was 0.3, so he floated
+  // ~12 cm over every roof)
+  const up = tc / 2 - 0.1;
   const mh = (s * run) / 2;
   const my = (wallY + ridgeY) / 2;
-  const ch = mh + s * Math.sin(th) * (tc / 2) - s * Math.cos(th) * 0.06;
-  const cy = my + Math.cos(th) * (tc / 2) + Math.sin(th) * 0.06;
+  const ch = mh + s * Math.sin(th) * up - s * Math.cos(th) * 0.06;
+  const cy = my + Math.cos(th) * up + Math.sin(th) * 0.06;
   if (axis === 'x') f.collider(game, ch, cy, center, L, tc, extent, 0, 0, -s * th);
   else f.collider(game, center, cy, ch, extent, tc, L, 0, s * th, 0);
 }
@@ -350,6 +353,15 @@ export function colliderBox(game: Game, x: number, y: number, z: number, sx: num
   _e.set(rx, ry, rz, 'YXZ');
   const q = new THREE.Quaternion().setFromEuler(_e);
   return game.physics.staticBox(new THREE.Vector3(x, y, z), new THREE.Vector3(sx / 2, sy / 2, sz / 2), q);
+}
+
+/** Static convex-hull collider around world-space points (roofs, pyramids, odd plinths). */
+export function colliderHull(game: Game, pts: THREE.Vector3[], friction = 0.8) {
+  const arr = new Float32Array(pts.length * 3);
+  pts.forEach((p, i) => arr.set([p.x, p.y, p.z], i * 3));
+  const cd = RAPIER.ColliderDesc.convexHull(arr);
+  if (!cd) return null;
+  return game.physics.staticCollider(cd.setFriction(friction).setCollisionGroups(groups(G.WORLD)));
 }
 
 /** Static vertical cylinder collider. */
@@ -446,7 +458,15 @@ export function ribbon(
   opts: { tile?: number; across?: number; heightFn?: (x: number, z: number) => number } = {},
 ): THREE.BufferGeometry {
   const tile = opts.tile ?? 4;
-  const across = opts.across ?? Math.max(1, Math.ceil(Math.abs(o1 - o0) / 2));
+  // floor pass: sample the terrain at least every ~2 m (its grid) both along and across. Two-point paths (UW's
+  // cross walk, lawn strips…) used to be flat chords that floated up to 0.4 m above (or sank into) the hill.
+  const across = Math.max(opts.across ?? 1, Math.ceil(Math.abs(o1 - o0) / 2));
+  for (let i = 1; i < path.length; i++) {
+    if (path[i].distanceTo(path[i - 1]) > 2.05) {
+      path = resample(path, 2);
+      break;
+    }
+  }
   const hf = opts.heightFn ?? ((x: number, z: number) => world.heightAt(x, z));
   const pos: number[] = [];
   const uv: number[] = [];
@@ -502,6 +522,12 @@ export function ribbon(
   }
   return g;
 }
+
+/**
+ * Static trimesh collider from world-space geometry (e.g. a ribbon()) — raised sidewalks, curbs, paths and pads
+ * that stand proud of the terrain, so Jimothy walks ON them instead of sinking to the grass below.
+ */
+export { trimeshFromGeometry as surfaceCollider } from '../central/lib/util';
 
 /** Terrain-conforming square decal centred on (x, z) with half-size R and UVs 0..1 (use a round texture/alpha). */
 export function groundDecal(world: World, x: number, z: number, R: number, lift = 0.05, segs = 6): THREE.BufferGeometry {
