@@ -122,7 +122,7 @@ export const UniversityOfWashing: ZoneBuilder = {
     halls.push({ info: tumble, name: 'TUMBLE DRY HALL' });
     for (const hInfo of halls) hallPlaque(world, b, hInfo.info, hInfo.name);
     if (library.towerTop) poi(world, 'bobblehead:n2', library.towerTop.x, library.towerTop.y + 0.35, library.towerTop.z);
-    if (library.towerTop) libraryTowerLadder(world, b, library);
+    if (library.towerTop) libraryTowerButtress(game, world, b, library);
 
     // quad lawn paths
     const libFootZ = library.stepsEnd.z; // ground in front of the library steps
@@ -498,35 +498,49 @@ function gothicLamp(game: Game, world: World, b: Batch, x: number, y: number, z:
 }
 
 /**
- * Maintenance ladder up the library tower (bobblehead n2 sits on the tower roof, ~25 m up). Bare walls tire Jimothy
- * 4× faster than ladders, so the tower gets a steeplejack's iron ladder on its west face, in the nook where the tower
- * stands proud of the facade, ground to crenel gap. Tower dims mirror gothicHall's (7×7, top at h + 10, centre
- * d/2 − 3.5 + 1.2 = 3.7 local, h = 14, d = 12). Rails/rungs are thin visual boxes; the tower wall is the climb face.
+ * Library tower climb (bobblehead n2 on the tower roof, 24 m up), ladder-free: bare walls tire Jimothy after ~7 m
+ * (~11 m sprinting), so it goes in three stages. A clasping buttress fills the nook where the tower stands proud of
+ * the west half of the facade; its flat stone top (~10 m up) is out of reach at walking pace but a sprint-climb makes
+ * it. Rest there, climb the last ~4–5 m of facade and mantle onto the 45° slate roof, walk up beside the tower to near
+ * the ridge and climb the tower's west face (~5 m) to the roof. Tower dims mirror gothicHall's (7×7, top at h + 10,
+ * centre d/2 − 3.5 + 1.2 = 3.7 local, h = 14, d = 12, so the tower's front is 1.2 m proud of the facade).
  */
-function libraryTowerLadder(world: World, b: Batch, lib: HallInfo) {
+function libraryTowerButtress(game: Game, world: World, b: Batch, lib: HallInfo) {
   const f = lib.frame;
-  const th2 = lib.top + 10;
-  const wx = -3.5; // tower west face (local x)
-  const lz = 6.62; // proud of the facade line (6, so he clears the eave) and short of the corner pinnacle (7.2)
-  const base = f.p(wx, 0, lz);
-  const gy = world.heightAt(base.x, base.z) - lib.floorY;
-  const IRON = 0xa3acb0; // galvanised: reads against the red brick from the quad
-  const rx = wx - 0.1;
-  const y0 = gy - 0.1;
-  const y1 = th2 + 1.1; // rails poke above the parapet as grab handles
-  for (const dz of [-0.26, 0.26]) {
-    f.box(b, 'metal', rx, (y0 + y1) / 2, lz + dz, 0.11, y1 - y0, 0.11, IRON);
-    // hooked grab-rail over the top
-    f.box(b, 'metal', wx + 0.05, y1, lz + dz, 0.4, 0.11, 0.11, IRON);
+  const x0 = -4.7,
+    x1 = -3.5; // tower west face
+  const z0 = 6, // facade
+    z1 = 7.2; // tower front
+  const xc = (x0 + x1) / 2,
+    zc = (z0 + z1) / 2;
+  let gy = Infinity; // lowest ground under its outer corners (the quad falls away downhill)
+  for (const [x, z] of [[x0, z1], [x0, z0], [x1, z1]]) {
+    const p = f.p(x, 0, z);
+    gy = Math.min(gy, world.heightAt(p.x, p.z) - lib.floorY);
   }
-  for (let y = gy + 0.35; y < th2 + 0.2; y += 0.35) f.box(b, 'metal', rx, y, lz, 0.08, 0.07, 0.52, IRON);
-  // stand-off brackets bolting it to the brick every few metres
-  for (let y = gy + 1.5; y < th2; y += 3.2)
-    for (const dz of [-0.26, 0.26]) f.box(b, 'metal', wx - 0.05, y, lz + dz, 0.12, 0.1, 0.1, IRON);
-  // ladder volume: where his body is while climbing (wall face out to ~1.2 m, ±0.8 m along the wall, full height)
-  const a = f.p(wx - 1.3, gy - 0.3, lz - 0.8);
-  const c = f.p(wx + 0.3, th2 + 1.5, lz + 0.8);
-  world.addLadder(new THREE.Vector3(Math.min(a.x, c.x), a.y, Math.min(a.z, c.z)), new THREE.Vector3(Math.max(a.x, c.x), c.y, Math.max(a.z, c.z)));
+  const top = Math.min(lib.top - 3.5, gy + 10.5); // walking pace tops out ~9 m up a bare wall, sprinting ~12
+  const bot = gy - 0.5;
+  const BRICK = 0xc47456,
+    STONE = 0xe6dcc6;
+  f.box(b, 'brick', xc, (bot + top - 0.2) / 2, zc, x1 - x0, top - 0.2 - bot, z1 - z0, BRICK);
+  // stone plinth + a set-off band halfway, flat coping on top (flush with the brick so nothing overhangs a climber)
+  f.box(b, 'concrete', xc, (bot + 0.9) / 2, zc, x1 - x0, 0.9 - bot, z1 - z0, STONE);
+  f.box(b, 'concrete', xc, (0.9 + top) / 2, zc, x1 - x0 + 0.02, 0.18, z1 - z0 + 0.02, STONE);
+  f.box(b, 'concrete', xc, top - 0.1, zc, x1 - x0, 0.2, z1 - z0, STONE);
+  f.collider(game, xc, (bot + top) / 2, zc, x1 - x0, top - bot, z1 - z0);
+  // eave: the roof slab's end face sticks 0.21 m out over the facade at 45° (its lower corner sits on the wall top), so a
+  // climber butted his head against it and dropped. Fill it in under the (drawn) cornice: a cove (0.22 m out over 0.45)
+  // then a flush fascia up to the slab's top corner, so he eases out and mantles onto the slates. Whole facade, both
+  // sides of the tower.
+  const h = lib.top,
+    fz = 6; // facade (= d / 2)
+  const hw = 23; // half the library's width (w = 46)
+  for (const [xa, xb] of [[-hw, x1], [-x1, hw]]) {
+    const len = xb - xa,
+      xm = (xa + xb) / 2;
+    f.collider(game, xm, h + 0.075, fz + 0.01, len, 0.25, 0.42); // fascia: z 5.8–6.22, y 13.95–14.2
+    f.collider(game, xm, h - 0.21, fz - 0.025, len, 0.54, 0.3, 0, Math.atan2(0.22, 0.45)); // cove face (6, 13.5)→(6.22, 13.95)
+  }
 }
 
 function hallPlaque(world: World, b: Batch, h: HallInfo, name: string) {

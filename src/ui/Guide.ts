@@ -98,6 +98,21 @@ export interface NearEntry {
 }
 
 const STORE = 'jimothy.guide.v1';
+
+/**
+ * On-site route hints for the golden bobbleheads whose climbs need planning (bare walls tire Jimothy after ~7 m,
+ * ~11 m sprinting; standing on a ledge gets his breath back). Keyed by collectible id; the rest get the generic hint.
+ */
+const BOBBLE_ROUTES: Record<string, string> = {
+  'bobblehead:c1': "On Grunge & Sons' roof. 16 m of brick is too much in one go: sprint-climb {sprint} the donut shop next door, catch your breath on its roof, then climb the Grunge wall from there.",
+  'bobblehead:c3': 'On top of the street clock. Climb the shop front behind it, then wall-jump {jump} across.',
+  'bobblehead:e1': "On the Noodle restaurant's roof. Get your breath back on the deck, then climb the glass just north of the west door.",
+  'bobblehead:e2': "On City Hall's dome. The walls are too tall: sprint-climb {sprint} the stone pier at a front corner of the portico, pull up onto the pediment and walk up it to the roof. Rest on the drum's plinth before the dome.",
+  'bobblehead:n1': "On Grandma Rosie's roof ridge. The porch roof bonks your head: climb the back wall and walk up the shingles.",
+  'bobblehead:n2': 'On the library tower. Sprint-climb {sprint} the buttress beside the tower, rest on top, climb onto the slates, walk up beside the tower and climb the last bit.',
+  'bobblehead:s1': 'On top of this gas tower. Too tall for tiny arms in one go: sprint-climb {sprint} the fat valve pipe standing against it, rest on its top, then climb on to the cap.',
+  'bobblehead:s2': "In the crow's nest. Jump for the rope ladder dangling from it.",
+};
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 
@@ -349,7 +364,10 @@ const DEFS: Def[] = [
         const n = env.game.get<any>('collectibles')?.nearest?.(env.player.position);
         return n?.position ? [n.position.clone()] : [];
       },
-      hint: 'A golden bobblehead is hiding around here, probably up high. Follow the light beam and climb!',
+      hint: (env) => {
+        const n = env.game.get<any>('collectibles')?.nearest?.(env.player.position);
+        return BOBBLE_ROUTES[n?.id] ?? 'A golden bobblehead is hiding around here, probably up high. Follow the light beam and climb!';
+      },
     },
   },
   { id: 'notACat', rank: 23, how: "Wait near people until someone says 'here kitty kitty'. Then turn around." },

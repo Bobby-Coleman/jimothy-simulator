@@ -313,11 +313,10 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
   // main cornice. Geometry pass: this was one solid slab over the whole roof whose top sat 0.2 m ABOVE the roof collider
   // (Jimothy sank into the roof everywhere, and it hid the grey roof membrane). Now it's a ring of 0.8 m bands (0.4 m
   // overhang) whose top is flush with the roof, with colliders (the overhang used to be walk-through). The front band
-  // skips the pediment span (it poked out of / hung over the pediment slopes, leaving a wedge-shaped pocket), and the
-  // south band has a notch for the service ladder so the climb doesn't run into its underside.
+  // skips the pediment span (it poked out of / hung over the pediment slopes, leaving a wedge-shaped pocket). A cove
+  // moulding under it (buildCityHallClimb) eases climbers out over the overhang.
   {
     const cy = baseTop + mbH - 0.3;
-    const ladX = mbX0 + 5; // = facade ladder (buildCityHallRoofAccess)
     const band = (xa: number, xb: number, za: number, zb: number) => {
       const c = new THREE.Vector3((xa + xb) / 2, cy, (za + zb) / 2);
       const s = new THREE.Vector3(xb - xa, 0.6, zb - za);
@@ -328,8 +327,7 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
       X1 = CH.x1 + 0.4,
       Z0 = CH.z0 - 0.4,
       Z1 = CH.z1 + 0.4;
-    band(X0, ladX - 0.6, Z0, CH.z0 + 0.4); // south, west of the ladder
-    band(ladX + 0.6, X1, Z0, CH.z0 + 0.4); // south, east of the ladder
+    band(X0, X1, Z0, CH.z0 + 0.4); // south
     band(X0, X1, CH.z1 - 0.4, Z1); // north
     band(CH.x1 - 0.4, X1, CH.z0 + 0.4, CH.z1 - 0.4); // east
     band(X0, mbX0 + 0.4, CH.z0 + 0.4, -12.8); // front (west), either side of the pediment
@@ -411,7 +409,7 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
   cylinderCollider(game, new THREE.Vector3(dx, drumY + 3.5 + 0.04, dz), 6.26, 0.28); // the cream rim ring (torus) round its foot
   cylinderCollider(game, new THREE.Vector3(dx, drumY + 3.5 + 6.0 + 1.0, dz), 1.1, 2.0);
   hullFromGeometry(game, new THREE.SphereGeometry(1.2, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), T(dx, drumY + 3.5 + 6.0 + 2.0, dz));
-  buildCityHallRoofAccess(game, world, batch, { mbX0, mbH, baseTop, dx, dz, drumY });
+  buildCityHallClimb(game, world, batch, { mbX0, mbH, baseTop, dx, dz, drumY });
   world.poi.set('bobblehead:e2', new THREE.Vector3(dx - 2.4, drumY + 3.5 + Math.sqrt(6.2 * 6.2 - 2.4 * 2.4) + 0.3, dz));
 
   // podium riser, lectern + microphone on the portico
@@ -441,46 +439,75 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
   ]);
 }
 
-type Part = { geo: THREE.BufferGeometry; color: number; matrix: THREE.Matrix4 };
-const LADDER_IRON = 0x3d434a;
-const LADDER_SAFETY = 0xffd23f;
-
 /**
- * Climbing nerf: bare walls now tire Jimothy after ~7 m, so City Hall (17 m to the parapet, then drum + dome) gets a
- * real roof-access route: a steel service ladder bolted to the south facade (pavement → parapet, yellow goose-neck
- * over the top), a stone plinth ring under the drum (the drum used to float 1 m above the roof; now it's a step you
- * mantle onto), and a dome maintenance ladder up the west face of the drum, out over the drum's cove moulding and rim
- * ring, and over the gold dome to bobblehead e2.
- * Visual rails/rungs are thin non-colliding boxes; `world.addLadder` volumes cover where Jimothy's body is while
- * climbing, so both ladders drain stamina at the gentle ladder rate.
+ * City Hall roof + dome climb (bobblehead e2), ladder-free since the climbing nerf (bare walls ≈ 7 m walking, 11 m
+ * sprinting). The route: up the grand steps, then sprint-climb the outside face of the anta at either front corner of the
+ * portico and mantle onto the pediment (10.75 m up: walking pace runs out ~2 m short; or climb the main block's front
+ * wall beside it and step across onto the cornice), rest, walk up the pediment to its ridge and hop the 0.65 m parapet.
+ * On the roof: mantle the drum plinth, rest, climb the drum and the steep lower dome (~7.5 m) and walk up the gold to the
+ * bobblehead. The bare facades are 17 m: no way up there.
+ * Geometry for it:
+ *  - the two antae (corner piers under the portico's entablature ends) and a cove under each end of its cornice;
+ *  - cove moulding under the main cornice all round (flared, drawn AND solid), so a climber eases out over the
+ *    cornice's 0.4 m overhang instead of butting against its underside, then climbs its face and the parapet;
+ *  - a stone plinth ring under the drum (the drum used to float 1 m above the roof; now it's a step you mantle onto);
+ *  - a cove moulding under the dome rim for the same reason as the cornice one.
  */
-function buildCityHallRoofAccess(game: Game, world: World, batch: Batch, o: { mbX0: number; mbH: number; baseTop: number; dx: number; dz: number; drumY: number }) {
+function buildCityHallClimb(game: Game, world: World, batch: Batch, o: { mbX0: number; mbH: number; baseTop: number; dx: number; dz: number; drumY: number }) {
   const { mbX0, mbH, baseTop, dx, dz, drumY } = o;
   const stone = stoneMat();
   const trim = trimMat();
-  // ---- facade ladder (south side, between the first two windows of each row)
+  // ---- main-cornice cove: a triangular prism (0.4 out over 0.6 up: |normal.y| 0.55, still a climbable face) along
+  // each wall under the cornice bands; ends run 0.4 past the corners so the corner squares are covered too
   {
-    const lx = mbX0 + 5,
-      wz = CH.z0; // wall plane; outside is −Z
-    const lz = wz - 0.14;
-    const gy = walkY(lx, wz - 1.0);
-    const top = baseTop + mbH + 1.0; // parapet top
-    const parts: Part[] = [];
-    for (const s of [-0.3, 0.3]) {
-      parts.push({ geo: new THREE.BoxGeometry(0.08, top - gy, 0.08), color: LADDER_IRON, matrix: T(lx + s, (gy + top) / 2, lz) });
-      // wall brackets
-      for (let y = gy + 1.2; y < top - 0.5; y += 3) parts.push({ geo: new THREE.BoxGeometry(0.06, 0.06, 0.14), color: LADDER_IRON, matrix: T(lx + s, y, wz - 0.07) });
-      // goose-neck handrails over the parapet (safety yellow so the ladder reads from the plaza)
-      parts.push({ geo: new THREE.BoxGeometry(0.08, 1.0, 0.08), color: LADDER_SAFETY, matrix: T(lx + s, top + 0.5, lz) });
-      parts.push({ geo: new THREE.BoxGeometry(0.08, 0.08, 0.72), color: LADDER_SAFETY, matrix: T(lx + s, top + 1.0, wz + 0.22) });
-      parts.push({ geo: new THREE.BoxGeometry(0.08, 1.0, 0.08), color: LADDER_SAFETY, matrix: T(lx + s, top + 0.5, wz + 0.56) });
+    const cb = baseTop + mbH - 0.6; // cornice underside
+    const tri = new THREE.Shape();
+    tri.moveTo(0, -0.6);
+    tri.lineTo(0, 0);
+    tri.lineTo(0.4, 0);
+    tri.closePath();
+    const run = (x: number, z: number, ry: number, len: number) => {
+      const geo = new THREE.ExtrudeGeometry(tri, { depth: len, bevelEnabled: false });
+      const m = T(x, cb, z, ry);
+      batch.add(geo, trim, { matrix: m, color: 0xefe8da });
+      hullFromGeometry(game, geo, m);
+    };
+    run(mbX0 - 0.4, CH.z0, Math.PI / 2, CH.x1 - mbX0 + 0.8); // south (out −z, runs +x)
+    run(CH.x1 + 0.4, CH.z1, -Math.PI / 2, CH.x1 - mbX0 + 0.8); // north (out +z, runs −x)
+    run(CH.x1, CH.z0 - 0.4, 0, CH.z1 - CH.z0 + 0.8); // east (out +x, runs +z)
+    // west front: only either side of the portico (the pediment covers the middle)
+    run(mbX0, -12.8, Math.PI, -12.8 - (CH.z0 - 0.4)); // out −x, runs −z
+    run(mbX0, CH.z1 + 0.4, Math.PI, CH.z1 + 0.4 - 12.8);
+  }
+  // ---- portico ends: a cove under each end of the portico cornice (it overhangs the entablature's end faces by
+  // 0.3 m), and a stone anta (corner pier) under each front corner, flush with the entablature's end face, so the end
+  // of the portico is a wall you can climb straight up and mantle off onto the pediment
+  {
+    const entX0 = CH.x0 + 1.2,
+      entY = baseTop + 9,
+      cb = entY + 1.45; // cornice underside (entY + 1.6 − 0.15)
+    const tri = new THREE.Shape();
+    tri.moveTo(0, -0.45);
+    tri.lineTo(0, 0);
+    tri.lineTo(0.3, 0);
+    tri.closePath();
+    for (const [z, ry, x] of [[-12.5, Math.PI / 2, entX0], [12.5, -Math.PI / 2, mbX0]] as const) {
+      const geo = new THREE.ExtrudeGeometry(tri, { depth: mbX0 - entX0, bevelEnabled: false });
+      const m = T(x, cb, z, ry);
+      batch.add(geo, stone, { matrix: m, uv: 2.4 });
+      hullFromGeometry(game, geo, m);
     }
-    for (let y = gy + 0.3; y < top; y += 0.35) parts.push({ geo: new THREE.BoxGeometry(0.6, 0.05, 0.05), color: LADDER_IRON, matrix: T(lx, y, lz) });
-    // a little yellow-and-black "ROOF ACCESS" style warning band at eye height
-    parts.push({ geo: new THREE.BoxGeometry(0.9, 0.5, 0.04), color: LADDER_SAFETY, matrix: T(lx, gy + 2.2, wz - 0.02) });
-    parts.push({ geo: new THREE.BoxGeometry(0.9, 0.12, 0.05), color: 0x222222, matrix: T(lx, gy + 2.2, wz - 0.03) });
-    batch.add(mergeColored(parts), trim, { castShadow: false });
-    world.addLadder(new THREE.Vector3(lx - 0.8, gy - 0.5, wz - 1.2), new THREE.Vector3(lx + 0.8, top + 1.0, wz + 0.4));
+    const aw = 1.4,
+      ad = 0.8;
+    const ax = entX0 + aw / 2;
+    for (const s of [-1, 1]) {
+      const az = s * (12.5 - ad / 2);
+      batch.add(new THREE.BoxGeometry(aw, entY - baseTop, ad), stone, { matrix: T(ax, (baseTop + entY) / 2, az), uv: 2.4 });
+      world.collider(new THREE.Vector3(ax, (baseTop + entY) / 2, az), new THREE.Vector3(aw, entY - baseTop, ad));
+      // base + capital bands (drawn only: 4 cm proud)
+      batch.add(new THREE.BoxGeometry(aw + 0.08, 0.35, ad + 0.08), trim, { matrix: T(ax, baseTop + 0.175, az), color: 0xefe8da });
+      batch.add(new THREE.BoxGeometry(aw + 0.08, 0.3, ad + 0.08), trim, { matrix: T(ax, entY - 0.15, az), color: 0xefe8da });
+    }
   }
   // ---- drum plinth (a 1 m stone step ring, mantle-able from the roof)
   const roofY = baseTop + mbH;
@@ -489,56 +516,16 @@ function buildCityHallRoofAccess(game: Game, world: World, batch: Batch, o: { mb
   batch.add(new THREE.TorusGeometry(6.62, 0.1, 6, 48), trim, { matrix: TR(dx, drumY - 0.02, dz, Math.PI / 2, 0, 0), color: 0xefe8da });
   // geometry pass: hull of the tapered ring (the r 6.8 cylinder left an invisible 0.2 m lip round the r 6.6 top)
   hullFromGeometry(game, plinthGeo, T(dx, (roofY + drumY) / 2, dz));
-  // ---- dome maintenance ladder: straight up the west face of the drum, then arcing over the dome
+  // ---- dome-rim cove: with the dome a true hemisphere, the gold dome + its cream rim ring overhang the drum wall by
+  // 0.2–0.28 m, and a climber would butt against their underside. The cove (cream flared ring, drawn AND solid) eases
+  // him out over the rim anywhere round the drum.
   {
-    const parts: Part[] = [];
-    // geometry pass: with the dome now a true hemisphere (no invisible bulge on the drum), the gold dome + its cream rim
-    // ring overhang the drum wall by 0.2–0.28 m, and a climber would butt against their underside. So the drum gets a
-    // cove moulding (cream flared ring, drawn AND solid) that eases him out over the rim anywhere round the drum; the
-    // ladder rails kink out over it, riding 7–14 cm off the stone.
     const eqY = drumY + 3.5;
     const K = eqY - 0.6; // cove bottom (just above the drum windows)
     const coveTopY = eqY - 0.1;
     const coveGeo = new THREE.CylinderGeometry(6.26, 6.0, coveTopY - K, 40);
     batch.add(coveGeo, trim, { matrix: T(dx, (K + coveTopY) / 2, dz), color: 0xefe8da });
     hullFromGeometry(game, coveGeo, T(dx, (K + coveTopY) / 2, dz));
-    const xd = dx - 6.07;
-    const Rd = 6.2 + 0.2;
-    for (const s of [-0.3, 0.3]) parts.push({ geo: new THREE.BoxGeometry(0.08, K - drumY, 0.08), color: LADDER_IRON, matrix: T(xd, (drumY + K) / 2, dz + s) });
-    for (let y = drumY + 0.3; y < K; y += 0.35) parts.push({ geo: new THREE.BoxGeometry(0.05, 0.05, 0.6), color: LADDER_IRON, matrix: T(xd, y, dz) });
-    {
-      // kink over the cove, then a short upright past the rim ring to where the arc starts
-      const a = new THREE.Vector2(dx - 6.07, K),
-        b = new THREE.Vector2(dx - Rd, coveTopY);
-      const L = a.distanceTo(b);
-      const th = Math.asin((a.x - b.x) / L);
-      for (const s of [-0.3, 0.3]) {
-        parts.push({ geo: new THREE.BoxGeometry(0.08, L + 0.06, 0.08), color: LADDER_IRON, matrix: TR((a.x + b.x) / 2, (a.y + b.y) / 2, dz + s, 0, 0, th) });
-        parts.push({ geo: new THREE.BoxGeometry(0.08, eqY - coveTopY + 0.04, 0.08), color: LADDER_IRON, matrix: T(b.x, (coveTopY + eqY) / 2, dz + s) });
-      }
-      parts.push({ geo: new THREE.BoxGeometry(0.05, 0.05, 0.6), color: LADDER_IRON, matrix: T((a.x + b.x) / 2, (a.y + b.y) / 2, dz) });
-    }
-    const PHI = (74 * Math.PI) / 180;
-    const P = (phi: number) => new THREE.Vector3(dx - Rd * Math.cos(phi), eqY + Rd * Math.sin(phi), dz);
-    const N = 18;
-    for (let i = 0; i < N; i++) {
-      const p0 = P((i / N) * PHI),
-        p1 = P(((i + 1) / N) * PHI);
-      const m = p0.clone().add(p1).multiplyScalar(0.5);
-      const len = p0.distanceTo(p1) + 0.02;
-      const rz = -((i + 0.5) / N) * PHI;
-      for (const s of [-0.3, 0.3]) parts.push({ geo: new THREE.BoxGeometry(0.08, len, 0.08), color: LADDER_IRON, matrix: TR(m.x, m.y, dz + s, 0, 0, rz) });
-    }
-    const dPhi = 0.35 / Rd;
-    for (let phi = dPhi * 0.5; phi < PHI; phi += dPhi) {
-      const q = P(phi);
-      parts.push({ geo: new THREE.BoxGeometry(0.05, 0.05, 0.6), color: LADDER_IRON, matrix: T(q.x, q.y, dz) });
-    }
-    // yellow grab hoop where the ladder tops out (next to the bobblehead)
-    const qt = P(PHI);
-    parts.push({ geo: new THREE.TorusGeometry(0.34, 0.04, 6, 14, Math.PI), color: LADDER_SAFETY, matrix: TR(qt.x, qt.y + 0.02, dz, 0, Math.PI / 2, 0) });
-    batch.add(mergeColored(parts), trim, { castShadow: false });
-    world.addLadder(new THREE.Vector3(dx - 7.6, drumY - 1.3, dz - 0.8), new THREE.Vector3(dx - 1.6, eqY + 6.8, dz + 0.8));
   }
 }
 
@@ -993,32 +980,9 @@ const pasta = cached('mat:pasta', () => glowAtNight(game, new THREE.MeshStandard
     world.collider(new THREE.Vector3(nx + mid.x, DECK + WALL_H / 2, nz + mid.z), new THREE.Vector3(0.2, WALL_H, len + 0.05), yaw);
   }
   batch.add(mergeColored(mull), trim, { matrix: T(nx, DECK, nz) });
-  // roof-access ladder on the glass just north of the west door (the bobblehead sits at its top): the glass is only
-  // 4.5 m, so it's climbable bare too, but after the climbing nerf this makes the last bit obvious and gentle
-  {
-    const a = Math.PI - Math.PI / 12 - Math.PI / 24; // middle of the first glass pane north of the door
-    const n = new THREE.Vector2(Math.cos(a), Math.sin(a));
-    const wr = WALL_R * Math.cos(Math.PI / 24); // pane plane distance
-    const c = n.clone().multiplyScalar(wr + 0.12);
-    const t = new THREE.Vector2(-n.y, n.x);
-    const ry = -a - Math.PI / 2;
-    const top = WALL_H + 0.5;
-    const parts: Part[] = [];
-    for (const s of [-0.28, 0.28]) {
-      const px = c.x + t.x * s,
-        pz = c.y + t.y * s;
-      parts.push({ geo: new THREE.BoxGeometry(0.07, top, 0.07), color: LADDER_IRON, matrix: T(px, top / 2, pz, ry) });
-      // yellow goose-neck over the roof edge
-      parts.push({ geo: new THREE.BoxGeometry(0.07, 0.9, 0.07), color: LADDER_SAFETY, matrix: T(px, top + 0.45, pz, ry) });
-      const hx = px - n.x * 0.4,
-        hz = pz - n.y * 0.4;
-      parts.push({ geo: new THREE.BoxGeometry(0.07, 0.07, 0.8), color: LADDER_SAFETY, matrix: T(hx, top + 0.9, hz, ry) });
-    }
-    for (let y = 0.3; y < top; y += 0.35) parts.push({ geo: new THREE.BoxGeometry(0.56, 0.045, 0.045), color: LADDER_IRON, matrix: T(c.x, y, c.y, ry) });
-    batch.add(mergeColored(parts), trim, { matrix: T(nx, DECK, nz), castShadow: false });
-    world.addLadder(new THREE.Vector3(nx + c.x - 1.0, DECK - 0.3, nz + c.y - 1.0), new THREE.Vector3(nx + c.x + 1.0, DECK + top + 1.2, nz + c.y + 1.0));
-  }
-  // roof (flush with the wall so you can mantle onto it), cap, spire
+  // roof (flush with the wall so you can mantle onto it), cap, spire. No roof ladder: the glass is only 4.5 m, a bare
+  // climb from the deck once he has got his breath back from the Noodle's ladder (bobblehead e1 is just north of the
+  // west door).
   batch.add(new THREE.CylinderGeometry(WALL_R + 0.02, WALL_R + 0.02, 0.5, 40), deckMat, { matrix: T(nx, DECK + WALL_H + 0.25, nz) });
   cylinderCollider(game, new THREE.Vector3(nx, DECK + WALL_H + 0.25, nz), WALL_R, 0.5);
   batch.add(new THREE.CylinderGeometry(2.2, 2.8, 1.4, 24), trim, { matrix: T(nx, DECK + WALL_H + 1.2, nz), color: 0xf5d98a });
