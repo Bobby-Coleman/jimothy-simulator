@@ -11,6 +11,8 @@ const R = 0.38;
 const MASS = 12;
 const WALK_SPEED = 4.6;
 const SPRINT_SPEED = 8.8;
+/** Holding the stroll key (X): his real, filmed walking pace. */
+const STROLL_SPEED = 0.65;
 const SWIM_SPEED = 2.8;
 const JUMP_V = 7.8;
 const CARRY_MAX_MASS = 14;
@@ -482,7 +484,8 @@ export class Jimothy implements System {
     const inp = game.input;
     const wish = this.wishDir(new THREE.Vector3());
     const sprint = inp.held('sprint');
-    const max = (sprint ? SPRINT_SPEED : WALK_SPEED) * this.speedMul;
+    const stroll = !sprint && inp.held('stroll');
+    const max = (sprint ? SPRINT_SPEED : stroll ? STROLL_SPEED : WALK_SPEED) * this.speedMul;
     const v = this.body.linvel();
     let vx = v.x;
     let vz = v.z;

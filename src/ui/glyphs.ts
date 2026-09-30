@@ -20,6 +20,7 @@ export const GLYPHS: Record<string, GlyphDef> = {
   look: { kbm: 'Mouse', pad: 'RS', touch: 'Drag' },
   jump: { kbm: 'Space', pad: 'A', touch: 'Jump' },
   sprint: { kbm: 'Shift', pad: 'LT', touch: 'Stick' },
+  stroll: { kbm: 'X', pad: 'LS', touch: 'Stick' },
   grab: { kbm: 'E', pad: 'X', touch: 'Grab' },
   bonk: { kbm: 'F', pad: 'RB', touch: 'Bonk' },
   wash: { kbm: 'R', pad: 'Y', touch: 'Wash' },

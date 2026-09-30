@@ -185,23 +185,53 @@ TAIL_TIP = SACRUM + np.array([0.0, 0.03, -0.045])
 PUFF_C = SACRUM + np.array([0.0, 0.05, -0.05])
 
 
+# The top of the back (the approved side profile): the drawn spine line, raised 1.6 cm at the sacrum to 3.6 cm over
+# the ribs. As a function of z (the spine runs monotonically forward).
+_SPT = np.linspace(0.0, 1.0, len(SPINE))
+_SPZ = SPINE[:, 2]
+_TOP = SPINE[:, 1] + 0.016 + 0.02 * smoothstep(0.1, 0.4, _SPT)
+
+# The back is one dome swept along the spine, from the sacrum to the withers: at every z an egg-shaped cross-section
+# (rounded top on the dorsal line, widest low down where it meets the ribs and belly), so the back is round from
+# behind with no ridge along the spine. The half-width and widest level vary along z:
+BACK_Z = (-0.232, 0.214)
+BACK_W = ([-0.24, -0.2, -0.12, -0.04, 0.04, 0.12, 0.17, 0.214], [0.085, 0.11, 0.13, 0.14, 0.143, 0.137, 0.12, 0.09])
+BACK_MID = ([-0.24, -0.12, 0.0, 0.12, 0.214], [0.445, 0.46, 0.47, 0.47, 0.5])
+
+
+def back_sdf(P):
+    z = np.clip(P[:, 2], BACK_Z[0], BACK_Z[1])
+    top = np.interp(z, _SPZ, _TOP)
+    mid = np.interp(z, *BACK_MID)
+    w = np.interp(z, *BACK_W)
+    up = P[:, 1] >= mid
+    ry = np.where(up, np.maximum(top - mid, 0.03), np.maximum(mid - 0.405, 0.02))
+    qx, qy = P[:, 0], P[:, 1] - mid
+    k0 = np.hypot(qx / w, qy / ry)
+    k1 = np.hypot(qx / (w * w), qy / (ry * ry))
+    d = k0 * (k0 - 1.0) / np.maximum(k1, 1e-9)
+    ends = np.maximum(BACK_Z[0] - P[:, 2], P[:, 2] - BACK_Z[1])
+    return smax(d, ends, 0.03)
+
+
+# The (almost absent) neck: from the withers down into the back of the skull, so the skull is the top of his head
+# (between the ears there is only fur, no body).
+NECK_A = np.array([0.0, float(np.interp(0.17, _SPZ, _TOP)) - 0.078, 0.17])
+NECK_B = np.array([0.0, 0.522, 0.262])
+
+
 def torso_sdf(P):
-    d = None
-    n = len(SPINE)
-    for i in range(3, n - 1, 2):                                      # dorsal muscle; ends before the sacrum
-        t = i / (n - 1)
-        r = 0.052 + 0.02 * smoothstep(0.1, 0.4, t)
-        a = SPINE[i] - np.array([0, 0.036, 0])
-        b = SPINE[min(i + 2, n - 1)] - np.array([0, 0.036, 0])
-        di = sd_capsule(P, a, b, r)
-        d = di if d is None else smin(d, di, 0.03)
+    d = back_sdf(P)
     d = smin(d, sd_ellipsoid(P, P3(0, ph(545, 262)), (0.16, 0.112, 0.175)), 0.05)     # rib cage
     d = smin(d, sd_ellipsoid(P, P3(0, ph(432, 258)), (0.145, 0.108, 0.13)), 0.05)     # abdomen (tucked up)
     d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.45, -0.185]), (0.1, 0.075, 0.05)), 0.04)  # pelvis: between the thighs only
     d = smin(d, sd_ellipsoid(P, P3(0, ph(640, 262)), (0.105, 0.106, 0.08)), 0.05)     # chest
     for sx in (1, -1):
         d = smin(d, sd_ellipsoid(P, np.array([0.092 * sx, *P3(0, ph(640, 250))[1:]]), (0.062, 0.1, 0.075)), 0.04)  # shoulders
-    d = smin(d, sd_capsule(P, P3(0, ph(640, 188)), OCC + HEAD_D * 0.04, 0.066), 0.045)                            # (no) neck
+    # neck: wider than tall (it spans the shoulders), so there's no dip between it and the shoulders
+    Q = P.copy()
+    Q[:, 0] = P[:, 0] / 1.45
+    d = smin(d, sd_round_cone(Q, NECK_A, NECK_B, 0.078, 0.046), 0.04)
     return d
 
 
@@ -340,7 +370,7 @@ class FaceCoords:
 def paint(V, eyes, N):
     x, y, z = V[:, 0], V[:, 1], V[:, 2]
     ax = np.abs(x)
-    back, side, belly, chest = hexc('#4f5055'), hexc('#6c6d72'), hexc('#8b8884'), hexc('#bdb4a3')
+    back, side, belly, chest = hexc('#4f5055'), hexc('#6c6d72'), hexc('#9a9792'), hexc('#bdb4a3')
     c = mix(side, back, smoothstep(0.5, 0.64, y)[:, None])
     c = mix(c, hexc('#3d3e43'), (smoothstep(0.58, 0.68, y) * smoothstep(0.08, 0.0, ax))[:, None])       # dark saddle
     c = mix(c, belly, (smoothstep(0.47, 0.37, y) * (0.75 + 0.25 * rlib.fbm(V * 25.0, 2, seed=9)))[:, None])      # belly
@@ -440,45 +470,89 @@ def limb_param(V, pose):
     return best_s, best_d
 
 
-def fur_length(V, N, eyes, pose='stand'):
-    """Per-vertex shell-fur length as a multiple of the game's FUR_LENGTH (3.5 cm): long, hanging under-fluff on the
-    belly, ruffs on the cheeks and chest, a fluffy tail puff, very short fur on the face (shortest on the snout),
-    short on the ears and lower legs, none on the soles."""
-    def lerp(a, b, t):                                          # (rlib.mix is for colours)
-        return a + (b - a) * t
+def _lerp(a, b, t):                                             # (rlib.mix is for colours)
+    return a + (b - a) * t
+
+
+def fur_regions(V, N, eyes, pose='stand'):
+    """Soft 0..1 weights of the coat's regions at points V (normals N), shared by fur_length and fur_comb."""
+    y = V[:, 1]
+    ny = N[:, 1]
+    ts = torso_sdf(V)
+    torso = smoothstep(0.02, 0.0, ts - 0.01)
+    s, _ = limb_param(V, pose)
+    limbs = [limb_sdf(c) for _, c in limb_cones(pose)]
+    dl = np.min(np.stack([l(V) for l in limbs], axis=1), axis=1)
+    fc = FaceCoords(V, eyes, N)
+    return dict(
+        torso=torso,
+        # the under-side and the lower flanks: the hanging under-fluff
+        belly=smoothstep(0.2, -0.6, ny) * smoothstep(0.5, 0.4, y) * torso,
+        leg=smoothstep(0.012, -0.012, dl - ts),
+        leg_s=s,
+        tail=smoothstep(0.01, -0.01, puff_sdf(V) - 0.012),
+        head=smoothstep(0.012, -0.004, head_skin_sdf(V) - 0.01),
+        ear=smoothstep(0.004, -0.002, ears_sdf(V) - 0.004),
+        fc=fc,
+    )
+
+
+def fur_length(V, N, eyes, pose='stand', R=None):
+    """Per-vertex shell-fur length as a multiple of the game's FUR_LENGTH (3.5 cm): long under-fluff hanging from the
+    belly and lower flanks, ruffs on the cheeks and chest, a fluffy tail puff, a proper coat on top of the head (the
+    crown between the ears is fur, not skull), very short fur on the face (shortest on the snout), short on the ears
+    and lower legs, none on the soles; all of it in slightly uneven patches, like his real, rather disorderly coat."""
+    R = R or fur_regions(V, N, eyes, pose)
     x, y, z = V[:, 0], V[:, 1], V[:, 2]
     ax = np.abs(x)
     ny = N[:, 1]
+    fc, head, ear, legw, s = R['fc'], R['head'], R['ear'], R['leg'], R['leg_s']
     L = np.ones(len(V))
-    torso = smoothstep(0.02, 0.0, torso_sdf(V) - 0.01)
-    # belly under-fluff: long where the torso faces down
-    under = smoothstep(-0.15, -0.7, ny) * smoothstep(0.5, 0.42, y) * torso
-    L = L + 0.8 * under
+    # belly under-fluff: long and straggly, from the belly down the lower flanks (the comb makes it hang)
+    L = L + 1.9 * R['belly']
     # chest / throat ruff
     chest = smoothstep(0.12, 0.22, z) * smoothstep(0.52, 0.4, y) * smoothstep(0.1, 0.0, ax - 0.04)
     L = np.maximum(L, 1.0 + 0.35 * chest)
     # legs: body-length fur at the top, short below the knees / elbows, shortest on the paws, none on the soles
-    s, _ = limb_param(V, pose)
-    limbs = [limb_sdf(c) for _, c in limb_cones(pose)]
-    dl = np.min(np.stack([l(V) for l in limbs], axis=1), axis=1)
-    legw = smoothstep(0.012, -0.012, dl - torso_sdf(V))
-    leg_len = lerp(0.8, 0.22, smoothstep(0.22, 0.6, s))
-    leg_len = lerp(leg_len, 0.12, smoothstep(0.8, 0.95, s))
-    L = lerp(L, leg_len, legw)
+    leg_len = _lerp(0.8, 0.22, smoothstep(0.22, 0.6, s))
+    leg_len = _lerp(leg_len, 0.12, smoothstep(0.8, 0.95, s))
+    L = _lerp(L, leg_len, legw)
     L = np.where((s > 0.78) & (ny < -0.5) & (legw > 0.5), 0.0, L)
     # tail puff: fluffy
-    tail = smoothstep(0.01, -0.01, puff_sdf(V) - 0.012)
-    L = lerp(L, 1.75, tail)
-    # head: cheek ruffs, very short face fur (shortest on the snout), short on top
-    fc = FaceCoords(V, eyes, N)
-    head = smoothstep(0.012, -0.004, head_skin_sdf(V) - 0.01)
-    face_len = lerp(0.3, 0.14, smoothstep(0.0, -1.2, fc.v))                     # forehead 0.3 -> snout 0.14
-    face_len = lerp(face_len, 0.1, smoothstep(-1.4, -1.9, fc.v) * smoothstep(0.9, 0.4, fc.au))   # nose / lips
+    L = _lerp(L, 1.75, R['tail'])
+    # head: cheek ruffs, very short face fur (shortest on the snout), a full coat on the crown and nape
+    face_len = _lerp(0.3, 0.14, smoothstep(0.0, -1.2, fc.v))                     # forehead 0.3 -> snout 0.14
+    face_len = _lerp(face_len, 0.1, smoothstep(-1.4, -1.9, fc.v) * smoothstep(0.9, 0.4, fc.au))   # nose / lips
     cheek = smoothstep(0.55, 0.85, fc.nx) * smoothstep(0.47, 0.42, y) * smoothstep(0.35, 0.27, z)
-    head_len = lerp(0.55, face_len, fc.front)
+    head_len = _lerp(1.0, face_len, fc.front)
     head_len = np.maximum(head_len, 1.4 * cheek)
-    L = lerp(L, head_len, head)
+    L = _lerp(L, head_len, head)
     # ears: short
-    ear = smoothstep(0.004, -0.002, ears_sdf(V) - 0.004)
-    L = lerp(L, 0.25, ear)
-    return np.clip(L, 0.0, 2.0)
+    L = _lerp(L, 0.25, ear)
+    # a disorderly coat: random patches of slightly different length (not on the face, ears or paws)
+    patch = 0.3 * rlib.fbm(V * 12.0, 2, seed=41) + 0.15 * rlib.fbm(V * 31.0, 2, seed=43)
+    L = L * (1.0 + patch * (1.0 + 0.6 * R['belly']) * (1.0 - fc.front * head) * (1.0 - ear) * smoothstep(0.03, 0.08, y))
+    return np.clip(L, 0.0, 3.3)
+
+
+def fur_comb(V, N, eyes, pose='stand', R=None):
+    """Per-vertex direction the fur lies in (model space, along the skin), scaled: the shell tips lean this far, as a
+    multiple of the local fur length. Raccoon fur lies back along the body and hangs down on the belly fringe and the
+    legs; random per-patch leans make the coat a bit tousled, like the real Jimothy's."""
+    R = R or fur_regions(V, N, eyes, pose)
+    n = len(V)
+    fc, head, ear = R['fc'], R['head'], R['ear']
+
+    def dirs(v, k):
+        return np.tile(np.asarray(v, dtype=float) / np.linalg.norm(v) * k, (n, 1))
+    c = dirs([0.0, -0.3, -1.0], 0.35)                                   # body: lies back and a little down
+    c = mix(c, dirs([0.0, -1.0, -0.2], 0.6), R['belly'])               # under-fluff: hangs down
+    c = mix(c, dirs([0.0, -1.0, 0.0], 0.4), R['leg'])                  # legs: down the leg
+    headc = mix(dirs([0.0, -0.2, -1.0], 0.5), dirs([0.0, 0.35, -1.0], 0.35), fc.front)   # crown back; face toward the ears
+    c = mix(c, headc, head)
+    c = c * (1.0 - 0.8 * R['tail'])[:, None]                           # the puff just sticks out
+    # tousled: random per-patch leans (hardly any on the face)
+    dis = np.stack([rlib.fbm(V * 9.0, 2, seed=51), rlib.fbm(V * 9.0, 2, seed=53), rlib.fbm(V * 9.0, 2, seed=57)], axis=1)
+    c = c + dis * (0.4 * (1.0 - 0.85 * fc.front * head))[:, None]
+    c = c - N * np.sum(c * N, axis=1)[:, None]                         # along the skin
+    return c * (1.0 - ear)[:, None]

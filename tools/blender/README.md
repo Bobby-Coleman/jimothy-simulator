@@ -62,15 +62,21 @@ Previews land in `tools/blender/renders/` (gitignored): `<model>_views.png` (fro
 
 ## Jimothy — `jimothy.glb` (14,240 triangles): the real, walking Jimothy
 
-The raccoon himself: a short, arched ("scrunched") spine, a head that hangs down with almost no neck, long normal
-raccoon legs, a very short cottontail-like tail puff and his traced mask. 0.70 m tall at the arch of the back,
-0.76 m nose to tail. **Origin on the ground under him; feet rest on y = 0.** The body is the physical animal only:
-the game's shell fur supplies the fluff (see `_FURLEN`).
+The raccoon himself: a short, arched ("scrunched") spine under a round, domed back, a head that hangs down with
+almost no neck (the skull is the top of his head: between the ears there's only fur), long normal raccoon legs, a
+very short cottontail-like tail puff and his traced mask. 0.70 m tall at the arch of the back, 0.76 m nose to tail.
+**Origin on the ground under him; feet rest on y = 0.** The body is the physical animal only: the game's shell fur
+supplies the fluff (see `_FURLEN`, `_FURCOMB`).
 
 * One **skinned** mesh `JimothyBody` (material `Fur`, 13,000 tris): `baseColorTexture` 2048² JPEG (UV islands on the
-  head get 2.6× the texel density so the mask is crisp), **no vertex colours**, and a float attribute **`_FURLEN`**
-  (three.js `_furlen`): shell-fur length as a multiple of Fur.ts's FUR_LENGTH (long belly under-fluff and cheek
-  ruffs ~1.4–1.8, back 1.0, face 0.1–0.3, lower legs ~0.2, paws 0.12, soles 0).
+  head get 2.6× the texel density so the mask is crisp), **no vertex colours**, and two custom attributes:
+  * **`_FURLEN`** (float; three.js `_furlen`): shell-fur length as a multiple of Fur.ts's FUR_LENGTH: a long
+    under-fluff hanging from the belly and lower flanks (up to ~3), cheek ruffs ~1.4, back and crown 1.0, face
+    0.1–0.3, lower legs ~0.2, paws 0.12, soles 0; everything in uneven patches (±30 %) for his rather disorderly coat.
+  * **`_FURCOMB`** (vec3, model space; three.js `_furcomb`): the direction the fur lies in, as the lean of the shell
+    tips per unit of fur length: back along the body, down on the belly fringe and legs, plus random per-patch leans.
+    (Blender's glTF exporter writes custom vector attributes without its Z-up → Y-up conversion, so build_jimothy.py
+    stores it in game space.)
 * Rigid children of the `Head` bone: `EyeL`/`EyeR` (pivot = eye centre, r = 0.011, material `Eye`; each has an
   `EyeLGlint`/`EyeRGlint` child, `EyeHighlight`) and `Nose` (`Nose`).
 * **Every bone's rest rotation is identity** (they point up in Blender with roll 0), so each bone's local axes are the

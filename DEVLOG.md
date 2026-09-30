@@ -246,3 +246,20 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
   (the ball model's face wash, now as the real raccoon move).
 * Carried things ride low on his back; when dropped or thrown they're lifted clear of his round collider first (else
   the physics shoved them away: a regression from the lower ride height that broke feeding Mom and crow trades).
+
+## Jimothy's shape and coat, round 2 (from the human)
+* **No body above his head**: the neck used to run over the top of his skull, a 5 cm hump between the ears that
+  read as a big forehead. The neck now comes down from the withers into the back of the skull; the skull is the top
+  of his head, and the crown has a proper coat of fur instead (his ears stand up out of it, as in the photos).
+* **A round back**: the back was a narrow ridge along the spine sitting on the wider ribs and belly (a bell-shaped
+  cross-section, with a drop on either side of the spine). It's now one dome swept along the same spine line (the
+  approved side profile is unchanged): rounded on top, widest low down.
+* **Belly fur that hangs down**: a long, straggly under-fluff from the belly down the lower flanks (up to ~10 cm),
+  combed downward, a little lighter, denser toward its ends so it reads as a hanging fringe.
+* **A disorderly coat**: fur length varies in random patches (±30 %), a new per-vertex comb direction lays the fur
+  back along the body with random per-patch leans, and ~4 cm tufts end at slightly different lengths. Long fur gets
+  more shells so its layers don't gap.
+* **Stroll key**: hold X to walk at his real, filmed pace (0.65 m/s); on a gamepad, tilt the stick gently.
+* **Animation**: planted feet pivot on the ball of the foot / the palm as the heel lifts (they used to slide back),
+  he runs lower and quicker with brief airborne moments at walking speed (a running pace), and his feet step in
+  place when he turns on the spot.

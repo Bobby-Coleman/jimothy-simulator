@@ -9,6 +9,8 @@ pose, plus rigid eyes, catchlights and nose parented to the Head bone.
 * Texture: smart-UV islands (the head's islands get extra texel density so the mask stays crisp), painted by
   evaluating jimothy_anatomy.paint() at every texel's 3D point, then dilated so mip levels don't bleed at seams.
 * `_FURLEN` vertex attribute: shell-fur length as a multiple of the game's FUR_LENGTH (three.js: `_furlen`).
+* `_FURCOMB` vertex attribute (vec3, model space): the direction the fur lies in, as a lean of the shell tips per
+  unit of fur length (three.js: `_furcomb`): back along the body, down on the belly fringe and legs, tousled per patch.
 * Rig: every bone points straight up in Blender, so in glTF / three.js every joint's rest rotation is IDENTITY and its
   local axes are the model's (+X his left, +Y up, +Z forward). Poses are plain Euler angles in the model frame:
   rotation.x > 0 swings a leg's lower end backward, like the round model's limbs.
@@ -488,9 +490,11 @@ def calibrate(out_dir):
     V = m.V
     N = rlib.sdf_grad(sdf, V, 1e-3)
     N /= np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-9)
-    L = A.fur_length(V, N, eyes, 'photo2') * 0.035
+    R = A.fur_regions(V, N, eyes, 'photo2')
+    L = A.fur_length(V, N, eyes, 'photo2', R) * 0.035
+    C = A.fur_comb(V, N, eyes, 'photo2', R)
     h = 0.85
-    Vf = V + N * (L * h)[:, None] - np.array([0, 1.0, 0]) * (L * 0.5 * h * h)[:, None]
+    Vf = V + N * (L * h)[:, None] + C * (L * h * h)[:, None]
     F = [(f[0], f[1], f[2]) for f in m.F] + [(f[0], f[2], f[3]) for f in m.F]
     clay = rlib.make_material('clay', '#8a8580', rough=0.8)
     skin = mesh_object('Skin', V, F, clay)
@@ -529,8 +533,12 @@ def main():
         print('   bone %-9s parent %-9s at (%.3f, %.3f, %.3f)' % (n, par, *p))
     dm, N, sdf = build_mesh(eyes)
     V, F = dm.V, [tuple(f) for f in dm.F]
-    furlen = A.fur_length(V, N, eyes, POSE)
-    log('fur length: min %.2f max %.2f mean %.2f' % (furlen.min(), furlen.max(), furlen.mean()))
+    R = A.fur_regions(V, N, eyes, POSE)
+    furlen = A.fur_length(V, N, eyes, POSE, R)
+    furcomb = A.fur_comb(V, N, eyes, POSE, R)
+    log('fur length: min %.2f max %.2f mean %.2f; comb |c| max %.2f mean %.2f' % (
+        furlen.min(), furlen.max(), furlen.mean(), np.linalg.norm(furcomb, axis=1).max(), np.linalg.norm(furcomb, axis=1).mean()))
+    log('comb of vertex 0 (game space): %s' % np.round(furcomb[0], 4).tolist())
     names, top, Wt = skin_weights(V, F, eyes)
     log('skin weights done')
 
@@ -542,6 +550,11 @@ def main():
     body.data.materials.append(fur_material(img))
     at = body.data.attributes.new('_FURLEN', 'FLOAT', 'POINT')
     at.data.foreach_set('value', furlen.astype(np.float32))
+    # (the glTF exporter writes custom vector attributes as they are, without its Z-up to Y-up conversion, so this is
+    # stored in game / glTF space)
+    cb = furcomb.astype(np.float32)
+    ac = body.data.attributes.new('_FURCOMB', 'FLOAT_VECTOR', 'POINT')
+    ac.data.foreach_set('vector', cb.ravel())
     groups = {n: body.vertex_groups.new(name=n) for n in names}
     for vi in range(len(V)):
         for j in range(4):

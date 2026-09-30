@@ -349,6 +349,7 @@ const CONTROLS: [string, string[], string[]][] = [
   ['Waddle', ['WASD'], ['LS']],
   ['Look around', ['Mouse'], ['RS']],
   ['Sprint', ['Shift'], ['LT']],
+  ['Stroll at his real pace (hold; on a pad, tilt the stick gently)', ['X'], []],
   ['Jump / climb (hold against walls)', ['Space'], ['A']],
   ['Grabby Hands: grab, drag, steal', ['E', 'LMB'], ['X', 'RT']],
   ['Bonk (throws what you carry)', ['F', 'RMB'], ['RB']],

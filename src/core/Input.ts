@@ -3,6 +3,7 @@ import * as THREE from 'three';
 export type Action =
   | 'jump'
   | 'sprint'
+  | 'stroll'
   | 'grab'
   | 'bonk'
   | 'wash'
@@ -25,6 +26,7 @@ const KEYMAP: Record<string, Action> = {
   KeyQ: 'roll',
   KeyZ: 'flop',
   KeyC: 'chitter',
+  KeyX: 'stroll',
   Tab: 'objectives',
   Escape: 'pause',
   KeyP: 'pause',
