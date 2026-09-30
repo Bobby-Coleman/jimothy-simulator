@@ -30,6 +30,11 @@ export interface HeadAnchors {
   scale: number;
   /** Head's rest position in the model-root space (accessories.glb nodes are authored in model space). */
   modelOffset: THREE.Vector3;
+  /**
+   * The walking (four-legged) Jimothy: accessories.glb is authored for the round head, so everything is refitted to
+   * these anchors, hats tilted forward by `tilt` with his down-turned head and glasses turned down by `faceTilt`.
+   */
+  quad?: { tilt: number; faceTilt: number; hatWidth: number; hatBase: THREE.Vector3 };
 }
 
 const REF_EYE_SEP = 0.186;
@@ -83,6 +88,13 @@ export function headAnchors(model: JimothyModel): HeadAnchors | null {
   if (!head) return null;
   const cached = anchorCache.get(head);
   if (cached) return cached;
+  if (model.quad) {
+    const q = model.quad.headAnchors();
+    const a: HeadAnchors = { head, crown: q.crown, eyeMid: q.eyeMid, eyeSep: q.eyeSep, eyeR: q.eyeR, earMid: q.earMid, center: q.center,
+      radius: q.radius, scale: q.scale, modelOffset: new THREE.Vector3(), quad: { tilt: q.tilt, faceTilt: q.faceTilt, hatWidth: q.hatWidth, hatBase: q.hatBase } };
+    anchorCache.set(head, a);
+    return a;
+  }
 
   // Measure in rest pose, unscaled (bobblehead may be active)
   const savedQ = head.quaternion.clone();
@@ -212,6 +224,7 @@ export function glbAccessory(names: string[], kind: FitKind, a: HeadAnchors): TH
   g.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(g);
   if (box.isEmpty()) return g;
+  if (a.quad) return fitToQuad(g, clone, kind, a, box);
   const size = box.getSize(new THREE.Vector3());
   const c = box.getCenter(new THREE.Vector3());
   let expected: THREE.Vector3;
@@ -233,6 +246,67 @@ export function glbAccessory(names: string[], kind: FitKind, a: HeadAnchors): TH
   const anchor = kind === 'hat' ? a.crown.clone().add(new THREE.Vector3(0, (size.y * s) / 2, 0)) : expected;
   clone.position.add(anchor.sub(c.multiplyScalar(s)));
   return g;
+}
+
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+
+/** Face-plane normal of the walking Jimothy's head (head-local): 15° below horizontal. */
+function faceNormal(a: HeadAnchors) {
+  return new THREE.Vector3(0, 0, 1).applyAxisAngle(X_AXIS, a.quad?.faceTilt ?? 0);
+}
+
+/**
+ * Refit a round-head accessory (authored for the ball) to the walking Jimothy's head: scaled to his head, hats sat on
+ * the crown tilted forward, glasses on the face plane, helmets round the whole head. `g` holds `clone`; `box` is
+ * the clone's bounds in g's space.
+ */
+function fitToQuad(g: THREE.Object3D, clone: THREE.Object3D, kind: FitKind, a: HeadAnchors, box: THREE.Box3) {
+  const q = a.quad!;
+  const size = box.getSize(new THREE.Vector3());
+  const c = box.getCenter(new THREE.Vector3());
+  // how far a hat pulls down over the skull (fraction of its height below the crown)
+  const fit = HAT_FIT[g.name] ?? { w: 1, sink: 0.1 };
+  const piv = kind === 'hat' ? new THREE.Vector3(c.x, box.min.y + size.y * fit.sink, c.z) : c;
+  const width = kind === 'hat' || kind === 'face' ? size.x : Math.max(size.x, size.y, size.z);
+  const targetW = kind === 'hat' ? q.hatWidth * fit.w : kind === 'face' ? a.eyeSep * 2.35 : a.radius * 2.05;
+  const s = targetW / Math.max(1e-4, width);
+  clone.position.sub(piv).multiplyScalar(s);
+  clone.scale.multiplyScalar(s);
+  if (kind === 'hat') {
+    g.position.copy(q.hatBase);
+    g.rotation.x = q.tilt;
+  } else if (kind === 'face') {
+    g.position.copy(a.eyeMid).addScaledVector(faceNormal(a), a.eyeR + 0.006);
+    g.rotation.x = q.faceTilt;
+  } else {
+    // his head hangs forward from his (very short) neck, so the bowl's opening + collar face up-and-back: the collar
+    // rings the neck behind his ears instead of circling his snout (the glass is a sphere either way)
+    g.position.copy(a.center);
+    g.rotation.x = 2.3;
+  }
+  return g;
+}
+
+/** Per hat: width across the head relative to hatWidth (the grad cap's board is wider than its skull cap) and how far
+ * below the hat base its bottom sits (fraction of its height). */
+const HAT_FIT: Record<string, { w: number; sink: number }> = {
+  Beanie: { w: 1.05, sink: 0.06 },
+  GradCap: { w: 1.4, sink: 0.12 },
+  BaseballCap: { w: 1.08, sink: 0.1 },
+  Crown: { w: 0.8, sink: 0.04 },
+};
+
+/** Primitive accessories are built at the anchors; on the walking Jimothy turn them with his head (see fitToQuad). */
+function tiltForQuad(obj: THREE.Object3D, kind: FitKind, a: HeadAnchors): THREE.Object3D {
+  if (!a.quad || kind === 'helmet') return obj;
+  const pivot = kind === 'hat' ? a.crown : a.eyeMid;
+  const w = new THREE.Group();
+  w.name = obj.name;
+  w.position.copy(pivot);
+  w.rotation.x = kind === 'hat' ? a.quad.tilt : a.quad.faceTilt;
+  obj.position.sub(pivot);
+  w.add(obj);
+  return w;
 }
 
 // ------------------------------------------------------------------ attachment helper
@@ -281,13 +355,13 @@ export class Attachment {
   }
 
   /**
-   * Footprint of the hat where it sits on the head: the bounds (in the part's space) of the hat's lowest 45 %, as an
-   * ellipse in x/z with its floor at the hat's bottom edge. Fur rooted inside that column is hidden; the ears
-   * (separate parts) are never clipped, so they poke out.
+   * Footprint of the hat where it sits on the head: the bounds (in the hat's own frame, which may be tilted on the
+   * head) of the hat's lowest 45 %, as an ellipse in x/z with its floor at the hat's bottom edge. Fur rooted inside
+   * that column is hidden; the ears (separate parts) are never clipped, so they poke out.
    */
   private setupClip(model: JimothyModel, part: THREE.Object3D, obj: THREE.Object3D) {
     part.updateMatrixWorld(true);
-    const inv = new THREE.Matrix4().copy(part.matrixWorld).invert();
+    const inv = new THREE.Matrix4().copy(obj.matrixWorld).invert();
     const pts: THREE.Vector3[] = [];
     obj.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -311,7 +385,11 @@ export class Attachment {
     const rx = Math.max(0.01, size.x * 0.5 * 1.04);
     const rz = Math.max(0.01, size.z * 0.5 * 1.04);
     const floor = minY + (maxY - minY) * 0.04;
-    this.footprint = new THREE.Matrix4().makeScale(1 / rx, 1, 1 / rz).multiply(new THREE.Matrix4().makeTranslation(-c.x, -floor, -c.z));
+    // hat frame → footprint, preceded by part → hat frame (the hat is a direct child of the part)
+    this.footprint = new THREE.Matrix4()
+      .makeScale(1 / rx, 1, 1 / rz)
+      .multiply(new THREE.Matrix4().makeTranslation(-c.x, -floor, -c.z))
+      .multiply(new THREE.Matrix4().copy(obj.matrix).invert());
     const parts = modelParts(model);
     const skip = new Set([parts.EarL, parts.EarR, obj].filter(Boolean) as THREE.Object3D[]);
     this.clipped = [];
@@ -323,6 +401,9 @@ export class Attachment {
     visit(part);
     // Jimothy is mostly one round body: its fur reaches up around the head and would poke through the hat too
     if (parts.Body && hasFurShells(parts.Body) && !this.clipped.includes(parts.Body)) this.clipped.push(parts.Body);
+    // the walking Jimothy is one skinned mesh (head included)
+    const sk = model.quad?.skinned;
+    if (sk && hasFurShells(sk) && !this.clipped.includes(sk)) this.clipped.push(sk);
     this.updateClip(part);
   }
 
@@ -330,6 +411,15 @@ export class Attachment {
     if (!this.footprint || !this.clipped.length) return;
     const inv = _m.copy(part.matrixWorld).invert();
     for (const mesh of this.clipped) {
+      const sk = mesh as THREE.SkinnedMesh;
+      const bi = sk.isSkinnedMesh ? sk.skeleton.bones.indexOf(part as THREE.Bone) : -1;
+      if (bi >= 0) {
+        // skinned: shells clip on bind-pose positions; a head vertex's bind → head-bone space map is constant
+        // (inverse bind matrix of the bone × the mesh's bind matrix)
+        _clip.multiplyMatrices(sk.skeleton.boneInverses[bi], sk.bindMatrix).premultiply(this.footprint);
+        setFurClip(mesh, _clip);
+        continue;
+      }
       // mesh object space → part space → footprint space (a relative transform, so a stale matrixWorld can't lag)
       _clip.multiplyMatrices(inv, mesh.matrixWorld).premultiply(this.footprint);
       setFurClip(mesh, _clip);
@@ -356,7 +446,7 @@ export const accessoryDebug = { forcePrimitive: false };
 export function glbOr(names: string[], kind: FitKind, a: HeadAnchors, fallback: () => THREE.Object3D) {
   const g = accessoryDebug.forcePrimitive ? null : glbAccessory(names, kind, a);
   if (g) return { obj: g, glb: true };
-  return { obj: fallback(), glb: false };
+  return { obj: tiltForQuad(fallback(), kind, a), glb: false };
 }
 
 // ------------------------------------------------------------------ primitive accessories

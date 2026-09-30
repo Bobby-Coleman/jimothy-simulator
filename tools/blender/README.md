@@ -1,19 +1,26 @@
 # tools/blender — procedural raccoons & accessories
 
-Every model in `public/assets/models/{jimothy,danny,slopothy,mom,kit,accessories}.glb` is generated
+Every model in `public/assets/models/{jimothy,jimothy_ball,danny,slopothy,mom,kit,accessories}.glb` is generated
 from scratch by the Python scripts in this folder, running inside Blender 5.2 LTS (headless).
 No downloaded or third-party geometry/textures: shapes are numpy SDFs + parametric tubes/spheres,
-fur patterns are procedural vertex colours. Output is deterministic (fixed seeds).
+fur patterns are procedural vertex colours (the walking Jimothy's are baked into a texture). Output is deterministic
+(fixed seeds).
 
 ## Regenerate
 
 ```sh
 BLENDER="C:/Program Files/Blender Foundation/Blender 5.2/blender.exe"
 
+# the walking Jimothy -> public/assets/models/jimothy.glb (~50 s; previews jimothy_views/_face/_posed.png)
+"$BLENDER" -b --factory-startup -P tools/blender/build_jimothy.py -- [--no-render] [--tris 13000] [--tex 2048]
+#   --calibrate: photo-pose silhouettes (bare skin, skin + shell fur) in reference/frames/calib/ to lay over the
+#   side-on reference photo (the photo itself is not in the repo)
+
 # raccoons -> public/assets/models/*.glb  (+ preview PNGs in tools/blender/renders/)
+# ('jimothy' builds jimothy_ball.glb: Jimothy rolled up into a ball, his rolling form)
 "$BLENDER" -b --factory-startup -P tools/blender/build_raccoons.py -- [--only jimothy,danny,slopothy,mom,kit] [--no-render]
 
-# accessories -> public/assets/models/accessories.glb (its preview render imports jimothy.glb, so build that first)
+# accessories -> public/assets/models/accessories.glb (its preview render imports jimothy_ball.glb, so build that first)
 "$BLENDER" -b --factory-startup -P tools/blender/build_accessories.py -- [--no-render]
 
 # validate: parses the GLB JSON (what three.js sees) + re-imports into Blender, prints node tree,
@@ -29,7 +36,9 @@ Previews land in `tools/blender/renders/` (gitignored): `<model>_views.png` (fro
 | file | contents |
 |---|---|
 | `rlib.py` | shared library: SDF primitives + surface-nets mesher, tubes/lofts/spheres, vectorised noise, a game-space scene graph that becomes Blender objects, vertex painting, materials, GLB export, studio preview renderer |
-| `build_raccoons.py` | round-raccoon builder (Jimothy, Danny, Slopothy variants) and quadruped builder (Mom, Kit) |
+| `jimothy_anatomy.py` | the real Jimothy's body, fitted to reference footage: skeleton, SDF sculpt, traced face markings, colours, per-vertex shell-fur length (no bpy) |
+| `build_jimothy.py` | builds `jimothy.glb` from the anatomy: mesh, UVs + baked texture, fur lengths, rig + skin weights |
+| `build_raccoons.py` | round-raccoon builder (Jimothy's rolled-up ball, Danny, Slopothy variants) and quadruped builder (Mom, Kit) |
 | `build_accessories.py` | the six mutator cosmetics, authored in Jimothy's Head space |
 | `validate_glb.py` | GLB checker (see above) |
 
@@ -51,10 +60,44 @@ Previews land in `tools/blender/renders/` (gitignored): `<model>_views.png` (fro
   The transform is on the group, so animation works the same.
 * Modifiers applied, normals exported, no animations, no UVs (see caveats).
 
-## Jimothy — `jimothy.glb` (13,783 triangles)
+## Jimothy — `jimothy.glb` (14,240 triangles): the real, walking Jimothy
+
+The raccoon himself: a short, arched ("scrunched") spine, a head that hangs down with almost no neck, long normal
+raccoon legs, a very short cottontail-like tail puff and his traced mask. 0.70 m tall at the arch of the back,
+0.76 m nose to tail. **Origin on the ground under him; feet rest on y = 0.** The body is the physical animal only:
+the game's shell fur supplies the fluff (see `_FURLEN`).
+
+* One **skinned** mesh `JimothyBody` (material `Fur`, 13,000 tris): `baseColorTexture` 2048² JPEG (UV islands on the
+  head get 2.6× the texel density so the mask is crisp), **no vertex colours**, and a float attribute **`_FURLEN`**
+  (three.js `_furlen`): shell-fur length as a multiple of Fur.ts's FUR_LENGTH (long belly under-fluff and cheek
+  ruffs ~1.4–1.8, back 1.0, face 0.1–0.3, lower legs ~0.2, paws 0.12, soles 0).
+* Rigid children of the `Head` bone: `EyeL`/`EyeR` (pivot = eye centre, r = 0.011, material `Eye`; each has an
+  `EyeLGlint`/`EyeRGlint` child, `EyeHighlight`) and `Nose` (`Nose`).
+* **Every bone's rest rotation is identity** (they point up in Blender with roll 0), so each bone's local axes are the
+  model's: +X his left, +Y up, +Z forward. Pose with plain Euler angles: +X rotation pitches a leg's lower end / the
+  nose down-and-back (same sense as the ball's limbs).
+
+| bone | parent | joint (model space) |
+|---|---|---|
+| `Hips` | – | (0, 0.452, −0.187) pelvis |
+| `Spine1` → `Spine2` → `Chest` → `Neck` | chain | along the arched spine: (0, .572, −.074), (0, .617, .063), (0, .598, .185), (0, .563, .261) |
+| `Head` | Neck | (0, 0.530, 0.262) back of the skull |
+| `Jaw` | Head | (0, 0.440, 0.318) hinge (chitter) |
+| `EarL`/`EarR` | Head | (±0.084, 0.574, 0.318) ear bases |
+| `ScapulaL/R` → `ArmL/R` → `ForearmL/R` → `HandL/R` | Chest | scapula top (±.06, .618, .159), shoulder, elbow, wrist |
+| `ThighL/R` → `ShinL/R` → `FootL/R` → `ToesL/R` | Hips | hip (±.096, .435, −.136), knee, ankle, ball of the foot |
+| `Tail` | Hips | (0, 0.469, −0.238) sacrum; the puff |
+
+Skin weights come from the anatomy (each vertex belongs softly to its body part, then to the nearest bones), smoothed
+over the mesh, 4 influences. The game animates it procedurally (`src/player/JimothyQuad.ts`: two-bone leg IK, gaits,
+carrying in a paw / the mouth / hugged while standing).
+
+## Jimothy rolled up — `jimothy_ball.glb` (13,783 triangles): the rolling form
 
 A 0.73 m ball (body ellipsoid radii x 0.365 / y 0.35 / z 0.378) with the face on the front-upper part, no neck,
-stubby socked legs, 5-fingered hands and a 0.76 m ringed tail (5 rings + dark tip).
+stubby socked legs, 5-fingered hands and a short, fat 0.26 m ringed tail stub (2 rings + dark tip; the real Jimothy's
+tail is a very short puff). (Built by `build_raccoons.py --only jimothy`; the pivot table below predates the short
+tail, whose segment pivots are now closer together.)
 Origin = centre of the body sphere; feet/hand bottoms at y = −0.42.
 
 | node | parent | pivot (Jimothy space) | notes |

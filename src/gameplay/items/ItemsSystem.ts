@@ -204,6 +204,12 @@ export class ItemsSystem implements System {
     const t = now - s.t0;
     const w = Math.min(1, t / 0.25) * Math.min(1, (s.until - now) / 0.35);
     const shake = t > 1.2 ? Math.sin(t * 9) * 0.22 * w : 0;
+    // the walking Jimothy sits up and stares at his paws (his animator poses it)
+    if (pl.model.quad) {
+      pl.model.quad.stareW = w;
+      pl.model.quad.stareShake = shake;
+      return;
+    }
     const add = (part: THREE.Object3D | undefined, x: number, y: number, z: number) => {
       if (!part) return;
       _e.set(x, y, z, 'XYZ');

@@ -536,10 +536,10 @@ def build(render=True):
 
 
 def render_on_jimothy():
-    """Fresh scene: import jimothy.glb + accessories.glb, parent each accessory to Head (identity)."""
+    """Fresh scene: import jimothy_ball.glb + accessories.glb, parent each accessory to Head (identity)."""
     import bpy
     rlib.reset_scene()
-    bpy.ops.import_scene.gltf(filepath=os.path.join(MODELS_DIR, 'jimothy.glb'))
+    bpy.ops.import_scene.gltf(filepath=os.path.join(MODELS_DIR, 'jimothy_ball.glb'))
     jim = {o.name: o for o in bpy.context.scene.objects}
     bpy.ops.import_scene.gltf(filepath=os.path.join(MODELS_DIR, 'accessories.glb'))
     acc = {o.name: o for o in bpy.context.scene.objects if o.name not in jim}

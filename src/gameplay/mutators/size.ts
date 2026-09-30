@@ -137,9 +137,10 @@ function sizeMutator(o: SizeOpts): MutatorImpl {
       const walkLike = p.mode === 'walk';
       if (o.physics) setCollider(p, p.mode === 'walk' ? 'big' : 'base');
 
-      // Carried items ride on top of the (resized) head instead of floating/clipping
+      // Carried items ride on top of the (resized) head instead of floating/clipping (the round model; the walking
+      // Jimothy's paw / mouth carry point already scales with him)
       const h = p.held;
-      if (h && h.kind === 'carry' && h.entity.body && h.entity.alive) {
+      if (h && h.kind === 'carry' && h.entity.body && h.entity.alive && !p.model.quad) {
         const size = (h.entity.data.size as THREE.Vector3 | undefined)?.y ?? 0.3;
         const f = p.forwardVec(_a);
         const target = _b.copy(p.position);

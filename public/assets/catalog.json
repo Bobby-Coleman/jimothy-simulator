@@ -1,7 +1,8 @@
 [
-  {"path":"assets/models/accessories.glb","kit":"custom","name":"accessories","size":[0.94,0.767,0.96],"min":[-0.47,-0.277,-0.58],"max":[0.47,0.49,0.38],"triangles":12448},
+  {"path":"assets/models/accessories.glb","kit":"custom","name":"accessories","size":[0.94,0.767,0.96],"min":[-0.47,-0.227,-0.44],"max":[0.47,0.54,0.52],"triangles":12448},
   {"path":"assets/models/danny.glb","kit":"custom","name":"danny","size":[0.826,0.901,1.763],"min":[-0.414,-0.471,-1.207],"max":[0.412,0.43,0.556],"triangles":13704},
-  {"path":"assets/models/jimothy.glb","kit":"custom","name":"jimothy","size":[0.726,0.808,1.552],"min":[-0.364,-0.421,-1.055],"max":[0.362,0.387,0.497],"triangles":13783},
+  {"path":"assets/models/jimothy_ball.glb","kit":"custom","name":"jimothy_ball","size":[0.726,0.808,1.089],"min":[-0.364,-0.421,-0.592],"max":[0.362,0.387,0.497],"triangles":13783},
+  {"path":"assets/models/jimothy.glb","kit":"custom","name":"jimothy","size":[0.368,0.701,0.756],"min":[-0.184,0,-0.336],"max":[0.184,0.701,0.42],"triangles":14240},
   {"path":"assets/models/kenney/blocky-characters/character-a.glb","kit":"blocky-characters","name":"character-a","size":[1.6,2.7,0.8],"min":[-0.8,0,-0.4],"max":[0.8,2.7,0.4],"triangles":72},
   {"path":"assets/models/kenney/blocky-characters/character-b.glb","kit":"blocky-characters","name":"character-b","size":[1.6,2.7,0.8],"min":[-0.8,0,-0.4],"max":[0.8,2.7,0.4],"triangles":72},
   {"path":"assets/models/kenney/blocky-characters/character-c.glb","kit":"blocky-characters","name":"character-c","size":[1.6,2.7,0.8],"min":[-0.8,0,-0.4],"max":[0.8,2.7,0.4],"triangles":72},

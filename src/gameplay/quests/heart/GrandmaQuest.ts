@@ -323,7 +323,8 @@ export class GrandmaQuest implements HeartQuest {
     const head = player?.model?.headPivot as THREE.Object3D | undefined;
     if (head) {
       head.updateMatrixWorld(true);
-      return head.localToWorld(out.set(0, 0.22, 0));
+      const quad = player?.model?.quad;
+      return head.localToWorld(quad ? out.copy(quad.headAnchors().crown) : out.set(0, 0.22, 0));
     }
     return out.copy(player.position).setY(player.position.y + 0.7);
   }

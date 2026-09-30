@@ -3,6 +3,7 @@ import type { Game, System } from '../core/Game';
 import type { Entity } from '../core/Entities';
 import { RAPIER, G, groups } from '../core/Physics';
 import { JimothyModel, type AnimState } from './JimothyModel';
+import { carryStyleFor, type CarryStyle } from './JimothyQuad';
 import type { CameraRig } from './CameraRig';
 
 export type PlayerMode = 'walk' | 'climb' | 'roll' | 'ragdoll' | 'swim' | 'hang';
@@ -62,6 +63,8 @@ function dampAngle(a: number, b: number, k: number, dt: number) {
 interface Held {
   entity: Entity;
   kind: 'carry' | 'drag';
+  /** How the walking Jimothy carries it: small in a paw, medium in his mouth, large hugged while standing up. */
+  style?: CarryStyle;
   localPoint?: THREE.Vector3;
   prevGroups: number[];
   since: number;
@@ -477,8 +480,10 @@ export class Jimothy implements System {
     const game = this.game;
     const inp = game.input;
     const wish = this.wishDir(new THREE.Vector3());
-    const sprint = inp.held('sprint');
-    const max = (sprint ? SPRINT_SPEED : WALK_SPEED) * this.speedMul;
+    // hugging something big while standing up = a slow waddle, no sprinting
+    const waddle = this.held?.kind === 'carry' && this.held.style === 'stand' && this.model.form === 'body';
+    const sprint = inp.held('sprint') && !waddle;
+    const max = (sprint ? SPRINT_SPEED : WALK_SPEED) * this.speedMul * (waddle ? 0.62 : 1);
     const v = this.body.linvel();
     let vx = v.x;
     let vz = v.z;
@@ -896,7 +901,8 @@ export class Jimothy implements System {
       return;
     }
     if (target.mass <= CARRY_MAX_MASS && (target.body.isDynamic() || target !== best)) {
-      this.held = { entity: target, kind: 'carry', prevGroups: this.setGroupsHeld(target, true), since: game.time };
+      const style = carryStyleFor(target.data.size as THREE.Vector3 | undefined);
+      this.held = { entity: target, kind: 'carry', style, prevGroups: this.setGroupsHeld(target, true), since: game.time };
       target.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
       target.data.heldByPlayer = true;
     } else {
@@ -947,6 +953,14 @@ export class Jimothy implements System {
       this.setGroupsHeld(e, false, h.prevGroups);
       const v = this.body.linvel();
       const f = this.forwardVec(_b);
+      if (thrown && this.model.quad) {
+        // the walking Jimothy tosses it up out of his mouth / paws: launch from above his head, like the round model
+        // always did (a mouth-height throw would hit every railing and wall edge)
+        const size = (e.data.size as THREE.Vector3 | undefined)?.y ?? 0.3;
+        _c.copy(this.position).add(_a.set(0, 0.42 + size * 0.5, 0)).addScaledVector(f, 0.06);
+        e.body.setTranslation({ x: _c.x, y: _c.y, z: _c.z }, true);
+        this.model.quad.throwT = 0;
+      }
       if (thrown) {
         const cam = game.get<CameraRig>('camera');
         const lift = cam ? THREE.MathUtils.clamp(-cam.pitch * 0.8 + 0.35, 0.15, 1.0) : 0.4;
@@ -982,12 +996,16 @@ export class Jimothy implements System {
     if (h.kind === 'carry') {
       const size = (e.data.size as THREE.Vector3 | undefined) ?? _c.set(0.3, 0.3, 0.3);
       let target: THREE.Vector3;
-      if (this.washing) {
+      // the walking Jimothy holds it in a paw, in his mouth or hugged to his chest (the model knows where those are)
+      const onModel = this.model.carryPoint(this.washing ? 'wash' : (h.style ?? 'mouth'), size, this.position, _a);
+      if (onModel) {
+        target = onModel;
+      } else if (this.washing) {
         target = _a.copy(this.position).addScaledVector(f, 0.52).add(_c.set(0, -0.12 + Math.sin(game.time * 24) * 0.04, 0));
       } else {
         target = _a.copy(this.position).add(_c.set(0, 0.42 + size.y * 0.5, 0)).addScaledVector(f, 0.06);
       }
-      if (this.mode === 'climb') target.addScaledVector(this.climbNormal, 0.3);
+      if (this.mode === 'climb' && !onModel) target.addScaledVector(this.climbNormal, 0.3);
       _q.setFromAxisAngle(UP, this.facing + Math.sin(game.time * 3) * 0.08);
       e.body.setNextKinematicTranslation({ x: target.x, y: target.y, z: target.z });
       e.body.setNextKinematicRotation({ x: _q.x, y: _q.y, z: _q.z, w: _q.w });
@@ -1304,6 +1322,7 @@ export class Jimothy implements System {
       vy: v.y,
       grounded: this.grounded,
       carrying: !!this.held && this.held.kind === 'carry',
+      carryStyle: this.held && this.held.kind === 'carry' ? (this.held.style ?? 'mouth') : null,
       washing: this.washing,
       flop: this.mode === 'ragdoll',
       time: game.time,

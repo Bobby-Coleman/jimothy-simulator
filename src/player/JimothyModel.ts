@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Assets } from '../core/Assets';
 import { applyFur } from './Fur';
 import { makeShadowOnly, shadowOnlyMaterial } from '../world/shadowOnly';
+import { JimothyQuad, type CarryStyle } from './JimothyQuad';
 
 export interface AnimState {
   mode: string;
@@ -19,7 +20,27 @@ export interface AnimState {
   idleTime?: number;
   /** 0..1 night factor (eyeshine). */
   night?: number;
+  /** How the held thing is carried by the walking form (paw / mouth / standing up). */
+  carryStyle?: CarryStyle | null;
 }
+
+export type FormName = 'body' | 'ball';
+
+/** One of Jimothy's bodies: the four-legged walker, or the ball he tucks into to roll. */
+interface Form {
+  name: FormName;
+  /** What sits under the pivot (positioned so its feet rest on the collider's bottom). */
+  root: THREE.Object3D;
+  parts: Partial<Record<PartName, THREE.Object3D>>;
+  rest: Map<THREE.Object3D, THREE.Quaternion>;
+  restPos: Map<THREE.Object3D, THREE.Vector3>;
+  furMats: { mat: THREE.MeshStandardMaterial; base: THREE.Color }[];
+  eyeMats: THREE.MeshStandardMaterial[];
+  quad: JimothyQuad | null;
+}
+
+/** The walking model's ground (y = 0) sits this far below the collider centre (the pivot adds +0.02 while walking). */
+const BODY_OFFSET = new THREE.Vector3(0, -0.4, -0.03);
 
 type PartName =
   | 'Body'
@@ -53,8 +74,11 @@ const _q = new THREE.Quaternion();
 const damp = (a: number, b: number, k: number, dt: number) => a + (b - a) * (1 - Math.exp(-k * dt));
 
 /**
- * Jimothy's visual model + procedural animation.
- * Uses `assets/models/jimothy.glb` when available, otherwise a primitive placeholder with the same part names.
+ * Jimothy's visual model + procedural animation. He has two bodies:
+ * - `body`: the real, four-legged Jimothy (`assets/models/jimothy.glb`, skinned; animated by JimothyQuad)
+ * - `ball`: the round ball he tucks into to roll (`assets/models/jimothy_ball.glb`, rigid parts)
+ * Only the current one is attached to the pivot (so `pivot.children[0]` is always the visible model), and `parts`
+ * points at its parts. A primitive ball-shaped placeholder is used until the GLBs arrive.
  */
 export class JimothyModel {
   /** Placed at the physics body center each frame. */
@@ -74,6 +98,13 @@ export class JimothyModel {
   headPivot: THREE.Object3D | null = null;
   usingGlb = false;
   modelName = 'jimothy';
+  private forms: Partial<Record<FormName, Form>> = {};
+  private current: Form | null = null;
+  private wantForm: FormName = 'body';
+  /** The form on screen ('ball' while rolling, and for the placeholder). */
+  form: FormName = 'ball';
+  /** The walking form's animator (null until jimothy.glb has loaded). */
+  quad: JimothyQuad | null = null;
 
   constructor() {
     this.root.name = 'JimothyRoot';
@@ -81,69 +112,117 @@ export class JimothyModel {
     this.setModel(buildPlaceholder());
   }
 
-  async load(assets: Assets, path = 'assets/models/jimothy.glb') {
-    const m = await assets.tryModel(path);
-    if (!m) return false;
-    this.setModel(m);
-    this.usingGlb = true;
-    return true;
+  async load(assets: Assets) {
+    const [ball, body] = await Promise.all([assets.tryModel('assets/models/jimothy_ball.glb'), assets.tryModel('assets/models/jimothy.glb')]);
+    if (ball) this.addForm('ball', ball);
+    if (body && JimothyQuad.fits(body)) this.addForm('body', body);
+    else if (body) this.addForm('ball', body);
+    this.usingGlb = !!(ball || body);
+    this.setForm(this.wantForm);
+    return this.usingGlb;
   }
 
+  /** Replace the ball form (the placeholder, or a mutator's model). */
   setModel(model: THREE.Object3D) {
-    this.pivot.clear();
-    this.pivot.add(model);
-    this.parts = {};
-    this.rest.clear();
-    this.restPos.clear();
+    this.addForm('ball', model);
+    this.current = null;
+    this.setForm(this.wantForm);
+  }
+
+  /** Show the four-legged body or the rolling ball (falls back to whichever exists). */
+  setForm(name: FormName) {
+    this.wantForm = name;
+    const f = this.forms[name] ?? this.forms[name === 'body' ? 'ball' : 'body'];
+    if (!f || f === this.current) return;
+    if (this.current) this.pivot.remove(this.current.root);
+    this.pivot.add(f.root);
+    this.current = f;
+    this.form = f.name;
+    this.parts = f.parts;
+    this.rest = f.rest;
+    this.restPos = f.restPos;
+    this.furMats = f.furMats;
+    this.eyeMats = f.eyeMats;
+    this.quad = f.quad;
+    this.headPivot = this.parts.Head ?? null;
+    this.cur = {};
+  }
+
+  private addForm(name: FormName, model: THREE.Object3D) {
+    const old = this.forms[name];
+    if (old && old.root !== model) this.pivot.remove(old.root);
+    const f: Form = { name, root: model, parts: {}, rest: new Map(), restPos: new Map(), furMats: [], eyeMats: [], quad: null };
+    if (name === 'body') {
+      f.quad = new JimothyQuad(model);
+      model.position.copy(BODY_OFFSET);
+      f.parts = f.quad.parts() as Form['parts'];
+    } else {
+      model.traverse((o) => {
+        const n = o.name as PartName;
+        if (PART_NAMES.includes(n) && !f.parts[n]) f.parts[n] = o;
+      });
+    }
     model.traverse((o) => {
-      const n = o.name as PartName;
-      if (PART_NAMES.includes(n) && !this.parts[n]) this.parts[n] = o;
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
       }
     });
-    for (const p of Object.values(this.parts)) {
+    for (const p of Object.values(f.parts)) {
       if (!p) continue;
-      this.rest.set(p, p.quaternion.clone());
-      this.restPos.set(p, p.position.clone());
+      f.rest.set(p, p.quaternion.clone());
+      f.restPos.set(p, p.position.clone());
     }
-    this.headPivot = this.parts.Head ?? null;
     applyFur(model);
-    // Perf: one shadow-only sphere (+ a tail blob) instead of ~23 shadow-casting parts. He's round; so is his shadow.
+    // Perf: shadows come from one cheap caster per form: the ball's shadow-only sphere (+ a tail blob); the walking
+    // body's own skinned mesh (its long legs need a real silhouette). Everything else (fur shells, eyes, …) doesn't.
     model.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh && !m.userData.shadowOnly) m.castShadow = false;
+      if (m.isMesh && !m.userData.shadowOnly) m.castShadow = !!(f.quad && m === f.quad.skinned);
     });
-    const ball = makeShadowOnly(new THREE.Mesh(new THREE.SphereGeometry(0.37, 16, 12), shadowOnlyMaterial()));
-    ball.name = 'ShadowBall';
-    this.parts.Body ? this.parts.Body.add(ball) : this.pivot.add(ball);
-    const tail = this.parts.Tail2 ?? this.parts.Tail1;
-    if (tail) {
-      const blob = makeShadowOnly(new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), shadowOnlyMaterial()));
-      blob.scale.set(1, 1, 3.2);
-      blob.position.z = -0.12;
-      tail.add(blob);
+    if (!f.quad) {
+      const ball = makeShadowOnly(new THREE.Mesh(new THREE.SphereGeometry(0.37, 16, 12), shadowOnlyMaterial()));
+      ball.name = 'ShadowBall';
+      f.parts.Body ? f.parts.Body.add(ball) : model.add(ball);
+      const tail = f.parts.Tail2 ?? f.parts.Tail1;
+      if (tail) {
+        const blob = makeShadowOnly(new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), shadowOnlyMaterial()));
+        blob.scale.set(1, 1, 3.2);
+        blob.position.z = -0.12;
+        tail.add(blob);
+      }
     }
     // Collect materials for wetness / eyeshine effects (clone so we don't touch shared assets)
-    this.furMats = [];
-    this.eyeMats = [];
     model.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (!m.isMesh || Array.isArray(m.material)) return;
+      if (!m.isMesh || Array.isArray(m.material) || m.userData.furShell) return;
       const mat = m.material as THREE.MeshStandardMaterial;
       if (/^(Fur|Slop)/i.test(mat.name)) {
-        this.furMats.push({ mat, base: mat.color.clone() });
+        f.furMats.push({ mat, base: mat.color.clone() });
       } else if (/^Eye$/i.test(mat.name) || o.name === 'EyeL' || o.name === 'EyeR') {
         if (!mat.userData.eyeClone) {
           const c = mat.clone();
           c.userData.eyeClone = true;
           m.material = c;
-          this.eyeMats.push(c);
+          f.eyeMats.push(c);
         }
       }
     });
+    this.forms[name] = f;
+    if (this.current?.name === name) this.current = null;
+  }
+
+  /**
+   * Where a carried thing's centre goes (world space) for the walking form, with the collider centre at `center`
+   * (this frame's physics position: the pose is last frame's but the position is current, so it doesn't lag behind at
+   * a run). Null while the ball is showing. `style` 'wash' = between the front paws while scrubbing.
+   */
+  carryPoint(style: CarryStyle | 'wash', size: THREE.Vector3 | undefined, center: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 | null {
+    if (!this.quad) return null;
+    this.quad.carryPoint(style, size, out);
+    this.root.worldToLocal(out);
+    return out.multiplyScalar(this.root.scale.x).add(center);
   }
 
   private furMats: { mat: THREE.MeshStandardMaterial; base: THREE.Color }[] = [];
@@ -165,10 +244,16 @@ export class JimothyModel {
   swipe() {
     this.swipeT = 0;
     this.swipeSide = -this.swipeSide;
+    for (const f of Object.values(this.forms)) {
+      if (!f?.quad) continue;
+      f.quad.swipeT = 0;
+      f.quad.swipeSide = this.swipeSide;
+    }
   }
   /** Both paws snatch forward (grab landed). */
   reach() {
     this.reachT = 0;
+    for (const f of Object.values(this.forms)) if (f?.quad) f.quad.reachT = 0;
   }
 
   /** 0 = dry, 1 = soaked (darker, flatter fur). */
@@ -196,6 +281,32 @@ export class JimothyModel {
   }
 
   animate(dt: number, s: AnimState) {
+    // the ball while rolling, the real Jimothy otherwise
+    this.setForm(s.mode === 'roll' ? 'ball' : 'body');
+    if (this.quad) {
+      this.quad.carry = s.carryStyle ?? null;
+      this.quad.animate(dt, s);
+      this.animateShared(dt, s);
+      return;
+    }
+    this.animateBall(dt, s);
+    this.animateShared(dt, s);
+  }
+
+  /** Squash & stretch and eyeshine (both forms). */
+  private animateShared(dt: number, s: AnimState) {
+    this.squashV += (-this.squashX * 160 - this.squashV * 14) * dt;
+    this.squashX += this.squashV * dt;
+    const sq = THREE.MathUtils.clamp(this.squashX, -0.35, 0.35);
+    this.pivot.scale.set(1 + sq * 0.55, 1 - sq, 1 + sq * 0.55);
+    const night = s.night ?? 0;
+    for (const m of this.eyeMats) {
+      m.emissive.setRGB(0.55, 0.62, 0.28);
+      m.emissiveIntensity = night * 0.9;
+    }
+  }
+
+  private animateBall(dt: number, s: AnimState) {
     const t = s.time;
     const moving = s.speed > 0.3;
     const amp = Math.min(s.speed / 4.5, 1.25);
@@ -382,19 +493,6 @@ export class JimothyModel {
     if (mouth) {
       const open = s.sinceChitter < 0.7 ? Math.abs(Math.sin(s.sinceChitter * 34)) * (1 - s.sinceChitter / 0.7) : 0;
       mouth.scale.set(1 + open * 0.3, 1 + open * 2.2, 1);
-    }
-
-    // Squash & stretch spring
-    this.squashV += (-this.squashX * 160 - this.squashV * 14) * dt;
-    this.squashX += this.squashV * dt;
-    const sq = THREE.MathUtils.clamp(this.squashX, -0.35, 0.35);
-    this.pivot.scale.set(1 + sq * 0.55, 1 - sq, 1 + sq * 0.55);
-
-    // Eyeshine: raccoon eyes catch the light at night
-    const night = s.night ?? 0;
-    for (const m of this.eyeMats) {
-      m.emissive.setRGB(0.55, 0.62, 0.28);
-      m.emissiveIntensity = night * 0.9;
     }
 
     // Tail chain

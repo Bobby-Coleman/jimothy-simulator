@@ -210,3 +210,20 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * Music: "A respectable amount of Bounce" removed (file, playlist, credits). Checking/unchecking a track switches
   to "My playlist"; the title screen starts on a random checked track; a pause is remembered across visits.
   Old saves are migrated (the playlist indices shifted).
+
+## The real Jimothy (from the human's reference footage)
+* **New body**: Jimothy is no longer a ball. `jimothy.glb` is the real animal: a short, arched ("scrunched") spine,
+  a head that hangs down with almost no neck (he can barely lift it), long normal raccoon legs, a very short
+  cottontail-like tail puff and his mask traced from video frames. Fitted in Blender to a side-on photo (skeleton
+  first, then the physical body; fur is NOT modelled) and approved from renders before building the game model.
+* **Game model**: one skinned mesh (13k tris) with a 2048² baked texture (crisp mask), rigid eyes/nose, 26 bones with
+  identity rest rotations, and a per-vertex `_FURLEN` attribute: shell fur is long under the belly and on the cheeks,
+  very short on the face, short on the legs. Fur.ts now furs skinned meshes (instanced SkinnedMesh shells).
+* **Rolling**: tucking into a roll swaps to the round model (`jimothy_ball.glb`, now with a short fat tail) behind
+  the existing squash/dust "whoomp"; he pops back out as himself.
+* **Animation** (`JimothyQuad.ts`): two-bone IK legs, walk → trot → bound with speed (a first pass; the walk cycle
+  measured from the footage comes next), jumping, swimming (dog-paddle), climbing, hanging, ragdoll, washing, bonk,
+  chitter (jaw), sniffing the ground when idle, and sitting up to stare at his empty paws.
+* **Carrying by size**: small things in one paw (three-legged walk), medium in his mouth, big things hugged to his
+  chest standing up (a slower waddle). Throws launch from above his head as before.
+* **Hats and glasses** refit to the new head (tilted with it; the fur under hats is clipped on the skinned mesh).

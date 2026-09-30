@@ -4,6 +4,12 @@ import * as THREE from 'three';
  * Shell fur: for every mesh whose material is named "Fur…" (or "Slop…"), render SHELLS extra copies pushed out
  * along the normals with an alpha-tested strand pattern. All shells of a mesh are ONE instanced draw call
  * (the shell height comes from gl_InstanceID), so fur costs 1 extra draw per fur mesh.
+ *
+ * Skinned meshes (the walking Jimothy) get a SkinnedMesh shell bound to the same skeleton, drawn instanced through
+ * an InstancedBufferGeometry that shares the base geometry's buffers. Shells are offset along the bind-pose normal
+ * before skinning, so the fur follows the pose.
+ *
+ * Per-vertex length: a float attribute `_furlen` (glTF `_FURLEN`) multiplies the fur length (0 = bare skin).
  */
 const DEFAULT_SHELLS = 10;
 const FUR_LENGTH = 0.035;
@@ -59,10 +65,11 @@ function addBaseRim(base: THREE.MeshStandardMaterial) {
 export const furSettings = { shells: DEFAULT_SHELLS };
 
 /**
- * `clip` (optional): matrix from the fur mesh's object space into a hat's "footprint" space; shells whose root lies
- * under the hat (y > 0 and x² + z² < 1) are discarded, so fur doesn't poke through beanies.
+ * `clip` (optional): matrix from the fur mesh's object space (bind space for skinned meshes) into a hat's "footprint"
+ * space; shells whose root lies under the hat (y > 0 and x² + z² < 1) are discarded, so fur doesn't poke through beanies.
+ * `lenAttr`: the geometry has a per-vertex `_furlen` multiplier.
  */
-function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number, clip?: { value: THREE.Matrix4 }): THREE.MeshStandardMaterial {
+function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number, clip?: { value: THREE.Matrix4 }, lenAttr = false): THREE.MeshStandardMaterial {
   const m = base.clone();
   m.name = base.name + '_shell';
   m.transparent = false;
@@ -82,7 +89,8 @@ function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number, cli
         '#include <common>',
         `#include <common>
          uniform float uShells; uniform float uFurLen; uniform vec3 uFurWind; uniform float uFurTime; uniform float uFurScale;
-         varying vec3 vFurObjPos; varying float vShellH;
+         varying vec3 vFurObjPos; varying float vShellH; varying float vFurLen;
+         ${lenAttr ? 'attribute float _furlen;' : ''}
          ${clip ? 'uniform mat4 uFurClip; varying vec3 vFurClip;' : ''}`,
       )
       .replace(
@@ -92,21 +100,24 @@ function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number, cli
          vFurObjPos = position;
          ${clip ? 'vFurClip = (uFurClip * vec4(position, 1.0)).xyz;' : ''}
          vShellH = shellH;
-         float furLen = uFurLen * uFurScale;
-         transformed += normalize(objectNormal) * shellH * furLen;
+         vFurLen = ${lenAttr ? '_furlen' : '1.0'};
+         float furLen = uFurLen * uFurScale * vFurLen;
+         // bind-pose normal (objectNormal is already skinned here), so skinned shells follow the pose
+         transformed += normalize(normal) * shellH * furLen;
          transformed.y -= shellH * shellH * furLen * 0.5;
-         transformed += uFurWind * shellH * shellH * 0.02 * (0.6 + 0.4 * sin(uFurTime * 7.0 + position.x * 40.0));`,
+         transformed += uFurWind * shellH * shellH * 0.02 * vFurLen * (0.6 + 0.4 * sin(uFurTime * 7.0 + position.x * 40.0));`,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
         `#include <common>
-         uniform sampler2D uNoise; uniform vec3 uFurRim; varying vec3 vFurObjPos; varying float vShellH;
+         uniform sampler2D uNoise; uniform vec3 uFurRim; varying vec3 vFurObjPos; varying float vShellH; varying float vFurLen;
          ${clip ? 'varying vec3 vFurClip;' : ''}`,
       )
       .replace(
         '#include <alphatest_fragment>',
         `${clip ? 'if (vFurClip.y > 0.0 && dot(vFurClip.xz, vFurClip.xz) < 1.0) discard;' : ''}
+         if (vFurLen < 0.04) discard;
          vec3 fp = vFurObjPos * 260.0;
          float n1 = texture2D(uNoise, fp.xy / 128.0).r;
          float n2 = texture2D(uNoise, fp.yz / 128.0 + 0.37).r;
@@ -124,11 +135,28 @@ function makeShellMaterial(base: THREE.MeshStandardMaterial, shells: number, cli
          #include <opaque_fragment>`,
       );
   };
-  m.customProgramCacheKey = () => 'fur_instanced_' + shells + (clip ? '_clip' : '');
+  m.customProgramCacheKey = () => 'fur_instanced_' + shells + (clip ? '_clip' : '') + (lenAttr ? '_len' : '');
   return m;
 }
 
 const _ident = new THREE.Matrix4();
+const noRaycast = () => {};
+
+/** Instanced shell copy of a skinned mesh: shares its buffers and skeleton. */
+function skinnedShell(mesh: THREE.SkinnedMesh, mat: THREE.Material, shells: number) {
+  const g = mesh.geometry;
+  const ig = new THREE.InstancedBufferGeometry();
+  ig.index = g.index;
+  for (const [k, a] of Object.entries(g.attributes)) ig.setAttribute(k, a);
+  ig.instanceCount = shells;
+  ig.drawRange = { ...g.drawRange };
+  if (!g.boundingSphere) g.computeBoundingSphere();
+  ig.boundingSphere = g.boundingSphere!.clone();
+  const s = new THREE.SkinnedMesh(ig, mat);
+  s.bind(mesh.skeleton, mesh.bindMatrix);
+  s.bindMode = mesh.bindMode;
+  return s;
+}
 
 export function applyFur(root: THREE.Object3D, enabled = true) {
   const shells = furSettings.shells;
@@ -136,7 +164,7 @@ export function applyFur(root: THREE.Object3D, enabled = true) {
   const targets: THREE.Mesh[] = [];
   root.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (!m.isMesh || m.userData.furShell || (m as any).isInstancedMesh || (m as any).isSkinnedMesh) return;
+    if (!m.isMesh || m.userData.furShell || (m as any).isInstancedMesh) return;
     const mat = m.material as THREE.MeshStandardMaterial;
     if (!mat || Array.isArray(mat)) return;
     if (!/^(Fur|Slop)/i.test(mat.name)) return;
@@ -144,35 +172,45 @@ export function applyFur(root: THREE.Object3D, enabled = true) {
   });
   for (const mesh of targets) if ((mesh.material as THREE.MeshStandardMaterial).isMeshStandardMaterial) addBaseRim(mesh.material as THREE.MeshStandardMaterial);
   if (shells <= 0) return;
-  const matCache = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+  const matCache = new Map<string, THREE.MeshStandardMaterial>();
   for (const mesh of targets) {
     const base = mesh.material as THREE.MeshStandardMaterial;
-    let sm = matCache.get(base);
+    const lenAttr = !!mesh.geometry.getAttribute('_furlen');
+    const key = base.uuid + (lenAttr ? '_len' : '');
+    let sm = matCache.get(key);
     if (!sm) {
-      sm = makeShellMaterial(base, shells);
-      matCache.set(base, sm);
+      sm = makeShellMaterial(base, shells, undefined, lenAttr);
+      matCache.set(key, sm);
     }
-    const inst = new THREE.InstancedMesh(mesh.geometry, sm, shells);
-    for (let i = 0; i < shells; i++) inst.setMatrixAt(i, _ident);
-    inst.instanceMatrix.needsUpdate = true;
+    let inst: THREE.Mesh;
+    if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) {
+      inst = skinnedShell(mesh as THREE.SkinnedMesh, sm, shells);
+    } else {
+      const im = new THREE.InstancedMesh(mesh.geometry, sm, shells);
+      for (let i = 0; i < shells; i++) im.setMatrixAt(i, _ident);
+      im.instanceMatrix.needsUpdate = true;
+      inst = im;
+    }
     inst.userData.furShell = true;
     inst.userData.furBase = base;
     inst.userData.furShells = shells;
     inst.userData.furMat = sm;
+    inst.userData.furLenAttr = lenAttr;
     inst.castShadow = false;
     inst.receiveShadow = true;
     inst.frustumCulled = false; // bounding sphere of instanced mesh isn't updated for skinned-ish parts
     inst.renderOrder = 1;
+    inst.raycast = noRaycast;
     mesh.add(inst);
   }
 }
 
 /**
- * Hide the shell fur of `mesh` under a hat: `clip` maps the mesh's object space into the hat's footprint space
- * (see makeShellMaterial). Pass null to restore. No-op for meshes without shells (low quality).
+ * Hide the shell fur of `mesh` under a hat: `clip` maps the mesh's object space (bind space for skinned meshes) into
+ * the hat's footprint space (see makeShellMaterial). Pass null to restore. No-op for meshes without shells (low quality).
  */
 export function setFurClip(mesh: THREE.Object3D, clip: THREE.Matrix4 | null) {
-  const inst = mesh.children.find((c) => c.userData.furShell) as THREE.InstancedMesh | undefined;
+  const inst = mesh.children.find((c) => c.userData.furShell) as THREE.Mesh | undefined;
   if (!inst) return;
   const u = inst.userData;
   if (!clip) {
@@ -181,7 +219,7 @@ export function setFurClip(mesh: THREE.Object3D, clip: THREE.Matrix4 | null) {
   }
   if (!u.clipMat) {
     u.clipU = { value: new THREE.Matrix4() };
-    u.clipMat = makeShellMaterial(u.furBase, u.furShells, u.clipU);
+    u.clipMat = makeShellMaterial(u.furBase, u.furShells, u.clipU, !!u.furLenAttr);
   }
   u.clipU.value.copy(clip);
   inst.material = u.clipMat;

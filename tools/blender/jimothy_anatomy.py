@@ -1,0 +1,484 @@
+"""
+Jimothy's anatomy: the approved body sculpt (numpy SDFs), skeleton, face markings and colours.
+
+Fitted to the real Jimothy (a raccoon with a short, arched "scrunched" spine, a head that points down, a very short
+puff of a tail and long normal raccoon legs): the side profile to a side-on photo (pixel-aligned orthographic camera,
+0.72 m per 530 px), the mask to eye-normalised frames of video footage. The reference media stay local and are not
+part of the repo; only the measured numbers live here.
+
+Everything is the PHYSICAL body (no fur volume): the game adds shell fur, whose per-vertex length is `fur_length`.
+Game space: +Y up, +Z forward, +X = his LEFT, metres, ground at y = 0.
+Used by build_jimothy.py (no bpy in here).
+"""
+import math
+import numpy as np
+
+import rlib
+from rlib import sd_capsule, sd_ellipsoid, sd_sphere, sd_round_cone, smin, smax, smoothstep, mix, hexc
+
+S = 0.72 / 530.0                        # metres per photo pixel
+
+
+def ph(px, py):
+    """Photo pixel -> (z, y) in game space."""
+    return np.array([(px - 495.0) * S, (620.0 - py) * S])
+
+
+def P3(x, zy):
+    return np.array([x, zy[1], zy[0]])
+
+
+def nrm(v):
+    return v / np.linalg.norm(v)
+
+
+def catmull(points, n):
+    P = np.asarray(points, dtype=float)
+    P = np.vstack([P[0] * 2 - P[1], P, P[-1] * 2 - P[-2]])
+    out = []
+    segs = len(P) - 3
+    for i in range(n):
+        t = i / (n - 1) * segs
+        k = min(int(t), segs - 1)
+        u = t - k
+        p0, p1, p2, p3 = P[k], P[k + 1], P[k + 2], P[k + 3]
+        out.append(0.5 * ((2 * p1) + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u + (-p0 + 3 * p1 - 3 * p2 + p3) * u ** 3))
+    return np.array(out)
+
+
+def fbm3(P, freq, seed):
+    return rlib.fbm(P * freq, 3, seed=seed)
+
+
+# ============================================================================================ skeleton
+# The spine as drawn over the side photo: short, arching up from the sacrum and down into the (almost absent) neck.
+SPINE = catmull([P3(0, p) for p in (ph(320, 275), ph(420, 185), ph(521, 141), ph(620, 150), ph(708, 189))], 40)
+SACRUM = SPINE[0]
+OCC = P3(0, ph(708, 189))
+NOSE = P3(0, ph(806, 340))
+HEAD_D = nrm(NOSE - OCC)
+HEAD_U = np.array([0.0, HEAD_D[2], -HEAD_D[1]])
+HIP = np.array([0.096, *ph(395, 300)[::-1]])
+SHO = np.array([0.09, *ph(655, 305)[::-1]])
+SCAP_TOP = P3(0.06, ph(612, 165))
+FEMUR, TIBIA, TARSUS, TOES = 0.225, 0.187, 0.105, 0.055
+HUMERUS, RADIUS, HAND = 0.182, 0.192, 0.08
+
+
+def ik2(root_zy, target_zy, l1, l2, bend):
+    d = target_zy - root_zy
+    L = np.clip(np.linalg.norm(d), abs(l1 - l2) + 1e-4, l1 + l2 - 1e-4)
+    dh = d / np.linalg.norm(d)
+    a = math.acos(np.clip((l1 * l1 + L * L - l2 * l2) / (2 * l1 * L), -1, 1))
+    c, s = math.cos(bend * a), math.sin(bend * a)
+    v = np.array([dh[0] * c - dh[1] * s, dh[0] * s + dh[1] * c])
+    return root_zy + l1 * v, root_zy + dh * L
+
+
+POSES = {
+    # side +1 = his LEFT, -1 = his RIGHT. Hind: (ankle, toe tip); front: (wrist, fingertip), as (z, y)
+    'photo2': {('H', -1): (ph(345, 565), ph(300, 625)), ('H', +1): (ph(455, 500), ph(570, 505)),
+               ('F', -1): (ph(640, 570), ph(690, 615)), ('F', +1): (ph(705, 440), ph(712, 487))},
+    # standing bind pose: toe / finger tips sit on the ground (their cones' radii above y = 0)
+    'stand': {('H', -1): (np.array([-0.175, 0.086]), np.array([-0.03, 0.018])), ('H', +1): (np.array([-0.175, 0.086]), np.array([-0.03, 0.018])),
+              ('F', +1): (np.array([0.215, 0.068]), np.array([0.29, 0.02])), ('F', -1): (np.array([0.215, 0.068]), np.array([0.29, 0.02]))},
+}
+
+
+def limb_joints(pose):
+    """Named joint positions of the four legs: {'H', side} -> [hip, knee, ankle, ball, toe tip],
+    {'F', side} -> [scapula top, shoulder, elbow, wrist, fingertip]."""
+    out = {}
+    for side in (+1, -1):
+        at, tt = POSES[pose][('H', side)]
+        hip_zy = np.array([HIP[2], HIP[1]])
+        knee, ank = ik2(hip_zy, at, FEMUR, TIBIA, +1)
+        fdir = nrm(tt - ank)
+        ball, tip = ank + fdir * TARSUS, ank + fdir * (TARSUS + TOES)
+        x0, x1 = HIP[0] * side, (HIP[0] - 0.012) * side
+        out[('H', side)] = [P3(x0, hip_zy), P3((x0 + x1) / 2, knee), P3(x1, ank), P3(x1, ball), P3(x1, tip)]
+        at, tt = POSES[pose][('F', side)]
+        sho_zy = np.array([SHO[2], SHO[1]])
+        elb, wr = ik2(sho_zy, at, HUMERUS, RADIUS, -1)
+        tipf = wr + nrm(tt - wr) * HAND
+        x0, x1 = SHO[0] * side, (SHO[0] - 0.014) * side
+        out[('F', side)] = [np.array([SCAP_TOP[0] * side, SCAP_TOP[1], SCAP_TOP[2]]), P3(x0, sho_zy), P3((x0 + x1) / 2, elb),
+                            P3(x1, wr), P3(x1, tipf)]
+    return out
+
+
+def limb_cones(pose):
+    """Per limb: (key, cones) with cones = [(a, b, r_a, r_b)], the hind legs including the hamstrings (the back of the
+    thigh IS the rump: nothing sits behind the legs but fur)."""
+    J = limb_joints(pose)
+    out = []
+    for side in (+1, -1):
+        j = J[('H', side)]
+        cones = [(j[0], j[1], 0.088, 0.046), (j[1], j[2], 0.04, 0.025), (j[2], j[3], 0.026, 0.023), (j[3], j[4], 0.023, 0.018)]
+        hip_zy, knee = np.array([j[0][2], j[0][1]]), np.array([j[1][2], j[1][1]])
+        f = knee - hip_zy
+        back = nrm(np.array([f[1], -f[0]]))
+        if back[0] > 0:
+            back = -back
+        a = hip_zy + back * 0.045 + nrm(f) * 0.01
+        b = knee + back * 0.028
+        cones.append((P3(j[0][0] * 0.95, a), P3(j[0][0], b), 0.078, 0.042))
+        out.append((('H', side), cones))
+        j = J[('F', side)]
+        out.append((('F', side), [(j[1], j[2], 0.062, 0.04), (j[2], j[3], 0.034, 0.024), (j[3], j[4], 0.024, 0.02)]))
+    return out
+
+
+# ============================================================================================ head (rest pose)
+EYE_Y = 0.471                 # eye height
+E = 0.04                      # half the inter-eye distance (IED = 0.08 m at game scale)
+EYE_R = 0.011                 # eyeball radius (a touch oversized: cute game)
+EAR_BASES = [np.array([0.084 * s, 0.574, 0.318]) for s in (1, -1)]
+EAR_DIRS = [nrm(np.array([0.5 * s, 1.0, -0.04])) for s in (1, -1)]
+
+
+def sd_rc_sx(P, a, b, r1, r2, sx):
+    """Round cone squashed sideways by sx (midline axis)."""
+    Q = P.copy()
+    Q[:, 0] = P[:, 0] / sx
+    return sd_round_cone(Q, a, b, r1, r2) * sx
+
+
+def head_skin_sdf(P):
+    d = sd_ellipsoid(P, np.array([0.0, 0.508, 0.306]), (0.07, 0.058, 0.066))                       # cranium
+    d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.466, 0.352]), (0.044, 0.042, 0.034)), 0.025)      # brow + bridge
+    d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.446, 0.336]), (0.056, 0.034, 0.032)), 0.03)       # face under the eyes
+    for sx in (1, -1):                                                                             # cheeks
+        d = smin(d, sd_ellipsoid(P, np.array([0.05 * sx, 0.44, 0.3]), (0.032, 0.042, 0.042)), 0.035)
+    d = smin(d, sd_rc_sx(P, np.array([0.0, 0.442, 0.356]), np.array([0.0, 0.392, 0.398]), 0.03, 0.016, 0.85), 0.02)  # muzzle
+    for sx in (1, -1):                                                                             # mandible
+        d = smin(d, sd_round_cone(P, np.array([0.036 * sx, 0.405, 0.305]), np.array([0.007 * sx, 0.379, 0.389]), 0.016, 0.01), 0.02)
+    d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.392, 0.362]), (0.024, 0.02, 0.03)), 0.02)       # floor of the mouth
+    d = smin(d, sd_capsule(P, np.array([0.0, 0.405, 0.33]), np.array([0.0, 0.43, 0.245]), 0.034), 0.045)  # throat
+    d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.395, 0.262]), (0.045, 0.034, 0.04)), 0.04)            # throat -> chest
+    for sx in (1, -1):
+        d = smin(d, sd_ellipsoid(P, np.array([0.015 * sx, 0.399, 0.392]), (0.011, 0.013, 0.011)), 0.016)  # whisker pads
+    return d
+
+
+def ear_frame(i):
+    """(base, up, fwd, across) of ear i (0 = left, 1 = right); the opening faces forward-outward."""
+    base, up = EAR_BASES[i], EAR_DIRS[i]
+    side = np.array([1.0, 0, 0]) if base[0] > 0 else np.array([-1.0, 0, 0])
+    fwd0 = nrm(np.cross(side, up)) * (1 if base[0] > 0 else -1)
+    fwd = nrm(fwd0 + side * 0.95)
+    return base, up, fwd, nrm(np.cross(up, fwd))
+
+
+def ears_sdf(P):
+    d = None
+    for i in range(2):
+        base, up, fwd, across = ear_frame(i)
+        R = np.stack([across, up, fwd], axis=1)
+        di = sd_ellipsoid(P, base + up * 0.043, (0.034, 0.05, 0.012), R)
+        d = di if d is None else np.minimum(d, di)
+    return d
+
+
+# ============================================================================================ body
+TAIL_TIP = SACRUM + np.array([0.0, 0.03, -0.045])
+PUFF_C = SACRUM + np.array([0.0, 0.05, -0.05])
+
+
+def torso_sdf(P):
+    d = None
+    n = len(SPINE)
+    for i in range(3, n - 1, 2):                                      # dorsal muscle; ends before the sacrum
+        t = i / (n - 1)
+        r = 0.052 + 0.02 * smoothstep(0.1, 0.4, t)
+        a = SPINE[i] - np.array([0, 0.036, 0])
+        b = SPINE[min(i + 2, n - 1)] - np.array([0, 0.036, 0])
+        di = sd_capsule(P, a, b, r)
+        d = di if d is None else smin(d, di, 0.03)
+    d = smin(d, sd_ellipsoid(P, P3(0, ph(545, 262)), (0.16, 0.112, 0.175)), 0.05)     # rib cage
+    d = smin(d, sd_ellipsoid(P, P3(0, ph(432, 258)), (0.145, 0.108, 0.13)), 0.05)     # abdomen (tucked up)
+    d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.45, -0.185]), (0.1, 0.075, 0.05)), 0.04)  # pelvis: between the thighs only
+    d = smin(d, sd_ellipsoid(P, P3(0, ph(640, 262)), (0.105, 0.106, 0.08)), 0.05)     # chest
+    for sx in (1, -1):
+        d = smin(d, sd_ellipsoid(P, np.array([0.092 * sx, *P3(0, ph(640, 250))[1:]]), (0.062, 0.1, 0.075)), 0.04)  # shoulders
+    d = smin(d, sd_capsule(P, P3(0, ph(640, 188)), OCC + HEAD_D * 0.04, 0.066), 0.045)                            # (no) neck
+    return d
+
+
+def tail_skin_sdf(P):
+    return sd_round_cone(P, SACRUM, TAIL_TIP, 0.036, 0.026)
+
+
+def puff_sdf(P):
+    """The cottontail puff: a lumpy, slightly lopsided ball of fur on the tail stub."""
+    d = sd_ellipsoid(P, PUFF_C, (0.046, 0.056, 0.045))
+    d = smin(d, sd_ellipsoid(P, PUFF_C + np.array([0.014, 0.032, -0.014]), (0.03, 0.034, 0.03)), 0.022)
+    d = smin(d, sd_ellipsoid(P, PUFF_C + np.array([-0.016, -0.026, -0.018]), (0.028, 0.03, 0.028)), 0.022)
+    return d - 0.007 * fbm3(P, 30.0, 17)
+
+
+def limb_sdf(cones):
+    def f(P):
+        d = None
+        for a, b, r1, r2 in cones:
+            di = sd_round_cone(P, a, b, r1, r2)
+            d = di if d is None else smin(d, di, 0.02)
+        return d
+    return f
+
+
+def region_sdfs(pose):
+    """The separate components (for skin weights / fur regions): name -> sdf."""
+    out = {'torso': torso_sdf, 'head': head_skin_sdf, 'tail': lambda P: np.minimum(tail_skin_sdf(P), puff_sdf(P)),
+           'ears': ears_sdf}
+    for key, cones in limb_cones(pose):
+        out[key] = limb_sdf(cones)
+    return out
+
+
+def body_sdf(pose, eyes):
+    """The exported surface: the whole physical body, with eye sockets."""
+    limbs = [limb_sdf(c) for _, c in limb_cones(pose)]
+
+    def f(P):
+        d = smin(torso_sdf(P), head_skin_sdf(P), 0.03)
+        d = smin(d, tail_skin_sdf(P), 0.03)
+        d = smin(d, puff_sdf(P), 0.025)
+        d = np.minimum(d, ears_sdf(P))
+        lg = None
+        for l in limbs:
+            dl = l(P)
+            lg = dl if lg is None else smin(lg, dl, 0.02)
+        d = smin(d, lg, 0.025)
+        for e in eyes:
+            d = smax(d, -sd_sphere(P, e, EYE_R + 0.0013), 0.003)
+        return d
+    return f
+
+
+def find_eyes():
+    eyes = []
+    for sx in (1, -1):
+        o = np.array([E * sx, EYE_Y, 0.6])
+        p, n = rlib.sdf_raycast(head_skin_sdf, o, (0, 0, -1), 0, 0.5, 900)
+        eyes.append(p - n * EYE_R * 0.4)
+    return eyes
+
+
+# ============================================================================================ face markings
+# Traced on eye-normalised video frames: u = lateral (eye units, eyes at u = +-1), v = up the face.
+# Right halves (u >= 0) mirrored for the left.
+MASK_R = [(0.0, 0.3), (0.18, 0.27), (0.5, 0.25), (0.72, 0.34), (0.95, 0.44), (1.25, 0.45), (1.55, 0.37), (1.9, 0.26),
+          (2.25, 0.12), (2.6, -0.06), (2.82, -0.3), (2.85, -0.5), (2.7, -0.72), (2.4, -0.86), (2.0, -0.93), (1.6, -0.97),
+          (1.25, -1.01), (0.95, -1.03), (0.62, -1.02), (0.4, -1.08), (0.34, -1.3), (0.28, -1.5), (0.0, -1.55)]
+BROW_R = [(0.17, 0.3), (0.15, 0.62), (0.2, 0.95), (0.36, 1.08), (0.6, 1.08), (0.78, 0.96), (1.05, 0.84), (1.4, 0.76),
+          (1.8, 0.64), (2.15, 0.46), (2.35, 0.28), (2.25, 0.16), (1.95, 0.27), (1.6, 0.38), (1.25, 0.48), (0.95, 0.47),
+          (0.72, 0.37), (0.5, 0.28), (0.3, 0.27)]
+UPLIP_R = [(0.0, -1.88), (0.28, -1.95), (0.42, -2.12), (0.34, -2.3), (0.0, -2.34)]
+STRIPE_R = [(0.0, 0.28), (0.16, 0.28), (0.19, 0.7), (0.24, 1.05), (0.32, 1.45), (0.36, 1.8), (0.0, 1.8)]
+PAD_R = [(0.66 + 0.34 * math.cos(a), -1.36 + 0.34 * math.sin(a)) for a in np.linspace(0, 2 * math.pi, 20, endpoint=False)]
+LIP_R = [(0.0, -2.26), (0.22, -2.24), (0.42, -2.14), (0.46, -2.2), (0.24, -2.31), (0.0, -2.33)]
+# side-on tracing, relative to the eye on that side: s forward, t up (eye units)
+MASK_SIDE = [(1.1, 0.2), (0.8, 0.72), (0.2, 0.8), (-0.4, 0.75), (-0.9, 0.55), (-1.35, 0.35), (-1.75, 0.02), (-2.1, -0.35),
+             (-2.15, -0.5), (-1.9, -0.8), (-1.4, -1.05), (-0.8, -1.4), (-0.1, -1.5), (0.5, -1.3), (0.9, -0.95), (1.1, -0.5)]
+BROW_SIDE = [(0.85, 0.76), (0.2, 0.84), (-0.45, 0.8), (-0.95, 0.6), (-1.4, 0.4), (-1.8, 0.04), (-2.05, -0.4), (-1.85, 0.25),
+             (-1.4, 0.72), (-0.85, 1.02), (-0.3, 1.2), (0.35, 1.3), (0.85, 1.12)]
+PAD_SIDE = [(1.05, -1.0), (0.55, -1.38), (0.1, -1.55), (0.0, -1.85), (0.45, -2.05), (1.0, -2.05), (1.3, -1.7)]
+FACE_TILT = math.radians(15.0)          # the face looks 15 deg below horizontal in the rest pose
+FACE_N = np.array([0.0, -math.sin(FACE_TILT), math.cos(FACE_TILT)])
+FACE_UP = np.array([0.0, math.cos(FACE_TILT), math.sin(FACE_TILT)])
+
+
+def mirror_poly(right):
+    left = [(-u, v) for (u, v) in reversed(right) if u > 1e-9]
+    return right + left
+
+
+def poly_sd(U, Vv, poly):
+    """Signed distance (eye units) from points to a closed polygon: negative inside."""
+    P = np.asarray(poly, dtype=float)
+    B = np.roll(P, -1, axis=0)
+    dmin = np.full(len(U), np.inf)
+    inside = np.zeros(len(U), dtype=bool)
+    for (ax, ay), (bx, by) in zip(P, B):
+        ex, ey = bx - ax, by - ay
+        wx, wy = U - ax, Vv - ay
+        t = np.clip((wx * ex + wy * ey) / (ex * ex + ey * ey + 1e-12), 0, 1)
+        dmin = np.minimum(dmin, np.hypot(wx - ex * t, wy - ey * t))
+        cond = ((ay > Vv) != (by > Vv)) & (U < (bx - ax) * (Vv - ay) / (by - ay + 1e-12) + ax)
+        inside ^= cond
+    return np.where(inside, -dmin, dmin)
+
+
+def poly_w(U, Vv, poly, feather=0.05):
+    return 1.0 - smoothstep(-feather, feather, poly_sd(U, Vv, poly))
+
+
+class FaceCoords:
+    """Face-plane and side coordinates of points (see the tracings)."""
+
+    def __init__(self, V, eyes, N):
+        x, y, z = V[:, 0], V[:, 1], V[:, 2]
+        self.M = (eyes[0] + eyes[1]) * 0.5
+        Q = V - self.M
+        self.u = x / E
+        self.v = (Q @ FACE_UP) / E
+        self.w = Q @ FACE_N                                             # depth behind the eye plane (m)
+        self.front = smoothstep(-0.075, -0.045, self.w)                 # markings only on the front of the head
+        self.au = np.abs(self.u)
+        side = np.where(x >= 0, 0, 1)
+        Es = np.array(eyes)[side]
+        self.s = (z - Es[:, 2]) / E
+        self.t = (y - Es[:, 1]) / E
+        self.nx = np.abs(N[:, 0])
+        phi = np.degrees(np.arctan2(np.abs(x), z - 0.305))              # angle round the head (0 = straight ahead)
+        self.ws = smoothstep(50.0, 66.0, phi)                           # 0 = front tracing, 1 = side tracing
+        self.near = smoothstep(-2.8, -2.3, self.s) * smoothstep(3.0, 2.0, np.abs(self.t))
+
+
+# ============================================================================================ colours (sRGB)
+def paint(V, eyes, N):
+    x, y, z = V[:, 0], V[:, 1], V[:, 2]
+    ax = np.abs(x)
+    back, side, belly, chest = hexc('#4f5055'), hexc('#6c6d72'), hexc('#8b8884'), hexc('#bdb4a3')
+    c = mix(side, back, smoothstep(0.5, 0.64, y)[:, None])
+    c = mix(c, hexc('#3d3e43'), (smoothstep(0.58, 0.68, y) * smoothstep(0.08, 0.0, ax))[:, None])       # dark saddle
+    c = mix(c, belly, (smoothstep(0.47, 0.37, y) * (0.75 + 0.25 * rlib.fbm(V * 25.0, 2, seed=9)))[:, None])      # belly
+    c = mix(c, chest, (smoothstep(0.45, 0.36, y) * smoothstep(0.12, 0.2, z) * smoothstep(0.09, 0.03, ax))[:, None])
+    c = c * (0.9 + 0.2 * rlib.fbm(V * 60.0, 3, seed=3))[:, None]                                           # grizzle
+    # legs: grey upper, dark lower, near-black hands and feet
+    c = mix(c, hexc('#393735'), smoothstep(0.24, 0.1, y)[:, None])
+    c = mix(c, hexc('#1c1b1a'), smoothstep(0.075, 0.035, y)[:, None])
+    # tail puff: grey-fawn, soft dark rings across it, dark tip
+    tax = nrm(PUFF_C - SACRUM + np.array([0, 0.02, -0.02]))
+    ts = (V - SACRUM) @ tax
+    inp = smoothstep(0.01, -0.02, puff_sdf(V) - 0.02) * smoothstep(0.02, 0.05, ts)
+    rings = 0.5 + 0.5 * np.cos(ts / 0.055 * 2 * math.pi)
+    tcol = mix(hexc('#77706a'), hexc('#3a3531'), (0.3 * rings + 0.6 * smoothstep(0.1, 0.17, ts))[:, None])
+    c = mix(c, tcol, inp[:, None])
+    # dark stripe from behind each ear down the side of the neck toward the shoulder
+    for s in (1, -1):
+        dn = sd_capsule(V, np.array([0.082 * s, 0.556, 0.272]), np.array([0.118 * s, 0.44, 0.215]), 0.022)
+        c = mix(c, hexc('#26262a'), smoothstep(0.008, -0.004, dn)[:, None])
+    # ---------------------------------------------------------------- face (traced markings; only near the head)
+    inhead = smoothstep(0.03, 0.0, head_skin_sdf(V) - 0.035)
+    hi = np.where(inhead > 1e-4)[0]
+    if len(hi):
+        c[hi] = mix(c[hi], face_paint(V[hi], eyes, N[hi], c[hi]), inhead[hi, None])
+    # ears: pale rims, grey inside, dark backs; a black patch on the head behind each ear
+    near_ears = np.where(ears_sdf(V) < 0.08)[0]
+    if len(near_ears):
+        c[near_ears] = ear_paint(V[near_ears], c[near_ears])
+    return np.clip(c, 0, 1)
+
+
+def face_paint(V, eyes, N, c):
+    fc = FaceCoords(V, eyes, N)
+    u, v, front, au, ws, near = fc.u, fc.v, fc.front, fc.au, fc.ws, fc.near
+    lower = smoothstep(-0.6, -0.95, v) * smoothstep(0.3, 0.45, au)
+    face = mix(c, hexc('#a3a19c'), (lower * front * (1 - smoothstep(0.35, 0.7, fc.nx)))[:, None])
+    face = mix(face, hexc('#6f6c69'), (smoothstep(-2.0, -2.35, v) * front)[:, None])  # darker chin
+    upper = smoothstep(0.2, 0.6, v) * smoothstep(3.4, 2.6, au)
+    face = mix(face, hexc('#747579'), (upper * front * 0.7)[:, None])                # grey forehead / crown
+
+    def both(front_w, side_w):
+        return front_w * (1 - ws) + side_w * ws
+    brow = both(np.maximum(poly_w(u, v, BROW_R, 0.09), poly_w(-u, v, BROW_R, 0.09)) * front, poly_w(fc.s, fc.t, BROW_SIDE, 0.1) * near)
+    browc = mix(np.tile(hexc('#fafaf7'), (len(V), 1)), np.tile(hexc('#c9c6bf'), (len(V), 1)), np.maximum(smoothstep(0.8, 2.0, au), ws)[:, None])
+    face = mix(face, browc, brow[:, None])
+    stripe = poly_w(u, v, mirror_poly(STRIPE_R), 0.07) * (1.0 - 0.85 * smoothstep(0.9, 1.5, v)) * (1 - ws)
+    face = mix(face, hexc('#404045'), (stripe * front)[:, None])
+    mask = both(poly_w(u, v, mirror_poly(MASK_R), 0.04) * front, poly_w(fc.s, fc.t, MASK_SIDE, 0.05) * near)
+    snout = smoothstep(-1.0, -1.25, v) * smoothstep(0.4, 0.2, au)
+    maskc = mix(np.tile(hexc('#0f0f11'), (len(V), 1)), np.tile(hexc('#2c2b2c'), (len(V), 1)), snout[:, None])
+    face = mix(face, maskc, mask[:, None])
+    pads = both(np.maximum(poly_w(u, v, PAD_R, 0.08), poly_w(-u, v, PAD_R, 0.08)) * front, poly_w(fc.s, fc.t, PAD_SIDE, 0.08) * near)
+    face = mix(face, hexc('#fbfbf9'), pads[:, None])
+    uplip = poly_w(u, v, mirror_poly(UPLIP_R), 0.04) * (1 - ws)
+    face = mix(face, hexc('#3b3735'), (uplip * front)[:, None])
+    lip = poly_w(u, v, mirror_poly(LIP_R), 0.03) * (1 - ws)
+    face = mix(face, hexc('#55504c'), (lip * front)[:, None])
+    return face * (0.94 + 0.12 * rlib.fbm(V * 90.0, 2, seed=21) * (1 - mask))[:, None]
+
+
+def ear_paint(V, c):
+    e = ears_sdf(V)
+    ear_in = smoothstep(0.004, -0.002, e - 0.004)
+    for i in range(2):
+        base, up, fwd, across = ear_frame(i)
+        q = V - (base + up * 0.043)
+        rr = np.sqrt(((q @ across) / 0.034) ** 2 + ((q @ up) / 0.05) ** 2)       # 1 = ear outline
+        onear = ear_in * smoothstep(0.03, 0.0, np.abs(q @ fwd) - 0.013) * smoothstep(1.3, 1.1, rr)
+        rim = smoothstep(0.62, 0.8, rr) * smoothstep(-0.2, 0.2, (q @ up) / 0.045 + 0.4)
+        c = mix(c, hexc('#4a4a4f'), (onear * (1 - rim))[:, None])
+        c = mix(c, hexc('#e6e3dc'), (onear * rim)[:, None])
+        behind = sd_ellipsoid(V, base + np.array([0.0, -0.01, -0.03]), (0.045, 0.04, 0.03))
+        c = mix(c, hexc('#1d1d20'), (smoothstep(0.006, -0.004, behind) * (1 - ear_in))[:, None])
+    return c
+
+
+# ============================================================================================ shell fur length
+def limb_param(V, pose):
+    """For each point: position along its nearest leg (0 = hip / shoulder .. 1 = toe / finger tip) and the distance to
+    that leg's bone chain."""
+    J = limb_joints(pose)
+    best_d = np.full(len(V), np.inf)
+    best_s = np.zeros(len(V))
+    for key, j in J.items():
+        pts = j[1:] if key[0] == 'F' else j                     # front legs: from the shoulder (not the scapula)
+        seg = [np.linalg.norm(pts[k + 1] - pts[k]) for k in range(len(pts) - 1)]
+        total, acc = sum(seg), 0.0
+        for k in range(len(pts) - 1):
+            a, b = pts[k], pts[k + 1]
+            ab = b - a
+            t = np.clip(((V - a) @ ab) / (ab @ ab), 0, 1)
+            d = np.linalg.norm(V - (a + t[:, None] * ab), axis=1)
+            better = d < best_d
+            best_d = np.where(better, d, best_d)
+            best_s = np.where(better, (acc + t * seg[k]) / total, best_s)
+            acc += seg[k]
+    return best_s, best_d
+
+
+def fur_length(V, N, eyes, pose='stand'):
+    """Per-vertex shell-fur length as a multiple of the game's FUR_LENGTH (3.5 cm): long, hanging under-fluff on the
+    belly, ruffs on the cheeks and chest, a fluffy tail puff, very short fur on the face (shortest on the snout),
+    short on the ears and lower legs, none on the soles."""
+    def lerp(a, b, t):                                          # (rlib.mix is for colours)
+        return a + (b - a) * t
+    x, y, z = V[:, 0], V[:, 1], V[:, 2]
+    ax = np.abs(x)
+    ny = N[:, 1]
+    L = np.ones(len(V))
+    torso = smoothstep(0.02, 0.0, torso_sdf(V) - 0.01)
+    # belly under-fluff: long where the torso faces down
+    under = smoothstep(-0.15, -0.7, ny) * smoothstep(0.5, 0.42, y) * torso
+    L = L + 0.8 * under
+    # chest / throat ruff
+    chest = smoothstep(0.12, 0.22, z) * smoothstep(0.52, 0.4, y) * smoothstep(0.1, 0.0, ax - 0.04)
+    L = np.maximum(L, 1.0 + 0.35 * chest)
+    # legs: body-length fur at the top, short below the knees / elbows, shortest on the paws, none on the soles
+    s, _ = limb_param(V, pose)
+    limbs = [limb_sdf(c) for _, c in limb_cones(pose)]
+    dl = np.min(np.stack([l(V) for l in limbs], axis=1), axis=1)
+    legw = smoothstep(0.012, -0.012, dl - torso_sdf(V))
+    leg_len = lerp(0.8, 0.22, smoothstep(0.22, 0.6, s))
+    leg_len = lerp(leg_len, 0.12, smoothstep(0.8, 0.95, s))
+    L = lerp(L, leg_len, legw)
+    L = np.where((s > 0.78) & (ny < -0.5) & (legw > 0.5), 0.0, L)
+    # tail puff: fluffy
+    tail = smoothstep(0.01, -0.01, puff_sdf(V) - 0.012)
+    L = lerp(L, 1.75, tail)
+    # head: cheek ruffs, very short face fur (shortest on the snout), short on top
+    fc = FaceCoords(V, eyes, N)
+    head = smoothstep(0.012, -0.004, head_skin_sdf(V) - 0.01)
+    face_len = lerp(0.3, 0.14, smoothstep(0.0, -1.2, fc.v))                     # forehead 0.3 -> snout 0.14
+    face_len = lerp(face_len, 0.1, smoothstep(-1.4, -1.9, fc.v) * smoothstep(0.9, 0.4, fc.au))   # nose / lips
+    cheek = smoothstep(0.55, 0.85, fc.nx) * smoothstep(0.47, 0.42, y) * smoothstep(0.35, 0.27, z)
+    head_len = lerp(0.55, face_len, fc.front)
+    head_len = np.maximum(head_len, 1.4 * cheek)
+    L = lerp(L, head_len, head)
+    # ears: short
+    ear = smoothstep(0.004, -0.002, ears_sdf(V) - 0.004)
+    L = lerp(L, 0.25, ear)
+    return np.clip(L, 0.0, 2.0)

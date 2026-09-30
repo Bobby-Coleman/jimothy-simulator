@@ -180,7 +180,8 @@ async function buildStatue(game: Game, world: World, batch: Batch) {
 
   const bronze = cached('mat:bronze', () => new THREE.MeshStandardMaterial({ color: 0xb4793a, metalness: 0.85, roughness: 0.32, envMapIntensity: 2.2 }));
   const S = 4;
-  const model = await loadMerged(game, 'assets/models/jimothy.glb');
+  // (the round Jimothy for now; the statue gets the real, four-legged Jimothy with the other renditions)
+  const model = await loadMerged(game, 'assets/models/jimothy_ball.glb');
   // statue faces west (toward Old Ballard); model forward is +Z
   const yaw = -Math.PI / 2;
   let bodyR = 1.5;

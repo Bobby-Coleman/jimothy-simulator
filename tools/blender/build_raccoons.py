@@ -1234,11 +1234,17 @@ def finish(model, mats, out_name, render=True, floor_y=-0.42, closeup=None):
 
 
 def build_jimothy(render=True):
+    """Jimothy rolled up into a ball: the rolling form (the walking Jimothy is build_jimothy.py). The real Jimothy's
+    tail is a very short puff, so the ball's tail is a short, fat stub too."""
     rlib.reset_scene()
     cfg = RoundCfg()
+    cfg.tail_len = 0.26
+    cfg.tail_rings = 2
+    cfg.tail_pitch1 = D(30)
+    cfg.tail_yaw = D(12)
     model = round_raccoon(cfg)
     mats = raccoon_materials()
-    finish(model, mats, 'jimothy', render, closeup=((0, 0.1, 0.3), 0.3))
+    finish(model, mats, 'jimothy_ball', render, closeup=((0, 0.1, 0.3), 0.3))
     return model
 
 

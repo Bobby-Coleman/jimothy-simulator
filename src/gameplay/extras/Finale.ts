@@ -1221,7 +1221,8 @@ export class Finale implements ExtrasFeature {
     const parts = player.model.parts ?? {};
     const head = parts.Head as THREE.Object3D | undefined;
     if (head) {
-      head.rotateX(-0.3 * this.jimLookUp);
+      // (the real Jimothy can barely lift his head, so the walking model only glances up)
+      head.rotateX((player.model.quad ? -0.12 : -0.3) * this.jimLookUp);
       if (this.nuzzleT > 0) head.rotateZ(Math.sin(t * 2.2) * 0.14);
       if (this.jimChitter > 0) head.rotateZ(Math.sin(t * 30) * 0.1 * this.jimChitter);
     }
