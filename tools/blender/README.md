@@ -89,7 +89,7 @@ supplies the fluff (see `_FURLEN`, `_FURCOMB`).
 | `Spine1` → `Spine2` → `Chest` → `Neck` | chain | along the arched spine: (0, .572, −.074), (0, .617, .063), (0, .598, .185), (0, .563, .261) |
 | `Head` | Neck | (0, 0.530, 0.262) back of the skull |
 | `Jaw` | Head | (0, 0.440, 0.318) hinge (chitter) |
-| `EarL`/`EarR` | Head | (±0.084, 0.574, 0.318) ear bases |
+| `EarL`/`EarR` | Head | (±0.08, 0.568, 0.322) ear bases |
 | `ScapulaL/R` → `ArmL/R` → `ForearmL/R` → `HandL/R` | Chest | scapula top (±.06, .618, .159), shoulder, elbow, wrist |
 | `ThighL/R` → `ShinL/R` → `FootL/R` → `ToesL/R` | Hips | hip (±.096, .435, −.136), knee, ankle, ball of the foot |
 | `Tail` | Hips | (0, 0.469, −0.238) sacrum; the puff |

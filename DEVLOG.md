@@ -271,3 +271,12 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
   not (~4 s); hanging still barely tires him (~1 % a second). Route hints no longer say you must sprint-climb.
 * **Title screen**: Jimothy stands and idles (breathing, glancing about, now and then washing his face) instead of
   freezing mid-jump: the paused simulation never ran his ground check, and his idle motion ran on the stopped game clock.
+
+## Ears that grow out of his head (from the human)
+* **Connected ears**: the ears stood on the fur above a skull that stopped short of them, so from the front you could
+  see daylight between head and ear. The skull is now a little higher and broader, with the muscle on either side
+  filling up under each ear, and each ear grows out of a rounded root blended into the skull, so the fur runs
+  unbroken from the crown up the back of the ear.
+* **Placed from the photos**: the ears sit a touch lower and closer together, lean ~25° outward and tip slightly
+  forward (they leaned back before), matching the adult photos (the side photo's ear lines up with the model's when
+  overlaid). Hats and the hat fur-clip were re-fitted to the raised skull.

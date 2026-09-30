@@ -133,8 +133,13 @@ def limb_cones(pose):
 EYE_Y = 0.471                 # eye height
 E = 0.04                      # half the inter-eye distance (IED = 0.08 m at game scale)
 EYE_R = 0.011                 # eyeball radius (a touch oversized: cute game)
-EAR_BASES = [np.array([0.084 * s, 0.574, 0.318]) for s in (1, -1)]
-EAR_DIRS = [nrm(np.array([0.5 * s, 1.0, -0.04])) for s in (1, -1)]
+# Ears: fitted to the side photo (tip at z .342, y .647; visible centre z .317, y .615) and the front footage (tilted
+# ~25 degrees outward, opening forward-outward). They sit on the top corners of the skull (see head_skin_sdf's
+# temporal fills and ear roots), a touch oversized for the cute game.
+EAR_BASES = [np.array([0.08 * s, 0.568, 0.322]) for s in (1, -1)]
+EAR_DIRS = [nrm(np.array([0.46 * s, 1.0, 0.14])) for s in (1, -1)]
+EAR_C = 0.043                                 # ear centre, along its axis from the base
+EAR_R = (0.034, 0.047, 0.012)                 # half-width, half-height, half-thickness
 
 
 def sd_rc_sx(P, a, b, r1, r2, sx):
@@ -145,7 +150,14 @@ def sd_rc_sx(P, a, b, r1, r2, sx):
 
 
 def head_skin_sdf(P):
-    d = sd_ellipsoid(P, np.array([0.0, 0.508, 0.306]), (0.07, 0.058, 0.066))                       # cranium
+    d = sd_ellipsoid(P, np.array([0.0, 0.515, 0.306]), (0.075, 0.06, 0.066))                       # cranium
+    for sx in (1, -1):                                                         # temporal muscle under the ears
+        d = smin(d, sd_ellipsoid(P, np.array([0.056 * sx, 0.545, 0.313]), (0.036, 0.03, 0.042)), 0.025)
+    for i in range(2):                                                         # ear roots: the ears grow out of the head
+        base, up, fwd, across = ear_frame(i)
+        side = np.array([np.sign(base[0]), 0.0, 0.0])
+        R = np.stack([across, up, fwd], axis=1)
+        d = smin(d, sd_ellipsoid(P, base - up * 0.004 - side * 0.01, (0.026, 0.022, 0.02), R), 0.018)
     d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.466, 0.352]), (0.044, 0.042, 0.034)), 0.025)      # brow + bridge
     d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.446, 0.336]), (0.056, 0.034, 0.032)), 0.03)       # face under the eyes
     for sx in (1, -1):                                                                             # cheeks
@@ -175,7 +187,7 @@ def ears_sdf(P):
     for i in range(2):
         base, up, fwd, across = ear_frame(i)
         R = np.stack([across, up, fwd], axis=1)
-        di = sd_ellipsoid(P, base + up * 0.043, (0.034, 0.05, 0.012), R)
+        di = sd_ellipsoid(P, base + up * EAR_C, EAR_R, R)
         d = di if d is None else np.minimum(d, di)
     return d
 
@@ -436,8 +448,8 @@ def ear_paint(V, c):
     ear_in = smoothstep(0.004, -0.002, e - 0.004)
     for i in range(2):
         base, up, fwd, across = ear_frame(i)
-        q = V - (base + up * 0.043)
-        rr = np.sqrt(((q @ across) / 0.034) ** 2 + ((q @ up) / 0.05) ** 2)       # 1 = ear outline
+        q = V - (base + up * EAR_C)
+        rr = np.sqrt(((q @ across) / EAR_R[0]) ** 2 + ((q @ up) / EAR_R[1]) ** 2)       # 1 = ear outline
         onear = ear_in * smoothstep(0.03, 0.0, np.abs(q @ fwd) - 0.013) * smoothstep(1.3, 1.1, rr)
         rim = smoothstep(0.62, 0.8, rr) * smoothstep(-0.2, 0.2, (q @ up) / 0.045 + 0.4)
         c = mix(c, hexc('#4a4a4f'), (onear * (1 - rim))[:, None])

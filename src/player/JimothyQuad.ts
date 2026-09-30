@@ -193,12 +193,12 @@ export class JimothyQuad {
     const local = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z).sub(head);
     const eyeL = b.EyeL?.position.clone() ?? local(0.037, 0.47, 0.367);
     const eyeR = b.EyeR?.position.clone() ?? local(-0.037, 0.47, 0.367);
-    // The top of his head between the ears is his skull (the neck rises steeply behind it): skin at (0, 0.558, 0.339)
+    // The top of his head between the ears is his skull (the neck rises steeply behind it): skin at (0, 0.566, 0.34)
     // in the model, facing ~30° forward of straight up (measured on the anatomy's SDF). Hats sit tilted that way; the
     // back of a brim just meets the neck.
     const tilt = 0.56;
     const dir = new THREE.Vector3(0, Math.cos(tilt), Math.sin(tilt));
-    const top = local(0, 0.558, 0.339);
+    const top = local(0, 0.566, 0.34);
     return {
       /** On top of the fur there. */
       crown: top.clone().addScaledVector(dir, 0.03),
