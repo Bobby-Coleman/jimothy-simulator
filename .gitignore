@@ -11,3 +11,6 @@ tools/_catalog_previews/
 
 # helper-agent git worktrees
 .claude/worktrees/
+
+# Jimothy reference footage/photos/models: study material only, never published
+reference/
