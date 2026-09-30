@@ -12,14 +12,6 @@ import type { AnimState } from './JimothyModel';
  * Gaits here are a first pass (walk → trot → bound with speed); the walk cycle measured from the footage replaces them.
  */
 
-export type CarryStyle = 'hand' | 'mouth' | 'stand';
-
-/** Which way Jimothy carries a thing of this size (metres): small in a paw, medium in his mouth, large standing up. */
-export function carryStyleFor(size: THREE.Vector3 | undefined): CarryStyle {
-  const m = size ? Math.max(size.x, size.y, size.z) : 0.3;
-  return m < 0.2 ? 'hand' : m < 0.46 ? 'mouth' : 'stand';
-}
-
 type LegKey = 'HL' | 'HR' | 'FL' | 'FR';
 
 interface Gait {
@@ -101,16 +93,12 @@ export class JimothyQuad {
   swipeT = 9;
   swipeSide = 1;
   reachT = 9;
-  /** Carry style while carrying (set by the model from the held thing's size). */
-  carry: CarryStyle | null = null;
   /**
    * "Stare at his empty paws" emote weight (0..1) + head shake: he sits up and holds his front paws up in front of his
    * face. Set every frame by the emote (ItemsSystem); consumed (reset) by the next animate().
    */
   stareW = 0;
   stareShake = 0;
-  /** Seconds since he threw the thing he carried (a quick upward toss). */
-  throwT = 9;
 
   static fits(root: THREE.Object3D) {
     return REQUIRED.every((n) => !!root.getObjectByName(n)) && !!root.getObjectByName('ThighL') && !!root.getObjectByName('ArmL');
@@ -237,47 +225,18 @@ export class JimothyQuad {
     o.quaternion.setFromEuler(_e);
   }
 
-  /** World position of a carried thing's centre for this style (after animate()). */
-  carryPoint(style: CarryStyle | 'wash', size: THREE.Vector3 | undefined, out: THREE.Vector3): THREE.Vector3 {
-    const b = this.bones;
-    const sy = size?.y ?? 0.2;
-    const sz = size?.z ?? 0.2;
-    this.arm.updateWorldMatrix(true, true);
-    if (style === 'hand') {
-      b.HandR.getWorldPosition(out);
-      return out.add(_v.set(0, sy * 0.5 + 0.02, 0));
-    }
-    if (style === 'mouth') {
-      const nose = b.Nose ?? b.Jaw;
-      nose.getWorldPosition(out);
-      // along the snout, a bit below the nose
-      b.Head.getWorldQuaternion(_q);
-      _v.set(0, -0.72, 0.7).normalize().applyQuaternion(_q);
-      _v2.set(0, -0.7, -0.72).normalize().applyQuaternion(_q);
-      return out.addScaledVector(_v, sz * 0.42).addScaledVector(_v2, 0.012);
-    }
-    b.HandL.getWorldPosition(out);
-    b.HandR.getWorldPosition(_v);
-    out.add(_v).multiplyScalar(0.5);
-    if (style === 'wash') return out.add(_v.set(0, 0.03, 0));
-    b.Chest.getWorldQuaternion(_q);
-    return out.addScaledVector(_v.set(0, 0, 1).applyQuaternion(_q).setY(0).normalize(), sz * 0.3).add(_v2.set(0, sy * 0.15, 0));
-  }
-
   animate(dt: number, s: AnimState) {
     const t = s.time;
     const b = this.bones;
     const mode = s.mode;
     const moving = s.speed > 0.3;
-    const carry = s.carrying ? this.carry : null;
-    const standing = carry === 'stand' && mode === 'walk' && s.grounded;
 
     // ---------------------------------------------------------------- gait timing
     const gspeed = mode === 'climb' ? s.climbSpeed * 1.6 : s.speed;
-    const stride = standing ? 0.3 : clamp(0.28 + 0.13 * gspeed, 0.3, 1.45);
+    const stride = clamp(0.28 + 0.13 * gspeed, 0.3, 1.45);
     const freq = mode === 'swim' ? 1.9 : mode === 'climb' ? clamp(gspeed / 0.5, 1.2, 4) : clamp(gspeed / stride, 0, 6.2);
     if ((moving && (mode === 'walk' || mode === 'climb')) || mode === 'swim') this.phase = (this.phase + dt * freq) % 1;
-    this.swayPhase += dt * (standing ? freq : 1);
+    this.swayPhase += dt;
     const ph = this.phase;
     // gait weights by speed
     const wBound = s01((gspeed - 5.6) / 1.4);
@@ -391,20 +350,6 @@ export class JimothyQuad {
           flex = -0.12 * (1 - fall);
           tailLift = 0.35;
           earBack = 0.35;
-        } else if (standing) {
-          // standing up with a big thing hugged to the chest; waddling on the hind legs
-          hipsPitch = -1.12;
-          hipsZ = 0.11;
-          hipsY = 0.02;
-          flex = -0.16;
-          chestPitch = -0.1;
-          headPitch = 0.28;
-          const w = Math.sin(this.swayPhase * Math.PI * 2);
-          hipsRoll = w * (moving ? 0.12 : 0.03);
-          hipsYaw = w * (moving ? 0.07 : 0.0);
-          walkLegs(0.26, 0.8, 0.12, (l) => l.hind);
-          for (const leg of L) if (leg.hind) leg.want.x += leg.sx * 0.02;
-          tailLift = -0.2;
         } else {
           if (moving) {
             const bob = wWalk * 0.008 + wTrot * 0.014 + wBound * 0.03;
@@ -480,16 +425,7 @@ export class JimothyQuad {
         break;
     }
 
-    // ---------------------------------------------------------------- overlays: carrying, washing, bonk, grabs, chitter
-    if (carry === 'hand' && mode !== 'swim') {
-      const fr = L[3];
-      fr.want.set(-0.035, 0.3, 0.33);
-      fr.endPitch = -0.7;
-      headPitch -= 0.05;
-    } else if (carry === 'mouth') {
-      jaw = 0.2;
-      headPitch -= 0.06;
-    }
+    // ---------------------------------------------------------------- overlays: washing, bonk, grabs, chitter
     if (s.washing) {
       // crouch, head down, both front paws scrubbing in front of the chest
       hipsY -= 0.03;
@@ -511,7 +447,7 @@ export class JimothyQuad {
     }
     this.swipeT += dt;
     this.reachT += dt;
-    if (this.swipeT < 0.32 && mode !== 'roll' && mode !== 'ragdoll' && carry !== 'hand') {
+    if (this.swipeT < 0.32 && mode !== 'roll' && mode !== 'ragdoll') {
       const u = this.swipeT / 0.32;
       const out = u < 0.35 ? u / 0.35 : 1 - (u - 0.35) / 0.65;
       const leg = this.swipeSide > 0 ? L[2] : L[3];
@@ -523,19 +459,6 @@ export class JimothyQuad {
     if (this.reachT < 0.2 && !s.carrying && mode !== 'roll' && mode !== 'ragdoll') {
       headPitch += 0.25;
       hipsZ += 0.03;
-    }
-    this.throwT += dt;
-    if (this.throwT < 0.3 && mode !== 'roll' && mode !== 'ragdoll') {
-      // toss: head flicks up, front end rears a little, paws push up-forward
-      const u = Math.sin((this.throwT / 0.3) * Math.PI);
-      headPitch -= 0.3 * u;
-      hipsPitch -= 0.25 * u;
-      jaw = Math.max(jaw, 0.25 * u);
-      for (const leg of L) {
-        if (leg.hind) continue;
-        leg.want.lerp(_v.set(leg.sx * 0.06, 0.4, 0.4), u * 0.8);
-        leg.endPitch = lerp(leg.endPitch, -0.8, u);
-      }
     }
     const stare = this.sm('stare', this.stareW, 8, dt);
     if (stare > 0.001) {
@@ -560,7 +483,7 @@ export class JimothyQuad {
     const k = 9;
     hipsY = this.sm('hipsY', hipsY, 14, dt);
     hipsZ = this.sm('hipsZ', hipsZ, 8, dt);
-    hipsPitch = this.sm('hipsPitch', hipsPitch, standing || carry === 'stand' ? 6 : 10, dt);
+    hipsPitch = this.sm('hipsPitch', hipsPitch, 10, dt);
     hipsRoll = this.sm('hipsRoll', hipsRoll, k, dt);
     hipsYaw = this.sm('hipsYaw', hipsYaw, k, dt);
     flex = this.sm('flex', flex, 12, dt);
@@ -621,16 +544,6 @@ export class JimothyQuad {
         if (leg.hind) continue;
         leg.want.lerp(_v.set(leg.sx * 0.05, -0.2, 0.02).applyMatrix4(_m), stare);
         leg.endPitch = lerp(leg.endPitch, -1.6, stare);
-      }
-    }
-    if (carry === 'stand' && (mode === 'walk' || mode === 'climb')) {
-      // hug the big thing against the chest (targets in the chest's frame: -Y = toward the belly, which faces
-      // forward when he stands)
-      _m.copy(this.armInv).multiply(b.Chest.matrixWorld);
-      for (const leg of L) {
-        if (leg.hind) continue;
-        leg.want.set(leg.sx * 0.075, -0.17, -0.14).applyMatrix4(_m);
-        leg.endPitch = -1.3;
       }
     }
     const kLeg = mode === 'ragdoll' ? 14 : 40;

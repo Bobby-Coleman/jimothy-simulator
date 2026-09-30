@@ -224,6 +224,6 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * **Animation** (`JimothyQuad.ts`): two-bone IK legs, walk → trot → bound with speed (a first pass; the walk cycle
   measured from the footage comes next), jumping, swimming (dog-paddle), climbing, hanging, ragdoll, washing, bonk,
   chitter (jaw), sniffing the ground when idle, and sitting up to stare at his empty paws.
-* **Carrying by size**: small things in one paw (three-legged walk), medium in his mouth, big things hugged to his
-  chest standing up (a slower waddle). Throws launch from above his head as before.
+* **Carrying**: everything rides on his back, as before (a paw / mouth / standing-hug version was tried and reverted
+  at the human's request). The ride height follows the body: his arched back is lower than the ball's top.
 * **Hats and glasses** refit to the new head (tilted with it; the fur under hats is clipped on the skinned mesh).

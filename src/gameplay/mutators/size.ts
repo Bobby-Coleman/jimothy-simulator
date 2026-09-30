@@ -137,10 +137,9 @@ function sizeMutator(o: SizeOpts): MutatorImpl {
       const walkLike = p.mode === 'walk';
       if (o.physics) setCollider(p, p.mode === 'walk' ? 'big' : 'base');
 
-      // Carried items ride on top of the (resized) head instead of floating/clipping (the round model; the walking
-      // Jimothy's paw / mouth carry point already scales with him)
+      // Carried items ride on top of the (resized) head instead of floating/clipping
       const h = p.held;
-      if (h && h.kind === 'carry' && h.entity.body && h.entity.alive && !p.model.quad) {
+      if (h && h.kind === 'carry' && h.entity.body && h.entity.alive) {
         const size = (h.entity.data.size as THREE.Vector3 | undefined)?.y ?? 0.3;
         const f = p.forwardVec(_a);
         const target = _b.copy(p.position);
@@ -149,7 +148,7 @@ function sizeMutator(o: SizeOpts): MutatorImpl {
           target.y += PLAYER_R * (o.k - 1) - 0.1 * o.k + Math.sin(game.time * 24) * 0.04;
         } else {
           target.addScaledVector(f, 0.06 * o.k);
-          target.y += visualTop(o.k) + size * 0.5 + 0.04;
+          target.y += visualTop(o.k) - (0.42 - p.model.backTop()) * o.k + size * 0.5 + 0.04;
         }
         h.entity.body.setNextKinematicTranslation({ x: target.x, y: target.y, z: target.z });
       }

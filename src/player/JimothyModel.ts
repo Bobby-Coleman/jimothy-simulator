@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Assets } from '../core/Assets';
 import { applyFur } from './Fur';
 import { makeShadowOnly, shadowOnlyMaterial } from '../world/shadowOnly';
-import { JimothyQuad, type CarryStyle } from './JimothyQuad';
+import { JimothyQuad } from './JimothyQuad';
 
 export interface AnimState {
   mode: string;
@@ -20,8 +20,6 @@ export interface AnimState {
   idleTime?: number;
   /** 0..1 night factor (eyeshine). */
   night?: number;
-  /** How the held thing is carried by the walking form (paw / mouth / standing up). */
-  carryStyle?: CarryStyle | null;
 }
 
 export type FormName = 'body' | 'ball';
@@ -213,16 +211,9 @@ export class JimothyModel {
     if (this.current?.name === name) this.current = null;
   }
 
-  /**
-   * Where a carried thing's centre goes (world space) for the walking form, with the collider centre at `center`
-   * (this frame's physics position: the pose is last frame's but the position is current, so it doesn't lag behind at
-   * a run). Null while the ball is showing. `style` 'wash' = between the front paws while scrubbing.
-   */
-  carryPoint(style: CarryStyle | 'wash', size: THREE.Vector3 | undefined, center: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 | null {
-    if (!this.quad) return null;
-    this.quad.carryPoint(style, size, out);
-    this.root.worldToLocal(out);
-    return out.multiplyScalar(this.root.scale.x).add(center);
+  /** Height above the collider centre where carried things rest on him: the ball's top, or the walker's arched back. */
+  backTop() {
+    return this.quad ? 0.33 : 0.42;
   }
 
   private furMats: { mat: THREE.MeshStandardMaterial; base: THREE.Color }[] = [];
@@ -284,7 +275,6 @@ export class JimothyModel {
     // the ball while rolling, the real Jimothy otherwise
     this.setForm(s.mode === 'roll' ? 'ball' : 'body');
     if (this.quad) {
-      this.quad.carry = s.carryStyle ?? null;
       this.quad.animate(dt, s);
       this.animateShared(dt, s);
       return;
