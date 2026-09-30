@@ -218,7 +218,7 @@ function installHelpers(full) {
     },
     /**
      * Climb a structure centred at (cx,cz) from (sx,sz): hold forward (+jump to grab the wall), rest on ledges.
-     * `sprint`: sprint-climb (a bare wall is ~7 m of climbing at walking pace, ~11 m sprinting).
+     * `sprint`: sprint-climb (faster; a stamina bar is ~11 m of bare wall either way).
      */
     climbTo(cx, cz, sx, sz, target, maxSecs = 60, stop, { sprint = false } = {}) {
       const cam = g.get('camera');

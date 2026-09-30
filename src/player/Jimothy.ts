@@ -643,7 +643,8 @@ export class Jimothy implements System {
     const n = _b.copy(hit.normal).setY(0).normalize();
     this.climbNormal.lerp(n, 0.35).normalize();
     const right = new THREE.Vector3().crossVectors(into, UP).normalize();
-    const speed = (inp.held('sprint') ? 3.9 : 2.7) * this.speedMul;
+    const sprintSpeed = 3.9 * this.speedMul;
+    const speed = inp.held('sprint') ? sprintSpeed : 2.7 * this.speedMul;
     const upV = inp.move.y * speed;
     const sideV = inp.move.x * speed * 0.8;
     const stick = hit.distance > R + 0.04 ? 2.5 : 0.6;
@@ -656,11 +657,13 @@ export class Jimothy implements System {
       },
       true,
     );
-    // A full stamina bar climbs a bare wall for ~2.75 s (~7 m, ~11 m sprinting); ladders are 4× gentler (11 s)
+    // Stamina pays for distance, not time: a full bar climbs ~11 m of bare wall whether he sprints (2.75 s) or not
+    // (~4 s); holding still on the wall barely tires him. Ladders are 4× gentler.
     const onLadder = !!game.get<any>('world')?.onLadder?.(this.position);
-    this.stamina -= dt / (onLadder ? 11 : 2.75);
+    const effort = 0.03 + 0.97 * Math.min(1, this.climbSpeed / sprintSpeed);
+    this.stamina -= (dt * effort) / (onLadder ? 11 : 2.75);
     if (this.stamina <= 0) {
-      this.game.hint('Jimothy’s tiny arms give out. (Rest on a ledge first, or sprint-climb.)', 2.2);
+      this.game.hint('Jimothy’s tiny arms give out. (Catch your breath on a ledge on the way up.)', 2.2);
       this.climbCooldown = 1.2;
       this.setMode('walk');
       return;

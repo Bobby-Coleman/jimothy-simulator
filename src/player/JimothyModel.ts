@@ -221,6 +221,7 @@ export class JimothyModel {
   private furMats: { mat: THREE.MeshStandardMaterial; base: THREE.Color }[] = [];
   private eyeMats: THREE.MeshStandardMaterial[] = [];
   private squashV = 0;
+  private clock = 0;
   private squashX = 0;
   private wetness = 0;
 
@@ -274,6 +275,10 @@ export class JimothyModel {
   }
 
   animate(dt: number, s: AnimState) {
+    // Idle motion (breathing, glances, tail sway…) runs on the model's own clock: on the title screen the game clock
+    // is stopped, but he should still stand there breathing
+    this.clock += dt;
+    s.time = this.clock;
     // the ball while rolling, the real Jimothy otherwise
     this.setForm(s.mode === 'roll' ? 'ball' : 'body');
     if (this.quad) {

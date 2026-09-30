@@ -323,7 +323,7 @@ const warningLights: V3[] = [];
  * Valve riser: a fat gas main standing against a tower from the ground to a valve at `top`, where it elbows into the
  * tower. The rest stop on the ladder-free climb to bobblehead s1: climb its outside face and mantle onto its flat
  * flanged top (1.1 m across, right against the tower), get your breath back, then climb the last ~7.5 m to the cap.
- * Its top is out of reach at walking pace from the ground, but a sprint-climb makes it. Nothing overhangs the climb
+ * Its top takes most of a stamina bar from the ground. Nothing overhangs the climb
  * (the flanges are drawn only), so neither Jimothy nor the camera gets wedged under anything.
  */
 function valveRiser(kit: Kit, b: Batch, cx: number, cz: number, r: number, top: number, ang: number) {

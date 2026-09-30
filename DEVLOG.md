@@ -263,3 +263,11 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * **Animation**: planted feet pivot on the ball of the foot / the palm as the heel lifts (they used to slide back),
   he runs lower and quicker with brief airborne moments at walking speed (a running pace), and his feet step in
   place when he turns on the spot.
+
+## Volume, climbing stamina, title pose (from the human)
+* **Volume**: master, music and sound effects default to 40 %, and sound effects play at twice their slider level (not
+  the music). Players whose volumes were still the old untouched defaults move to the new ones; customised volumes stay.
+* **Climbing stamina pays for distance, not time**: a full bar climbs ~11 m of bare wall whether you sprint (2.75 s) or
+  not (~4 s); hanging still barely tires him (~1 % a second). Route hints no longer say you must sprint-climb.
+* **Title screen**: Jimothy stands and idles (breathing, glancing about, now and then washing his face) instead of
+  freezing mid-jump: the paused simulation never ran his ground check, and his idle motion ran on the stopped game clock.

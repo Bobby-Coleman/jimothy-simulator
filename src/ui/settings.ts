@@ -33,9 +33,10 @@ const prefersReducedMotion = () => {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  master: 0.8,
-  sfx: 0.9,
-  music: 0.6,
+  // (sound effects play at twice the slider's level: see SFX_GAIN in audio/AudioManager.ts)
+  master: 0.4,
+  sfx: 0.4,
+  music: 0.4,
   sensitivity: 1,
   invertY: false,
   dayLength: 20,
@@ -52,6 +53,13 @@ const KEY = 'jimothy.settings.v1';
 export function loadSettings(): Settings {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || '{}');
+    // Saved settings hold every value, changed or not: volumes still at the old defaults (80 / 90 / 60 %) were never
+    // touched, so they move to the new ones
+    if (raw && raw.master === 0.8 && raw.sfx === 0.9 && raw.music === 0.6) {
+      delete raw.master;
+      delete raw.sfx;
+      delete raw.music;
+    }
     const s = { ...DEFAULT_SETTINGS };
     for (const k of Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]) {
       if (raw && typeof raw[k] === typeof DEFAULT_SETTINGS[k]) (s as any)[k] = raw[k];

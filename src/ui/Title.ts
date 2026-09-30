@@ -169,6 +169,9 @@ export class TitleScreen {
       } catch (err) {
         console.warn('[ui] title: could not settle Jimothy', err);
       }
+      // (his own ground check doesn't run while the simulation is paused: without this he'd strike his mid-jump
+      // pose on the title instead of standing about)
+      p.grounded = true;
     }
     try {
       p.postPhysics?.(dt);

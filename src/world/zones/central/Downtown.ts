@@ -441,9 +441,9 @@ function buildCityHall(game: Game, world: World, batch: Batch) {
 }
 
 /**
- * City Hall roof + dome climb (bobblehead e2), ladder-free since the climbing nerf (bare walls ≈ 7 m walking, 11 m
- * sprinting). The route: up the grand steps, then sprint-climb the outside face of the anta at either front corner of the
- * portico and mantle onto the pediment (10.75 m up: walking pace runs out ~2 m short; or climb the main block's front
+ * City Hall roof + dome climb (bobblehead e2), ladder-free since the climbing nerf (a full stamina bar climbs ~11 m of
+ * bare wall, sprinting or not). The route: up the grand steps, then climb the outside face of the anta at either front
+ * corner of the portico and mantle onto the pediment (10.75 m up: most of a bar; or climb the main block's front
  * wall beside it and step across onto the cornice), rest, walk up the pediment to its ridge and hop the 0.65 m parapet.
  * On the roof: mantle the drum plinth, rest, climb the drum and the steep lower dome (~7.5 m) and walk up the gold to the
  * bobblehead. The bare facades are 17 m: no way up there.

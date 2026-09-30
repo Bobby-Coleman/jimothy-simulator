@@ -118,7 +118,7 @@ export const OldBallard: ZoneBuilder = {
     buildPlaque(game, world, batch, gw);
     buildPorchAndDen(game, world, batch);
 
-    // (bobblehead c1 on the Grunge & Sons roof has no ladder: its brick front is 16 m of bare wall. Sprint-climb the east
+    // (bobblehead c1 on the Grunge & Sons roof has no ladder: its brick front is 16 m of bare wall. Climb the east
     // end of the donut shop next door, rest on its roof, then climb the Grunge's side wall from there.)
 
     // ---------------------------------------------------------------- Jimothy Commons plaza

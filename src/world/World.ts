@@ -29,8 +29,8 @@ export class World implements System {
   /** Named points of interest (spawn, quest spots). Zone builders fill this. */
   readonly poi = new Map<string, THREE.Vector3>();
   /**
-   * Ladder volumes (world space). Climbing inside one costs the old, gentle stamina rate; bare walls, poles and
-   * trees tire Jimothy 4× faster, so tall landmarks are climbed by ladder (or in stages, via ledges).
+   * Ladder volumes (world space). Climbing inside one costs a quarter of the stamina of bare walls, poles and trees
+   * (~11 m of those per bar), so tall landmarks are climbed by ladder (or in stages, via ledges).
    */
   readonly ladders: THREE.Box3[] = [];
   addLadder(min: THREE.Vector3, max: THREE.Vector3) {

@@ -48,6 +48,9 @@ export interface SoundHandle {
   readonly playing: boolean;
 }
 
+/** Sound effects (world + UI) play at this multiple of the SFX slider (music doesn't); the master limiter catches peaks. */
+const SFX_GAIN = 2;
+
 export interface AudioVolumes {
   master: number;
   sfx: number;
@@ -233,7 +236,7 @@ export class AudioManager {
   private workerBroken = false;
   private reqId = 0;
   private pending = new Map<number, { resolve: (r: { chans: Float32Array[]; sr: number }) => void; reject: (e: unknown) => void; timer: ReturnType<typeof setTimeout> }>();
-  private volumes: AudioVolumes = { master: 0.9, sfx: 1, music: 0.6 };
+  private volumes: AudioVolumes = { master: 0.4, sfx: 0.4, music: 0.4 };
   private muted = false;
   private worldPaused = false;
   private baseUrl: string | null = null;
@@ -872,7 +875,7 @@ export class AudioManager {
 
   private applyVolumes(immediate = false): void {
     this.ramp(this.master, this.muted ? 0 : this.volumes.master, immediate ? 0 : 0.03);
-    this.ramp(this.sfxBus, this.volumes.sfx, immediate ? 0 : 0.03);
+    this.ramp(this.sfxBus, this.volumes.sfx * SFX_GAIN, immediate ? 0 : 0.03);
     this.ramp(this.musicBus, this.volumes.music, immediate ? 0 : 0.03);
   }
 

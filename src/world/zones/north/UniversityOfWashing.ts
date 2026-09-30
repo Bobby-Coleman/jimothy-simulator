@@ -498,10 +498,9 @@ function gothicLamp(game: Game, world: World, b: Batch, x: number, y: number, z:
 }
 
 /**
- * Library tower climb (bobblehead n2 on the tower roof, 24 m up), ladder-free: bare walls tire Jimothy after ~7 m
- * (~11 m sprinting), so it goes in three stages. A clasping buttress fills the nook where the tower stands proud of
- * the west half of the facade; its flat stone top (~10 m up) is out of reach at walking pace but a sprint-climb makes
- * it. Rest there, climb the last ~4–5 m of facade and mantle onto the 45° slate roof, walk up beside the tower to near
+ * Library tower climb (bobblehead n2 on the tower roof, 24 m up), ladder-free: bare walls tire Jimothy after ~11 m
+ * (sprinting or not), so it goes in three stages. A clasping buttress fills the nook where the tower stands proud of
+ * the west half of the facade; its flat stone top (~10 m up) takes most of a stamina bar. Rest there, climb the last ~4–5 m of facade and mantle onto the 45° slate roof, walk up beside the tower to near
  * the ridge and climb the tower's west face (~5 m) to the roof. Tower dims mirror gothicHall's (7×7, top at h + 10,
  * centre d/2 − 3.5 + 1.2 = 3.7 local, h = 14, d = 12, so the tower's front is 1.2 m proud of the facade).
  */
