@@ -500,12 +500,13 @@ export class SlopSystem implements System {
   }
 
   // ---------------------------------------------------------------- debug helpers
-  spawnAt(x: number, z: number, n = 1, role: 'campus' | 'roamer' | 'tiny' = 'roamer'): Slopothy[] {
+  /** `mistakes`: SF flags from SlopGeometry (eye3 1, legs 2, ears 4, tail 8, neck 16, melt 32, earMix 64, paws 128); random if omitted. */
+  spawnAt(x: number, z: number, n = 1, role: 'campus' | 'roamer' | 'tiny' = 'roamer', mistakes?: number): Slopothy[] {
     const out: Slopothy[] = [];
     for (let i = 0; i < n; i++) {
       const gx = x + (n > 1 ? rand(-2, 2) : 0);
       const gz = z + (n > 1 ? rand(-2, 2) : 0);
-      const s = this.slopothys.spawn(new THREE.Vector3(gx, surfaceY(this.game, gx, gz), gz), { role, announce: true, home: new THREE.Vector3(gx, 0, gz) });
+      const s = this.slopothys.spawn(new THREE.Vector3(gx, surfaceY(this.game, gx, gz), gz), { role, announce: true, home: new THREE.Vector3(gx, 0, gz), mistakes });
       if (s) out.push(s);
     }
     return out;

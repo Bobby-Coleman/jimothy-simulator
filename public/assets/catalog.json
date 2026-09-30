@@ -1754,7 +1754,7 @@
   {"path":"assets/models/kenney/watercraft-kit/ship-ocean-liner.glb","kit":"watercraft-kit","name":"ship-ocean-liner","size":[4.76,8.934,21.28],"min":[-2.38,0,-10.64],"max":[2.38,8.934,10.64],"triangles":2796},
   {"path":"assets/models/kenney/watercraft-kit/ship-small-ghost.glb","kit":"watercraft-kit","name":"ship-small-ghost","size":[4.8,9.964,10.6],"min":[-2.4,0,-5.3],"max":[2.4,9.964,5.3],"triangles":1703},
   {"path":"assets/models/kenney/watercraft-kit/ship-small.glb","kit":"watercraft-kit","name":"ship-small","size":[4.8,9.964,10.6],"min":[-2.4,0,-5.3],"max":[2.4,9.964,5.3],"triangles":1723},
+  {"path":"assets/models/kit_jimothy.glb","kit":"custom","name":"kit_jimothy","size":[0.136,0.178,0.256],"min":[-0.068,0,-0.124],"max":[0.068,0.178,0.132],"triangles":9219},
   {"path":"assets/models/kit.glb","kit":"custom","name":"kit","size":[0.136,0.185,0.331],"min":[-0.068,0,-0.202],"max":[0.068,0.185,0.129],"triangles":9018},
-  {"path":"assets/models/mom.glb","kit":"custom","name":"mom","size":[0.294,0.42,1.174],"min":[-0.147,0,-0.744],"max":[0.147,0.42,0.43],"triangles":12139},
-  {"path":"assets/models/slopothy.glb","kit":"custom","name":"slopothy","size":[0.731,1.005,1.532],"min":[-0.366,-0.421,-1.042],"max":[0.365,0.584,0.49],"triangles":14717}
+  {"path":"assets/models/mom.glb","kit":"custom","name":"mom","size":[0.294,0.42,1.174],"min":[-0.147,0,-0.744],"max":[0.147,0.42,0.43],"triangles":12139}
 ]

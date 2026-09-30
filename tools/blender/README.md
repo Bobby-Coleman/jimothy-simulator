@@ -1,6 +1,6 @@
 # tools/blender — procedural raccoons & accessories
 
-Every model in `public/assets/models/{jimothy,jimothy_ball,danny,slopothy,mom,kit,accessories}.glb` is generated
+Every model in `public/assets/models/{jimothy,jimothy_ball,danny,mom,kit,kit_jimothy,accessories}.glb` is generated
 from scratch by the Python scripts in this folder, running inside Blender 5.2 LTS (headless).
 No downloaded or third-party geometry/textures: shapes are numpy SDFs + parametric tubes/spheres,
 fur patterns are procedural vertex colours (the walking Jimothy's are baked into a texture). Output is deterministic
@@ -18,7 +18,10 @@ BLENDER="C:/Program Files/Blender Foundation/Blender 5.2/blender.exe"
 
 # raccoons -> public/assets/models/*.glb  (+ preview PNGs in tools/blender/renders/)
 # ('jimothy' builds jimothy_ball.glb: Jimothy rolled up into a ball, his rolling form)
-"$BLENDER" -b --factory-startup -P tools/blender/build_raccoons.py -- [--only jimothy,danny,slopothy,mom,kit] [--no-render]
+"$BLENDER" -b --factory-startup -P tools/blender/build_raccoons.py -- [--only jimothy,danny,mom,kit] [--no-render]
+
+# Nugget, the kit who takes after Jimothy -> public/assets/models/kit_jimothy.glb (kit_cfg re-proportioned)
+"$BLENDER" -b --factory-startup -P tools/blender/build_kit_jimothy.py -- [--no-render]
 
 # accessories -> public/assets/models/accessories.glb (its preview render imports jimothy_ball.glb, so build that first)
 "$BLENDER" -b --factory-startup -P tools/blender/build_accessories.py -- [--no-render]
@@ -137,21 +140,12 @@ eyebrow clumps drooping over the eyes; `Fur`), so the game can raise or wiggle t
 Other pivots are Jimothy's × 1.12, e.g. eyes (±0.107, 0.134, 0.388), shoulders (±0.137, −0.224, 0.146),
 wrists (±0.143, −0.430, 0.213), hips (±0.148, −0.202, −0.134), ears (±0.193, 0.316, 0.092), `Tail1` (0, −0.112, −0.325).
 
-## Slopothy — `slopothy.glb` (14,717 triangles)
+## Slopothys — no model of their own
 
-Jimothy's base with generative-AI errors. Root `Slopothy`, same node names, and the main material is **`Slop`**
-(vertex-coloured like `Fur`, with a slightly lavender "off" palette), so the game can swap in its glitch shader.
-Errors:
-* 4 eyes of mismatched sizes and heights. `EyeL`/`EyeR` plus `ExtraEye1` (forehead, pivot (0.012, 0.215, 0.314))
-  and `ExtraEye2` (left cheek, pivot (−0.183, 0.034, 0.339)), all children of Head.
-* 6 legs. `ArmL/R` and `LegL/R` plus `ExtraLeg1` / `ExtraLeg2` (children of Body, hips at (±0.17, −0.15, 0.0),
-  6 toes each).
-* Hands with 7 fingers.
-* `EarL` 1.8× and `EarR` 0.85×.
-* A second tail growing out of the head. `ExtraTail1`→`ExtraTail2`→`ExtraTail3` chain; `ExtraTail1` is a child
-  of Head with its pivot at (0.04, 0.26, 0.08), same local axes as the main tail.
-* Melted, off-centre muzzle with a chin drip, a warped asymmetric mask, a lopsided mouth, and 7 uneven tail rings.
-* The Head mesh is asymmetric (it is the only non-mirrored model).
+SlopCorp's fake AI Jimothys used to be a Blender model (`slopothy.glb`, the round Jimothy with AI errors). They are
+now built in the game from the real `jimothy.glb` (src/gameplay/slop/SlopGeometry.ts): his skinned body walking his
+own gait a few centimetres off the ground, with the mistakes added at runtime (six legs, a long neck, a long ringed
+tail, a third eye, a melting face, extra or wrong ears, giant AI hands) and a glossy slop shader.
 
 ## Mom — `mom.glb` (12,139 triangles)
 
@@ -175,6 +169,15 @@ Baby raccoon: about 0.23 m nose-to-rump (plus a short up-curled tail), oversized
 Same node naming as Mom, root `Kit`, origin at ground level: `Head` (0, 0.086, 0.020), eyes (±0.026, 0.119, 0.097),
 nose (0, 0.096, 0.123), mouth (0, 0.091, 0.123), ears (±0.037, 0.154, 0.042), `LegFL/FR` (±0.030, 0.060, 0.020),
 `LegBL/BR` (±0.034, 0.060, −0.070), `Tail1` (0, 0.075, −0.090) … `Tail5` (0.008, 0.119, −0.173).
+
+## Nugget — `kit_jimothy.glb` (9,219 triangles): the kit who takes after Jimothy
+
+`build_kit_jimothy.py` reuses `kit_cfg` and `quad_raccoon` from build_raccoons.py and re-proportions the kit like the
+real Jimothy: one round dome of a back (a short, arched spine) that rises above the head, the head carried low at
+the front of the dome with the nose tipped down 16°, next to no neck, longer legs, and a tiny grey tail puff with one
+faint ring instead of the long ringed tail. Same node names as `kit.glb` (root `Kit`), so it runs on the same rig:
+`RIGS.kitJimothy` (src/entities/animals/RaccoonRig.ts); `Kit.ts` gives it to kit #3, Nugget. `Head` (0, 0.075, 0.024),
+`LegFL/FR` (±0.030, 0.084, 0.012), `LegBL/BR` (±0.034, 0.088, −0.060), `Tail1` (0, 0.122, −0.084).
 
 ## Materials
 

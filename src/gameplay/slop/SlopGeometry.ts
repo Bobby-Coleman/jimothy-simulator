@@ -1,11 +1,16 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Game } from '../../core/Game';
+import { JimothyQuad } from '../../player/JimothyQuad';
 import { emptyRig, type SlopRig } from './SlopMaterial';
 
 /**
- * Builds single-mesh "GPU rigged" geometries for slop creatures: every vertex carries its part index (aPart),
- * whether it's an extra/wrong bit (aExtra) and an emissive boost (aGlow), plus a vertex colour.
+ * Geometry for the slop creatures.
+ *  - The Slop Dragon: a single-mesh "GPU rigged" geometry: every vertex carries its part index (aPart), whether it's an
+ *    extra/wrong bit (aExtra) and an emissive boost (aGlow), plus a vertex colour (PartGeo).
+ *  - The Slopothys: the REAL Jimothy (jimothy.glb, skinned, posed by his own animator) re-rigged with every mistake an
+ *    image generator makes with him: a third eye, six legs, four ears, a long ringed tail (see loadSlopothyModel; the
+ *    neck, melting face, wrong ears and AI hands are done with bones / the shader in Slopothys.ts).
  */
 
 type ColorFn = (p: THREE.Vector3, n: THREE.Vector3) => THREE.Color;
@@ -101,224 +106,474 @@ export class PartGeo {
 }
 
 // =====================================================================================================
-// Slopothy
+// Slopothy: the real Jimothy (jimothy.glb) with an image generator's mistakes
 // =====================================================================================================
 
-/** Slopothy part indices (shared with the animation code). */
-export const SP = {
-  body: 0,
-  armL: 1,
-  armR: 2,
-  legL: 3,
-  legR: 4,
-  extraLeg1: 5,
-  extraLeg2: 6,
-  head: 7,
+/**
+ * A Slopothy's optional mistakes (bit flags). The geometry for all of them lives in ONE shared skinned mesh built from
+ * the real model; each Slopothy switches its own on (Slopothys.ts), so every variant shares the same buffers.
+ */
+export const SF = {
+  /** A third eye in the middle of the forehead. */
+  eye3: 1,
+  /** Six legs: a middle pair (copies of his front legs) under the belly. */
+  legs: 2,
+  /** A second pair of ears behind the first. */
+  ears: 4,
+  /** A long ringed raccoon tail (the real one is a short puff). */
   tail: 8,
-  extraTail: 9,
+  /** A neck (the real one has virtually none). */
+  neck: 16,
+  /** The face melts and drips. */
+  melt: 32,
+  /** Mismatched ears: one huge, one small and on backwards. */
+  earMix: 64,
+  /** Giant "AI hands" (and feet). */
+  paws: 128,
 } as const;
 
-export const SLOP_LEGS = [SP.armL, SP.armR, SP.legL, SP.legR, SP.extraLeg1, SP.extraLeg2];
+/** Per-vertex feature ids (aSlopV.x): the uFeat[] toggle that shows the vertex (0 = always shown). */
+export const FEAT = { eye3: 1, legL: 2, legR: 3, earL: 4, earR: 5, tail: 6 } as const;
+export const MAX_FEAT = 8;
 
-export interface SlopModelData {
-  geometry: THREE.BufferGeometry;
-  rig: SlopRig;
-  /** Lowest point of the model (feet), model space. */
-  footY: number;
-  /** Model height (m). */
-  height: number;
-  fromGlb: boolean;
+export interface SlopBoneSpec {
+  name: string;
+  /** Parent bone (null = the model root). Every rest rotation is identity, like the real rig. */
+  parent: string | null;
+  /** Rest position relative to the parent. */
+  pos: THREE.Vector3;
 }
 
-const PART_OF: Record<string, number> = {
-  Body: SP.body,
-  ArmL: SP.armL,
-  HandL: SP.armL,
-  ArmR: SP.armR,
-  HandR: SP.armR,
-  LegL: SP.legL,
-  LegR: SP.legR,
-  ExtraLeg1: SP.extraLeg1,
-  ExtraLeg2: SP.extraLeg2,
-  Head: SP.head,
-  EarL: SP.head,
-  EarR: SP.head,
-  EyeL: SP.head,
-  EyeR: SP.head,
-  Mouth: SP.head,
-  Nose: SP.head,
-  ExtraEye1: SP.head,
-  ExtraEye2: SP.head,
-  Tail1: SP.tail,
-  Tail2: SP.tail,
-  Tail3: SP.tail,
-  Tail4: SP.tail,
-  Tail5: SP.tail,
-  ExtraTail1: SP.extraTail,
-  ExtraTail2: SP.extraTail,
-  ExtraTail3: SP.extraTail,
-};
-const PIVOT_NODE: Record<string, number> = {
-  ArmL: SP.armL,
-  ArmR: SP.armR,
-  LegL: SP.legL,
-  LegR: SP.legR,
-  ExtraLeg1: SP.extraLeg1,
-  ExtraLeg2: SP.extraLeg2,
-  Head: SP.head,
-  Tail1: SP.tail,
-  ExtraTail1: SP.extraTail,
-};
-const EXTRA_NODES = new Set(['ExtraLeg1', 'ExtraLeg2', 'ExtraEye1', 'ExtraEye2', 'ExtraTail1', 'ExtraTail2', 'ExtraTail3']);
+export interface SlopModelData {
+  /**
+   * The real Jimothy's skinned body + his eyes / nose (as skinned parts) + every optional mistake, in the model frame
+   * (feet on y = 0, facing +Z, his left = +X). Attributes: position normal uv skinIndex skinWeight color _furlen
+   * _furcomb aSlopV (feature id, face-melt weight, gloss) aGlow aPart aExtra (the slop shader's; 0 here).
+   * UV x < -0.5 = untextured (vertex colour only).
+   */
+  geometry: THREE.BufferGeometry;
+  /**
+   * The same mesh drawing only the base body + the features in `mask` (bit 1 << FEAT id): its own index buffer over the
+   * shared vertex buffers (cached; never dispose these). Unused mistakes then cost nothing to draw.
+   */
+  geometryFor(mask: number): THREE.BufferGeometry;
+  /** Skeleton, parents first: the real rig's bones, then EyeL/EyeR/Nose/Eye3, the middle legs, Ear2L/R, TailX1..7. */
+  bones: SlopBoneSpec[];
+  boneInverses: THREE.Matrix4[];
+  /** His coat texture. */
+  coat: THREE.Texture | null;
+  /** Where each feature grows from (model frame), indexed by FEAT id. */
+  featAnchors: THREE.Vector3[];
+  /** The long tail's bones, root first. */
+  tailBones: string[];
+  /** Unused part rig for the slop shader (everything is part 0). */
+  rig: SlopRig;
+  /** Generous bounds for culling / bubbles (model frame, any pose). */
+  box: THREE.Box3;
+  bounds: THREE.Sphere;
+}
 
-let modelPromise: Promise<SlopModelData> | null = null;
+let modelPromise: Promise<SlopModelData | null> | null = null;
 
-/** Load (once) the Slopothy geometry: from slopothy.glb, or a distorted procedural raccoon as a fallback. */
-export function loadSlopothyModel(game: Game): Promise<SlopModelData> {
+/** Build (once) the Slopothy mesh from the real Jimothy. Resolves null if jimothy.glb can't be loaded. */
+export function loadSlopothyModel(game: Game): Promise<SlopModelData | null> {
   if (!modelPromise) {
-    modelPromise = (async () => {
-      const obj = await game.assets.tryModel('assets/models/slopothy.glb');
-      if (obj) {
-        try {
-          return fromGlb(obj);
-        } catch (err) {
-          console.warn('[slop] slopothy.glb conversion failed, using procedural slop', err);
-        }
-      }
-      return proceduralSlopothy();
-    })();
+    modelPromise = buildSlopothy(game).catch((err) => {
+      console.warn('[slop] could not build the Slopothy model', err);
+      return null;
+    });
   }
   return modelPromise;
 }
 
-function finishModel(geometry: THREE.BufferGeometry, rig: SlopRig, fromGlb: boolean): SlopModelData {
-  const bb = geometry.boundingBox!;
-  return { geometry, rig, footY: bb.min.y, height: bb.max.y - bb.min.y, fromGlb };
-}
+/** Collects skinned vertices + triangles into one geometry. */
+class SkinBuilder {
+  P: number[] = [];
+  N: number[] = [];
+  UV: number[] = [];
+  SI: number[] = [];
+  SW: number[] = [];
+  C: number[] = [];
+  V: number[] = [];
+  GL: number[] = [];
+  FL: number[] = [];
+  FC: number[] = [];
+  I: number[] = [];
 
-function fromGlb(root: THREE.Object3D): SlopModelData {
-  root.position.set(0, 0, 0);
-  root.rotation.set(0, 0, 0);
-  root.scale.set(1, 1, 1);
-  root.updateMatrixWorld(true);
-  const rig = emptyRig();
-  rig.parents[SP.extraTail] = SP.head;
-  root.traverse((o) => {
-    const id = PIVOT_NODE[o.name];
-    if (id != null) o.getWorldPosition(rig.pivots[id]);
-  });
-  const pg = new PartGeo();
-  let meshes = 0;
-  root.traverse((o) => {
-    const mesh = o as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    let part = -1;
-    let extra = false;
-    for (let n: THREE.Object3D | null = mesh; n; n = n.parent) {
-      if (part < 0 && PART_OF[n.name] != null) part = PART_OF[n.name];
-      if (EXTRA_NODES.has(n.name)) extra = true;
+  get count() {
+    return this.P.length / 3;
+  }
+
+  vert(p: THREE.Vector3, n: THREE.Vector3, uv: [number, number], si: number[], sw: number[], col: THREE.Color, feat: number, face = 0, gloss = 0, glow = 0, fl = 0, fc?: THREE.Vector3) {
+    this.P.push(p.x, p.y, p.z);
+    this.N.push(n.x, n.y, n.z);
+    this.UV.push(uv[0], uv[1]);
+    for (let k = 0; k < 4; k++) {
+      this.SI.push(si[k] ?? 0);
+      this.SW.push(sw[k] ?? 0);
     }
-    if (part < 0) part = SP.body;
-    const src = mesh.geometry as THREE.BufferGeometry;
+    this.C.push(col.r, col.g, col.b);
+    this.V.push(feat, face, gloss);
+    this.GL.push(glow);
+    this.FL.push(fl);
+    this.FC.push(fc?.x ?? 0, fc?.y ?? 0, fc?.z ?? 0);
+    return this.count - 1;
+  }
+
+  build() {
     const g = new THREE.BufferGeometry();
-    // Always de-interleave / de-quantize into plain Float32 attributes so everything merges cleanly.
-    const sp = src.getAttribute('position');
-    const sn = src.getAttribute('normal');
-    const pa = new Float32Array(sp.count * 3);
-    for (let i = 0; i < sp.count; i++) {
-      pa[i * 3] = sp.getX(i);
-      pa[i * 3 + 1] = sp.getY(i);
-      pa[i * 3 + 2] = sp.getZ(i);
-    }
-    g.setAttribute('position', new THREE.BufferAttribute(pa, 3));
-    if (src.index) g.setIndex(Array.from(src.index.array as ArrayLike<number>));
-    if (sn) {
-      const na = new Float32Array(sn.count * 3);
-      for (let i = 0; i < sn.count; i++) {
-        na[i * 3] = sn.getX(i);
-        na[i * 3 + 1] = sn.getY(i);
-        na[i * 3 + 2] = sn.getZ(i);
-      }
-      g.setAttribute('normal', new THREE.BufferAttribute(na, 3));
-    } else g.computeVertexNormals();
-    g.applyMatrix4(mesh.matrixWorld);
-    const mat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial;
-    const base = mat?.color ? mat.color.clone() : new THREE.Color(1, 1, 1);
-    const vc = src.getAttribute('color');
-    const n = g.getAttribute('position').count;
-    const colors = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      const r = vc ? vc.getX(i) : 1;
-      const gg = vc ? vc.getY(i) : 1;
-      const b = vc ? vc.getZ(i) : 1;
-      colors[i * 3] = r * base.r;
-      colors[i * 3 + 1] = gg * base.g;
-      colors[i * 3 + 2] = b * base.b;
-    }
-    const em = mat?.emissive;
-    const glow = em && (mat.emissiveIntensity ?? 0) > 0 && em.r + em.g + em.b > 0.3 ? 0.9 : 0;
-    pg.push(g, { part, color: 0xffffff, extra, glow }, colors);
-    meshes++;
-  });
-  if (!meshes) throw new Error('no meshes');
-  return finishModel(pg.build(), rig, true);
+    const f32 = (a: number[], n: number) => new THREE.BufferAttribute(new Float32Array(a), n);
+    g.setAttribute('position', f32(this.P, 3));
+    g.setAttribute('normal', f32(this.N, 3));
+    g.setAttribute('uv', f32(this.UV, 2));
+    g.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint16Array(this.SI), 4));
+    g.setAttribute('skinWeight', f32(this.SW, 4));
+    g.setAttribute('color', f32(this.C, 3));
+    g.setAttribute('aSlopV', f32(this.V, 3));
+    g.setAttribute('aGlow', f32(this.GL, 1));
+    g.setAttribute('_furlen', f32(this.FL, 1));
+    g.setAttribute('_furcomb', f32(this.FC, 3));
+    // the slop shader's part rig isn't used (skinning does the posing): one shared zero buffer for both
+    const zero = new THREE.BufferAttribute(new Float32Array(this.count), 1);
+    g.setAttribute('aPart', zero);
+    g.setAttribute('aExtra', zero);
+    g.setIndex(this.count > 65535 ? new THREE.BufferAttribute(new Uint32Array(this.I), 1) : new THREE.BufferAttribute(new Uint16Array(this.I), 1));
+    g.computeBoundingBox();
+    g.computeBoundingSphere();
+    return g;
+  }
 }
 
-/** A distorted procedural raccoon with the same part layout (used if the GLB is missing). */
-function proceduralSlopothy(): SlopModelData {
-  const rig = emptyRig();
-  rig.parents[SP.extraTail] = SP.head;
-  const pg = new PartGeo();
-  const fur = new THREE.Color('#8a7c86');
-  const belly = new THREE.Color('#eadfe8');
-  const mask = '#1e1523';
-  const white = '#f8f0fa';
-  const paw = '#2e2632';
-  const furFn: ColorFn = (_p, n) => _c.copy(fur).lerp(belly, THREE.MathUtils.clamp(-n.y * 0.8 + 0.1, 0, 1));
-  const S = (r: number, w = 18, h = 12) => new THREE.SphereGeometry(r, w, h);
-  pg.add(S(0.36, 22, 16), { part: SP.body, color: furFn, scale: [1.06, 0.94, 1.1] });
-  // head
-  rig.pivots[SP.head].set(0, 0.06, 0.2);
-  pg.add(S(0.2), { part: SP.head, color: furFn, pos: [0.01, 0.1, 0.27], scale: [1.15, 0.95, 1] });
-  pg.add(S(0.12), { part: SP.head, color: mask, pos: [0.02, 0.13, 0.4], scale: [1.8, 0.55, 0.7] });
-  pg.add(S(0.08), { part: SP.head, color: white, pos: [0.04, 0.05, 0.43], scale: [1.1, 0.8, 1.2] }); // melted muzzle
-  pg.add(S(0.05), { part: SP.head, color: white, pos: [-0.02, -0.03, 0.43], scale: [0.8, 1.6, 0.8] }); // chin drip
-  pg.add(S(0.028), { part: SP.head, color: '#161212', pos: [0.05, 0.08, 0.52] });
-  pg.add(S(0.045), { part: SP.head, color: '#060505', pos: [0.1, 0.15, 0.45] });
-  pg.add(S(0.034), { part: SP.head, color: '#060505', pos: [-0.08, 0.19, 0.45] });
-  pg.add(S(0.012), { part: SP.head, color: '#ffffff', pos: [0.115, 0.17, 0.49], glow: 0.9 });
-  pg.add(S(0.03), { part: SP.head, color: '#060505', pos: [0.01, 0.29, 0.4], extra: true });
-  pg.add(S(0.025), { part: SP.head, color: '#060505', pos: [-0.2, 0.05, 0.4], extra: true });
-  pg.add(S(0.07), { part: SP.head, color: furFn, pos: [0.17, 0.3, 0.22], scale: [1.6, 1.4, 0.5] });
-  pg.add(S(0.06), { part: SP.head, color: furFn, pos: [-0.13, 0.27, 0.22], scale: [0.9, 1.1, 0.45] });
-  // legs (+ extra legs), each a capsule with a 6-toed paw
-  const legs: [number, number, number, number, boolean][] = [
-    [SP.armL, 0.15, -0.2, 0.17, false],
-    [SP.armR, -0.15, -0.2, 0.17, false],
-    [SP.legL, 0.17, -0.22, -0.14, false],
-    [SP.legR, -0.17, -0.22, -0.14, false],
-    [SP.extraLeg1, 0.2, -0.18, 0.0, true],
-    [SP.extraLeg2, -0.21, -0.19, 0.02, true],
-  ];
-  for (const [part, x, y, z, extra] of legs) {
-    rig.pivots[part].set(x, y, z);
-    pg.add(new THREE.CapsuleGeometry(0.055, 0.1, 4, 10), { part, extra, color: furFn, pos: [x, y - 0.08, z] });
-    pg.add(S(0.06, 12, 8), { part, extra, color: paw, pos: [x, y - 0.19, z + 0.02], scale: [1.2, 0.55, 1.4] });
-    for (let f = 0; f < 6; f++) {
-      pg.add(S(0.014, 6, 4), { part, extra, color: paw, pos: [x - 0.05 + f * 0.02, y - 0.2, z + 0.09] });
+const NO_UV: [number, number] = [-2, -2];
+const smooth = (a: number, b: number, x: number) => {
+  const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+/** How much a point on his face melts (model frame): the muzzle and mask most, fading out up the brow. */
+const faceMelt = (p: THREE.Vector3, headW: number) => headW * smooth(0.285, 0.345, p.z) * THREE.MathUtils.clamp((0.545 - p.y) / 0.14, 0, 1);
+
+/** The long tail (model frame), root → tip: a gentle droop that curls back up. */
+const TAIL_PTS: [number, number, number][] = [
+  [0, 0.478, -0.27],
+  [0, 0.462, -0.35],
+  [0, 0.442, -0.43],
+  [0, 0.428, -0.51],
+  [0, 0.424, -0.59],
+  [0, 0.432, -0.665],
+  [0, 0.452, -0.735],
+];
+
+async function buildSlopothy(game: Game): Promise<SlopModelData | null> {
+  const src = await game.assets.tryModel('assets/models/jimothy.glb');
+  if (!src || !JimothyQuad.fits(src)) return null;
+  src.position.set(0, 0, 0);
+  src.quaternion.identity();
+  src.scale.set(1, 1, 1);
+  src.updateMatrixWorld(true);
+  let body: THREE.SkinnedMesh | null = null;
+  src.traverse((o) => {
+    const m = o as THREE.SkinnedMesh;
+    if (m.isSkinnedMesh && !body) body = m;
+  });
+  if (!body) return null;
+  const skinned: THREE.SkinnedMesh = body;
+  const srcBones = skinned.skeleton.bones;
+  const modelPos = (o: THREE.Object3D) => o.getWorldPosition(new THREE.Vector3());
+  const byName = (n: string) => src.getObjectByName(n)!;
+
+  // ---------------------------------------------------------------- skeleton
+  const specs: SlopBoneSpec[] = [];
+  const index = new Map<string, number>();
+  const at = new Map<string, THREE.Vector3>(); // rest positions, model frame
+  const addBone = (name: string, parent: string | null, model: THREE.Vector3) => {
+    index.set(name, specs.length);
+    at.set(name, model.clone());
+    const pos = parent ? model.clone().sub(at.get(parent)!) : model.clone();
+    specs.push({ name, parent, pos });
+    return specs.length - 1;
+  };
+  for (const b of srcBones) addBone(b.name, (b.parent as THREE.Bone | null)?.isBone ? b.parent!.name : null, modelPos(b));
+  const B = (n: string) => index.get(n)!;
+  // his eyes and nose are rigid meshes on the Head bone: here they're skinned parts, with bones of their own so the
+  // animator's blink (it scales EyeL / EyeR) still works
+  const eyeL = byName('EyeL') as THREE.Mesh;
+  const eyeR = byName('EyeR') as THREE.Mesh;
+  const nose = byName('Nose') as THREE.Mesh;
+  addBone('EyeL', 'Head', modelPos(eyeL));
+  addBone('EyeR', 'Head', modelPos(eyeR));
+  addBone('Nose', 'Head', modelPos(nose));
+
+  // ---------------------------------------------------------------- the real body
+  const sb = new SkinBuilder();
+  const g = skinned.geometry;
+  const pos = g.getAttribute('position');
+  const nor = g.getAttribute('normal');
+  const uv = g.getAttribute('uv');
+  const si = g.getAttribute('skinIndex');
+  const sw = g.getAttribute('skinWeight');
+  const fl = g.getAttribute('_furlen');
+  const fc = g.getAttribute('_furcomb');
+  const n = pos.count;
+  const headSet = new Set(['Head', 'Jaw', 'EarL', 'EarR'].map(B));
+  const weightOf = (i: number, set: Set<number>) => {
+    let s = 0;
+    for (let k = 0; k < 4; k++) if (set.has(si.getComponent(i, k))) s += sw.getComponent(i, k);
+    return s;
+  };
+  const white = new THREE.Color(1, 1, 1);
+  const p = new THREE.Vector3();
+  const q = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const skinOf = (i: number, remap?: (b: number) => number) => {
+    const idx: number[] = [];
+    const wt: number[] = [];
+    for (let k = 0; k < 4; k++) {
+      const b = si.getComponent(i, k);
+      idx.push(remap ? remap(b) : b);
+      wt.push(sw.getComponent(i, k));
     }
+    return { idx, wt };
+  };
+  for (let i = 0; i < n; i++) {
+    p.fromBufferAttribute(pos, i);
+    q.fromBufferAttribute(nor, i);
+    if (fc) c.fromBufferAttribute(fc, i);
+    else c.set(0, 0, 0);
+    const s = skinOf(i);
+    sb.vert(p, q, uv ? [uv.getX(i), uv.getY(i)] : NO_UV, s.idx, s.wt, white, 0, faceMelt(p, weightOf(i, headSet)), 0, 0, fl ? fl.getX(i) : 0, c);
   }
-  // tail
-  rig.pivots[SP.tail].set(0, 0.0, -0.3);
-  for (let i = 0; i < 7; i++) {
-    pg.add(S(0.075 - i * 0.004, 12, 8), { part: SP.tail, color: i % 2 ? '#2f2434' : '#b6a3ae', pos: [0.02 * i, 0.02 + i * 0.015, -0.32 - i * 0.09], scale: [1, 1, 1.3] });
+  const srcIndex = g.index ? Array.from(g.index.array as ArrayLike<number>) : Array.from({ length: n }, (_, i) => i);
+  for (const i of srcIndex) sb.I.push(i);
+
+  /** Append a rigid mesh (model frame) bound 100 % to one bone. */
+  const rigid = (mesh: THREE.Mesh, bone: number, col: THREE.Color, feat: number, gloss: number, glow: number, xf?: THREE.Matrix4) => {
+    const mg = mesh.geometry;
+    const mp = mg.getAttribute('position');
+    const mn = mg.getAttribute('normal');
+    const m = xf ?? mesh.matrixWorld;
+    const nm = new THREE.Matrix3().getNormalMatrix(m);
+    const base = sb.count;
+    for (let i = 0; i < mp.count; i++) {
+      p.fromBufferAttribute(mp, i).applyMatrix4(m);
+      if (mn) q.fromBufferAttribute(mn, i).applyMatrix3(nm).normalize();
+      else q.set(0, 0, 1);
+      sb.vert(p, q, NO_UV, [bone, 0, 0, 0], [1, 0, 0, 0], col, feat, faceMelt(p, 1), gloss, glow);
+    }
+    const mi = mg.index ? Array.from(mg.index.array as ArrayLike<number>) : Array.from({ length: mp.count }, (_, i) => i);
+    for (const i of mi) sb.I.push(base + i);
+  };
+  const colOf = (mesh: THREE.Object3D, fallback: number) => {
+    const mat = (mesh as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+    return mat?.color ? mat.color.clone() : new THREE.Color(fallback);
+  };
+  const glintOf = (eye: THREE.Object3D) => eye.children.find((o) => (o as THREE.Mesh).isMesh) as THREE.Mesh | undefined;
+  for (const [eye, bone] of [
+    [eyeL, B('EyeL')],
+    [eyeR, B('EyeR')],
+  ] as [THREE.Mesh, number][]) {
+    rigid(eye, bone, colOf(eye, 0x060505), 0, 1, 0);
+    const gl = glintOf(eye);
+    if (gl) rigid(gl, bone, new THREE.Color(1, 1, 1), 0, 0.6, 1.1);
   }
-  // extra tail growing out of the head
-  rig.pivots[SP.extraTail].set(0.04, 0.3, 0.2);
-  for (let i = 0; i < 4; i++) {
-    pg.add(S(0.05 - i * 0.006, 10, 7), { part: SP.extraTail, extra: true, color: i % 2 ? '#2f2434' : '#b6a3ae', pos: [0.04 - i * 0.02, 0.33 + i * 0.07, 0.18 - i * 0.03] });
+  rigid(nose, B('Nose'), colOf(nose, 0x161212), 0, 0.75, 0);
+  // everything so far is always drawn; each mistake's triangles follow as one run per FEAT id
+  const baseCount = sb.I.length;
+  const runs = new Map<number, [number, number]>();
+  const run = (feat: number, fn: () => void) => {
+    const s0 = sb.I.length;
+    fn();
+    runs.set(feat, [s0, sb.I.length - s0]);
+  };
+
+  // ---------------------------------------------------------------- mistake: a third eye
+  run(FEAT.eye3, () => {
+    // on the forehead, between and above his eyes: find the skin there
+    const probe = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial());
+    probe.geometry.setAttribute('position', pos);
+    probe.geometry.setIndex(srcIndex);
+    const eyeY = at.get('EyeL')!.y;
+    const ray = new THREE.Raycaster(new THREE.Vector3(0, eyeY + 0.036, 0.7), new THREE.Vector3(0, 0, -1));
+    const hit = ray.intersectObject(probe, false)[0];
+    const k = 2.1; // (bigger than the real two: the generator is proud of it)
+    const r = 0.011 * k;
+    const center = hit ? hit.point.clone().add(new THREE.Vector3(0, 0, -r * 0.3)) : new THREE.Vector3(0, eyeY + 0.036, 0.37);
+    const b3 = addBone('Eye3', 'Head', center);
+    const xf = new THREE.Matrix4().compose(center, new THREE.Quaternion(), new THREE.Vector3(k, k, k));
+    rigid(eyeL, b3, colOf(eyeL, 0x060505), FEAT.eye3, 1, 0, xf);
+    const gl = glintOf(eyeL);
+    if (gl) rigid(gl, b3, new THREE.Color(1, 1, 1), FEAT.eye3, 0.6, 1.3, xf.clone().multiply(gl.matrix));
+  });
+
+  // ---------------------------------------------------------------- mistake: six legs (copies of the front legs, mid-body)
+  /**
+   * Copy the triangles whose corners all belong (≥ minW) to `set`, moved by `d`, bones remapped. The sculpted fur
+   * fades out toward the cut (so the open edge stays tucked inside the body instead of flaring out).
+   */
+  const copyPart = (set: Set<number>, minW: number, d: THREE.Vector3, remap: (b: number) => number, feat: number) => {
+    const keep = new Map<number, number>();
+    for (let t = 0; t < srcIndex.length; t += 3) {
+      const a = srcIndex[t];
+      const b = srcIndex[t + 1];
+      const e = srcIndex[t + 2];
+      if (weightOf(a, set) < minW || weightOf(b, set) < minW || weightOf(e, set) < minW) continue;
+      for (const v of [a, b, e]) {
+        let o = keep.get(v);
+        if (o == null) {
+          p.fromBufferAttribute(pos, v).add(d);
+          q.fromBufferAttribute(nor, v);
+          if (fc) c.fromBufferAttribute(fc, v);
+          else c.set(0, 0, 0);
+          const s = skinOf(v, remap);
+          const fade = THREE.MathUtils.smoothstep(weightOf(v, set), minW, Math.min(1, minW + 0.4));
+          o = sb.vert(p, q, uv ? [uv.getX(v), uv.getY(v)] : NO_UV, s.idx, s.wt, white, feat, 0, 0, 0, fl ? fl.getX(v) * fade : 0, c);
+          keep.set(v, o);
+        }
+        sb.I.push(o);
+      }
+    }
+  };
+  const anchors = Array.from({ length: MAX_FEAT }, () => new THREE.Vector3());
+  anchors[FEAT.eye3].copy(at.get('Eye3')!);
+  for (const [s, feat] of [
+    ['L', FEAT.legL],
+    ['R', FEAT.legR],
+  ] as [string, number][]) {
+    const arm = at.get('Arm' + s)!;
+    const mid = new THREE.Vector3(arm.x * 1.25, arm.y + 0.02, 0.03);
+    const mArm = addBone('MidArm' + s, 'Spine2', mid);
+    const mFore = addBone('MidForearm' + s, 'MidArm' + s, mid.clone().add(at.get('Forearm' + s)!).sub(arm));
+    const mHand = addBone('MidHand' + s, 'MidForearm' + s, mid.clone().add(at.get('Hand' + s)!).sub(arm));
+    const map = new Map([
+      [B('Arm' + s), mArm],
+      [B('Forearm' + s), mFore],
+      [B('Hand' + s), mHand],
+    ]);
+    const spine = B('Spine2');
+    run(feat, () => copyPart(new Set(map.keys()), 0.5, mid.clone().sub(arm), (b) => map.get(b) ?? spine, feat));
+    anchors[feat].copy(mid);
   }
-  return finishModel(pg.build(), rig, false);
+
+  // ---------------------------------------------------------------- mistake: a second pair of ears
+  for (const [s, sx, feat] of [
+    ['L', 1, FEAT.earL],
+    ['R', -1, FEAT.earR],
+  ] as [string, number, number][]) {
+    const ear = at.get('Ear' + s)!;
+    const e2 = ear.clone().add(new THREE.Vector3(sx * 0.03, -0.024, -0.06));
+    const b2 = addBone('Ear2' + s, 'Head', e2);
+    const src2 = B('Ear' + s);
+    const head = B('Head');
+    run(feat, () => copyPart(new Set([src2]), 0.5, e2.clone().sub(ear), (b) => (b === src2 ? b2 : head), feat));
+    anchors[feat].copy(e2);
+  }
+
+  // ---------------------------------------------------------------- mistake: a long ringed tail
+  const tailBones: string[] = [];
+  {
+    const pts = TAIL_PTS.map(([x, y, z]) => new THREE.Vector3(x, y, z));
+    let parent = 'Tail';
+    pts.forEach((pt, i) => {
+      const name = 'TailX' + (i + 1);
+      addBone(name, parent, pt);
+      tailBones.push(name);
+      parent = name;
+    });
+    const tip = pts[pts.length - 1].clone().add(new THREE.Vector3(0, 0.03, -0.05));
+    const curve = new THREE.CatmullRomCurve3([...pts, tip], false, 'centripetal');
+    const nb = pts.length; // bones sit at curve t = k / nb (the tip segment follows the last one)
+    const rows = 46;
+    const around = 12;
+    const light = new THREE.Color('#aaa39c');
+    const dark = new THREE.Color('#2b2522');
+    const side = new THREE.Vector3(1, 0, 0);
+    const up = new THREE.Vector3();
+    const T = new THREE.Vector3();
+    const C0 = new THREE.Vector3();
+    const base = sb.count;
+    for (let r = 0; r <= rows; r++) {
+      const t = r / rows;
+      curve.getPoint(t, C0);
+      curve.getTangent(t, T);
+      up.crossVectors(side, T).normalize();
+      // fat and bushy, tapering; seven dark rings and a dark tip
+      let rad = THREE.MathUtils.lerp(0.068, 0.042, t) * (1 + 0.07 * Math.cos(t * Math.PI * 2 * 7));
+      if (t > 0.9) rad *= Math.sqrt(Math.max(0, (1 - t) / 0.1));
+      const ring = t > 0.9 || (t > 0.06 && (t * 7.4) % 1 > 0.56);
+      const k = Math.min(nb - 1, Math.floor(t * nb));
+      const f = THREE.MathUtils.clamp(t * nb - k, 0, 1);
+      const b0 = B(tailBones[k]);
+      const b1 = B(tailBones[Math.min(nb - 1, k + 1)]);
+      for (let j = 0; j <= around; j++) {
+        const a = (j / around) * Math.PI * 2;
+        q.copy(side).multiplyScalar(Math.cos(a)).addScaledVector(up, Math.sin(a));
+        p.copy(C0).addScaledVector(q, rad);
+        sb.vert(p, q, NO_UV, [b0, b1, 0, 0], [1 - f, f, 0, 0], ring ? dark : light, FEAT.tail, 0, 0.15);
+      }
+    }
+    run(FEAT.tail, () => {
+      for (let r = 0; r < rows; r++) {
+        for (let j = 0; j < around; j++) {
+          const A = base + r * (around + 1) + j;
+          const Bv = A + around + 1;
+          sb.I.push(A, Bv, A + 1, Bv, Bv + 1, A + 1);
+        }
+      }
+    });
+    anchors[FEAT.tail].copy(pts[0]);
+  }
+
+  // ---------------------------------------------------------------- bind matrices
+  const tmp: THREE.Object3D[] = [];
+  const tmpRoot = new THREE.Object3D();
+  for (const s of specs) {
+    const o = new THREE.Object3D();
+    o.position.copy(s.pos);
+    (s.parent ? tmp[index.get(s.parent)!] : tmpRoot).add(o);
+    tmp.push(o);
+  }
+  tmpRoot.updateMatrixWorld(true);
+  const boneInverses = specs.map((s, i) => (i < srcBones.length ? skinned.skeleton.boneInverses[i].clone() : tmp[i].matrixWorld.clone().invert()));
+
+  const geometry = sb.build();
+  const box = geometry.boundingBox!.clone().expandByScalar(0.12);
+  box.min.y -= 0.1;
+  box.max.y += 0.25; // a stretched neck / a sitting-up groom
+  const bounds = box.getBoundingSphere(new THREE.Sphere());
+  const mat = skinned.material as THREE.MeshStandardMaterial;
+  // one index buffer per combination of mistakes actually in use, all over the same vertex buffers
+  const fullIndex = geometry.index!.array as Uint16Array | Uint32Array;
+  const variants = new Map<number, THREE.BufferGeometry>();
+  const geometryFor = (mask: number) => {
+    let vg = variants.get(mask);
+    if (vg) return vg;
+    const parts: [number, number][] = [[0, baseCount]];
+    for (const [feat, r] of runs) if (mask & (1 << feat)) parts.push(r);
+    const arr = new (fullIndex.constructor as Uint16ArrayConstructor | Uint32ArrayConstructor)(parts.reduce((s, [, c]) => s + c, 0));
+    let o = 0;
+    for (const [s0, c] of parts) {
+      arr.set(fullIndex.subarray(s0, s0 + c), o);
+      o += c;
+    }
+    vg = new THREE.BufferGeometry();
+    for (const [name, a] of Object.entries(geometry.attributes)) vg.setAttribute(name, a);
+    vg.setIndex(new THREE.BufferAttribute(arr, 1));
+    vg.boundingBox = geometry.boundingBox!.clone();
+    vg.boundingSphere = geometry.boundingSphere!.clone();
+    variants.set(mask, vg);
+    return vg;
+  };
+  return {
+    geometry,
+    geometryFor,
+    bones: specs,
+    boneInverses,
+    coat: mat?.map ?? null,
+    featAnchors: anchors,
+    tailBones,
+    rig: emptyRig(),
+    box,
+    bounds,
+  };
 }
 
 // =====================================================================================================

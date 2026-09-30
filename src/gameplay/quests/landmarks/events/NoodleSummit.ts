@@ -53,7 +53,7 @@ export class NoodleSummit extends Landmark {
   }
 
   hint() {
-    if (this.step === 'leapt') return 'You jumped off the Space Noodle. You are fine. You are a ball.';
+    if (this.step === 'leapt') return 'You jumped off the Space Noodle. You are fine. You are round.';
     if (this.done) return 'Now take the Leap of Faith: jump off the top and land (it is fine, you are round).';
     return 'Get to the top deck of the Space Noodle, Downtown (east).';
   }
@@ -110,7 +110,7 @@ export class NoodleSummit extends Landmark {
       this.game.score(500, 'Top Of The Noodle', this.top.clone());
       this.setStep('summit');
       this.complete();
-      k.after(4, () => k.hint('Leap of Faith? Jump off. You are a ball. You will bounce.', 4));
+      k.after(4, () => k.hint('Leap of Faith? Jump off. You are round. You will bounce.', 4));
     } else {
       this.game.score(50, 'Noodle Again');
     }
@@ -119,7 +119,7 @@ export class NoodleSummit extends Landmark {
   private leapOfFaith(h: number) {
     const k = this.kit;
     const first = this.step !== 'leapt';
-    k.shout('LEAP OF FAITH!', `${h.toFixed(0)} m · Jimothy is fine. He's a ball.`, '#ffd84a');
+    k.shout('LEAP OF FAITH!', `${h.toFixed(0)} m · Jimothy is fine. He's round.`, '#ffd84a');
     this.game.sfx('crowd_cheer', this.player?.position, 0.8);
     this.game.sfx('boing', this.player?.position, 1, 0.7);
     this.game.get<CameraRig>('camera')?.shake(0.8);

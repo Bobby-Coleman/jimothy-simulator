@@ -17,15 +17,15 @@ No install, no login. Keyboard + mouse, gamepad, or touch (phones/tablets).
 | ![Washing cotton candy](docs/screenshots/03-washing-cotton-candy.jpg) | ![Climbing the Space Noodle](docs/screenshots/04-space-noodle-climb.jpg) |
 | *Washing cotton candy. (Where'd it go?)* | *Climbing the Space Noodle* |
 | ![The park](docs/screenshots/05-park-with-npcs.jpg) | ![Pike's Plaice Market](docs/screenshots/06-pikes-plaice-market.jpg) |
-| *Gasworks-ish Park (that's the Slop Dragon up there)* | *Pike's Plaice Market — fresh fish, flying daily* |
-| ![SlopCorp and the Slop Dragon](docs/screenshots/07-slopcorp-dragon.jpg) | ![Finale fireworks](docs/screenshots/08-finale-fireworks.jpg) |
-| *SlopCorp's AI campus: fake Jimothys and a seven-legged dragon* | *Jimothy Summer Forever* |
+| *Gasworks-ish Park* | *Pike's Plaice Market — fresh fish, flying daily (and a bronze Jimothy piggy bank)* |
+| ![SlopCorp's fake Jimothys](docs/screenshots/07-slopcorp-dragon.jpg) | ![Finale fireworks](docs/screenshots/08-finale-fireworks.jpg) |
+| *SlopCorp's AI campus: fake Jimothys, each wrong in its own way (that's the real one in front)* | *Jimothy Summer Forever* |
 
 ## What's in it
 
 * **A raccoon, not a goat.** Grabby hands instead of a lick (carry, drag, steal from pedestrians, hang onto moving cars),
-  a round-boy body slam instead of a headbutt, wall climbing, swimming, and — because he's basically a sphere —
-  **Tuck & Roll** into a bowling ball. Flop into a ragdoll whenever you like.
+  a round-boy body slam instead of a headbutt, wall climbing, swimming, and — because that domed back is halfway there
+  already — **Tuck & Roll** into a bowling ball. Flop into a ragdoll whenever you like.
 * **Washing.** Raccoons wash things. Hold anything near water (puddles, fountains, pools, the bay, sprinklers — or
   anywhere at all when Seattle rains) and scrub. Cotton candy dissolves. Cash gets laundered. Phones become
   "water resistant". AI-generated fake Jimothys melt.

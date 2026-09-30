@@ -17,8 +17,10 @@ Read it fully before writing code or assets.
 * **Heartwarming** underneath: Jimothy is beloved. The town adores him. He has a mom, possible family,
   crow friends, and he returns lost things. Moments of genuine sweetness between the chaos.
 * **Rating: PG.** Cartoon violence only. No blood, no swearing, no alcohol/drug jokes, nothing mean-spirited.
-  Jimothy's round shape is *celebrated* ("round boy", "perfectly spherical", "aerodynamically a ball"),
-  **never mocked**. His short spine syndrome is not a joke target; he's healthy and happy.
+  Jimothy's round shape is *celebrated* ("round boy", "maximum roundness", "no neck and no notes"), **never mocked**.
+  His short spine syndrome is not a joke target; he's healthy and happy. He's round, not a literal ball: he has long
+  legs and a tiny puff of a tail (§6). "Perfectly spherical" is for fans' hyperbole, the Tuck & Roll ball
+  ("aerodynamically a ball") and AI slop getting him wrong.
 * **AI slop jokes** (self-aware: this game was built overnight by an AI). Target the *slop*, not people.
   Use fictional parody company names (SlopCorp, PromptFarm), never real AI products/companies.
 * Real people: **never name real private individuals.** The woman who first filmed him is "a nice lady with a phone".
@@ -26,7 +28,8 @@ Read it fully before writing code or assets.
 
 ## 2. What's real about Jimothy (lore to riff on)
 
-* Wild raccoon living in **Ballard, Seattle**. Unusually short, **rounded, almost spherical** body, basically no neck
+* Wild raccoon living in **Ballard, Seattle**. An unusually short, arched spine gives him a **round, domed back**,
+  basically **no neck**, **long legs** for his body length, a **very short tail** and an unusual, high-stepping gait
   (likely short spine syndrome). Experts say he's healthy, no mobility issues or pain.
 * July 13 2026: a woman filmed him near the Ballard thrift store. She thought he was **a cat** until he turned around.
   "What am I looking at?" She named him Jimothy because **"he just looked like a Jimothy."**
@@ -64,8 +67,9 @@ Read it fully before writing code or assets.
 
 ## 4. Mechanics (raccoon-specific, replacing goat-specific ones)
 
-* **Grabby Hands** (replaces the goat's lick): tiny dexterous hands grab small props (carry above head), drag big ones
-  (fridges, cars' bumpers, NPC legs), steal held items from humans (phones, coffee, sandwiches), hang onto moving cars.
+* **Grabby Hands** (replaces the goat's lick): dexterous raccoon hands grab small props (they ride on his back),
+  drag big ones (fridges, cars' bumpers, NPC legs), steal held items from humans (phones, coffee, sandwiches), hang
+  onto moving cars.
 * **Washing** (signature): hold an item near/in water (bay, pond, fountain, puddles, pools, sinks, sprinklers) and scrub.
   Things change when washed:
   * cotton candy → **dissolves**; Jimothy stares at his empty hands. Sad trombone. (+points, objective)
@@ -74,10 +78,11 @@ Read it fully before writing code or assets.
   * **AI slop things (Slopothys, slop signs) → dissolve/pixelate away**
   * dirty teddy bear → clean (return to sad kid)
   * soap bar → giant bubble burst; fish → clean fish; diploma → soggy; NPC face → they are baffled
-* **Tuck & Roll**: Jimothy is basically a sphere. Toggle into a ball: momentum physics, fast downhill, bowling people over,
-  bounce combos. Canon-adjacent: Danny was filmed rolling across a lawn.
+* **Tuck & Roll**: with that domed back he's halfway to a ball already. Toggle to tuck his legs in and become one
+  (`jimothy_ball.glb`): momentum physics, fast downhill, bowling people over, bounce combos. Canon-adjacent: Danny was
+  filmed rolling across a lawn.
 * **Climbing**: raccoons climb. Walls, trees, poles, drainpipes, the Space Noodle. Stamina meter.
-* **Flop**: ragdoll: the ball tumbles with flailing stubby legs. Goat-Sim-style.
+* **Flop**: ragdoll: he tumbles, long legs flailing. Goat-Sim-style.
 * **Bonk**: short lunge + body slam that launches props and NPCs.
 * **Dumpster diving**: jump into dumpsters/trash cans to find random items (sometimes rare).
 * **Nocturnal**: day/night cycle. At night trash is juicier, Grandma leaves snacks out, eyes glow (eyeshine!).
@@ -109,8 +114,13 @@ Pike Place → **Pike's Plaice Market**; Starbucks → **Starbrews** / **Bean Me
 
 ## 6. Characters
 
-* **Jimothy** — round grey-brown raccoon, black bandit mask, white muzzle/eyebrows, small round ears with pale rims,
-  stubby legs, tiny dark hands, fluffy ringed tail (5–6 dark rings). No neck: the head is the front of the ball.
+* **Jimothy** — the real one (`jimothy.glb`, animated by `src/player/JimothyQuad.ts`): a normal-sized raccoon on an
+  unusually short, arched spine, so his back is a **round dome**. Virtually **no neck**: the head is carried low at the
+  front of the dome, nose pointing down and forward. **Long legs** for his short body, dark toward the paws. A **very
+  short**, fluffy tail: a puff with faint rings. A normal raccoon face: black bandit mask, white brows and muzzle,
+  round ears with pale rims. Grey-brown coat with a lighter belly fringe that hangs down. His walk is a pace (the legs
+  on one side swing together) in which a front paw lifts high and curls. He tucks into a ball to roll
+  (`jimothy_ball.glb`, which keeps a short tail). Every rendition of him uses the shared helpers (§9).
 * **Mom** — normal-shaped raccoon (longer body), lives in the den. Grooms him. Wants snacks.
 * **Danny** — another round raccoon on a lawn in the Hills. Rolls. Might be Dad. Family reunion quest.
 * **Kits** — 5 lost baby raccoons around town; follow Jimothy in a line once found; bring them to Mom.
@@ -151,11 +161,16 @@ Goat Simulator 3 vibe: bright, saturated, sunny stylised-realism; chunky proport
 ambient occlusion, bloom, light fog to the horizon, Mount-Rainier-ish silhouette in the distance. Toy-like props.
 Jimothy is the most detailed thing on screen (fluffy shell-fur). Humans are chunky toys. Signs are canvas-drawn
 with parody names; AI slop signs have garbled text ("BEST ESPRSSO SINCE 20§3").
+Every rendition of Jimothy in the world comes from two shared helpers (use them, don't fork them, never draw the old
+ball): **`drawJimothy(ctx, x, y, r, opts)`** in `src/fx/jimothyArt.ts`, the 2D side profile mid-stride for signs,
+murals, flags and ads (face-on icons draw his real face: mask, brows, muzzle, round pale-rimmed ears); and
+**`bakeJimothy(game, opts)`** in `src/player/JimothyBake.ts`, the real model posed by his own animator and frozen into
+static meshes for statues, bobbleheads and figures.
 
 ## 10. Tech conventions
 
-* **Units** meters, Y-up, right-handed (Three.js default). Jimothy body radius **0.35 m**. Humans 1.75 m.
-  Cars ~4.3 m long. Trash can ~1 m tall. Doors 2.1 m.
+* **Units** meters, Y-up, right-handed (Three.js default). Jimothy: a **0.38 m** ball collider; the model is ~0.7 m
+  tall and ~0.85 m nose to tail. Humans 1.75 m. Cars ~4.3 m long. Trash can ~1 m tall. Doors 2.1 m.
 * **Stack**: three, @dimforge/rapier3d-compat, postprocessing. Vite dev server `npm run dev`.
 * **Source layout** (`src/`):
   * `core/` engine: `Game.ts`, `Physics.ts`, `Input.ts`, `Assets.ts`, `Events.ts`, `Renderer.ts`

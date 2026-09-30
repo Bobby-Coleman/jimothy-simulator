@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { assetUrl } from '../../core/Assets';
+import { drawJimothy } from '../../fx/jimothyArt';
 import type { Expression } from './types';
 
 /**
@@ -408,86 +409,54 @@ export function faceMaterial(style: FaceStyle, e: Expression, clean = false): TH
 
 const printCache = new Map<string, THREE.MeshStandardMaterial>();
 
-function roundRaccoon(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
-  // ears
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.arc(cx + s * r * 0.62, cy - r * 0.78, r * 0.27, 0, Math.PI * 2);
-    ctx.fillStyle = '#6f6a66';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(cx + s * r * 0.62, cy - r * 0.78, r * 0.15, 0, Math.PI * 2);
-    ctx.fillStyle = '#e9e1d6';
-    ctx.fill();
+/**
+ * The fan-tee print: the real Jimothy mid-walk (the shared doodle), cut out like a sticker with a white border so
+ * he reads on any shirt colour, over his name.
+ */
+function drawFanPrint(ctx: CanvasRenderingContext2D, W: number, H: number) {
+  const k = W / 256;
+  // the figure on its own layer, so its silhouette can be grown into the white border
+  const fig = document.createElement('canvas');
+  fig.width = W;
+  fig.height = H;
+  drawJimothy(fig.getContext('2d')!, W / 2, 106 * k, 98 * k);
+  const sil = document.createElement('canvas');
+  sil.width = W;
+  sil.height = H;
+  const sctx = sil.getContext('2d')!;
+  sctx.drawImage(fig, 0, 0);
+  sctx.globalCompositeOperation = 'source-in';
+  sctx.fillStyle = '#ffffff';
+  sctx.fillRect(0, 0, W, H);
+  const border = 7 * k;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    ctx.drawImage(sil, Math.cos(a) * border, Math.sin(a) * border);
   }
-  // body (he's a ball)
-  const g = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.2, cx, cy, r);
-  g.addColorStop(0, '#b4aea6');
-  g.addColorStop(1, '#7c7670');
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = g;
-  ctx.fill();
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = '#2a2622';
-  ctx.stroke();
-  // white brows / muzzle
-  ctx.fillStyle = '#f3efe8';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + r * 0.28, r * 0.42, r * 0.3, 0, 0, Math.PI * 2);
-  ctx.fill();
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.ellipse(cx + s * r * 0.36, cy - r * 0.34, r * 0.2, r * 0.09, s * 0.3, 0, Math.PI * 2);
-    ctx.fill();
+  ctx.drawImage(sil, 0, 0);
+  ctx.drawImage(fig, 0, 0);
+  // his name, fitted to the print
+  let size = 60 * k;
+  ctx.font = `${size}px ${FONT}`;
+  while (size > 20 && ctx.measureText('JIMOTHY').width > W - 30 * k) {
+    size -= 2;
+    ctx.font = `${size}px ${FONT}`;
   }
-  // bandit mask
-  ctx.fillStyle = '#1d1a18';
-  ctx.beginPath();
-  ctx.ellipse(cx - r * 0.34, cy - r * 0.08, r * 0.3, r * 0.19, 0.25, 0, Math.PI * 2);
-  ctx.ellipse(cx + r * 0.34, cy - r * 0.08, r * 0.3, r * 0.19, -0.25, 0, Math.PI * 2);
-  ctx.fill();
-  // eyes
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.arc(cx + s * r * 0.33, cy - r * 0.09, r * 0.085, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff';
-    ctx.fill();
-  }
-  // nose + smile
-  ctx.fillStyle = '#1d1a18';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + r * 0.17, r * 0.1, r * 0.07, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(cx - r * 0.12, cy + r * 0.33);
-  ctx.quadraticCurveTo(cx, cy + r * 0.42, cx + r * 0.12, cy + r * 0.33);
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  // tiny hands
-  ctx.fillStyle = '#2a2622';
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.ellipse(cx + s * r * 0.5, cy + r * 0.8, r * 0.14, r * 0.09, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 10 * k;
+  ctx.strokeStyle = '#ffffff';
+  ctx.strokeText('JIMOTHY', W / 2, 226 * k);
+  ctx.fillStyle = '#16304f';
+  ctx.fillText('JIMOTHY', W / 2, 226 * k);
 }
 
 function drawPrint(kind: 'jimothy' | 'slopcorp', canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext('2d')!;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (kind === 'jimothy') {
-    const W = canvas.width;
-    roundRaccoon(ctx, W / 2, 104, 72);
-    ctx.font = `64px ${FONT}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 10;
-    ctx.strokeStyle = '#ffffff';
-    ctx.strokeText('JIMOTHY', W / 2, 218);
-    ctx.fillStyle = '#16304f';
-    ctx.fillText('JIMOTHY', W / 2, 218);
+    drawFanPrint(ctx, canvas.width, canvas.height);
   } else {
     const W = canvas.width;
     const H = canvas.height;

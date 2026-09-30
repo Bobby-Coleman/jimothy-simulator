@@ -280,3 +280,34 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * **Placed from the photos**: the ears sit a touch lower and closer together, lean ~25° outward and tip slightly
   forward (they leaned back before), matching the adult photos (the side photo's ear lines up with the model's when
   overlaid). Hats and the hat fur-clip were re-fitted to the raised skull.
+
+## Every other Jimothy, redone as the real one (from the human)
+The player model became the real Jimothy a few rounds ago; everything else that depicted him was still the old ball
+with a long ringed tail. Now it all shows the real one (the rolling form, and signs about rolling, stay a ball).
+* **Two shared helpers**, so every rendition matches the model:
+  * `src/fx/jimothyArt.ts` `drawJimothy()`: the one 2D doodle of him, fitted to the model and the photos: a domed
+    back, the head low at the front with no neck, long legs mid-stride with a front paw curled up, a tiny tail puff.
+    Every sign, flag, banner, bus-stop ad, shop window, plaque, the mural and the fan T-shirts use it.
+  * `src/player/JimothyBake.ts` `bakeJimothy()`: the real model posed by his own animator and frozen into static
+    meshes (fur optionally sculpted into the surface, head split off for bobbleheads), for the 3D ones.
+* **3D:** the Downtown statue is now a bronze of him mid-stride with his fur and mask carved in (climbable; the
+  bobblehead sits on his head). The golden bobbleheads and the stadium's giant one (in a Barnacles jersey and cap)
+  are the real Jimothy with a big nodding head. "Round Form #7" is an abstract bronze of him on four long legs. The
+  bronze piggy bank at the market is his current rolling ball (short tail now). The Golden Garbage Trophy has a tiny
+  gold Jimothy peeking out.
+* **Slopothys** are now built from the real model, walking his real gait in mid-air, each with an AI's mistakes: six
+  legs, a long neck, a long ringed tail, a third eye, a melting face, extra or wrong ears, giant hands.
+  "Suspiciously Normal Jimothy" looks exactly like him (it hovers 3 cm up and casts no shadow). `slopothy.glb` is gone.
+* **2D art:** the SlopCorp billboard and posters show an AI getting him wrong (giraffe neck, six legs, a long ringed
+  tail); washing reveals a hand-painted real Jimothy. The finale's raccoon firework draws his walking silhouette in
+  sparks. The logo's "O", the dialog portraits and the favicon are his real face. Rookie card, cash, newspaper photo,
+  stadium banners and the scoreboard's pixel art are all the real him.
+* **One of Mom's kits takes after him:** Nugget has his domed back, low head, long legs and tiny tail puff
+  (`kit_jimothy.glb`, `tools/blender/build_kit_jimothy.py`), in the kit quest and the finale.
+* **Mutators on the new body:** AI Enhanced grows copies of his real legs and a forehead eye and shimmers all over;
+  Bobblehead grows his head over his shoulders; Wet Jimothy's fur flattens (it never did before); the Zoomies tail
+  helicopter swells his puff; the Rookie carries his bat in his mouth; the crows grip his back; the finale's wave is a
+  sit-up-and-wave; the cannon tucks him into a ball with his face peeking out of the muzzle.
+* **Text:** only lines his real body contradicts changed ("Tiny Legs, Big Journey" → "Legs For Days", "tiny arms",
+  "basically a sphere"…). He's still famously round, so the round jokes stay. DESIGN.md's character sheet and
+  AGENTS.md's player-model notes describe the real Jimothy. README screenshots retaken.

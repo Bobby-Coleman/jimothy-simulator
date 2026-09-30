@@ -37,7 +37,7 @@ const COMMON: Record<LineKey, string[]> = {
   flee: ['AAAH!', 'RUN!', 'Everybody panic!', 'Round boy rampage!', 'Not the face!', 'Whaaa!', 'Chaos raccoon!'],
   getup: ['My back!', "I'm okay!", 'Was that... a raccoon?', 'Worth it.', 'Ow! ...still cute though.', 'Did anyone get that on video?', '10/10 would get bonked again', "I'm filing a complaint. A cute one.", 'Who put a raccoon there?!', 'Ugh, my latte...', 'I felt that in my soul.'],
   stolen: ['HEY!', 'HEY! That\'s mine!', 'Give that back!', 'Thief! Tiny round thief!'],
-  giveUp: ['Ugh, fine. Keep it.', "He's surprisingly fast for a ball.", "I'll just buy another one...", 'I respect the hustle.', 'Enjoy it, I guess!'],
+  giveUp: ['Ugh, fine. Keep it.', "He's surprisingly fast. Those LEGS!", "I'll just buy another one...", 'I respect the hustle.', 'Enjoy it, I guess!'],
   caught: ['Give that BACK!', 'Gotcha! ...no, wait.', 'Please? Pretty please?'],
   washed: ['...thank you?', 'Did a raccoon just wash my face?', 'I feel... refreshed?', 'Spa day, apparently.', 'My pores have never been cleaner.'],
   kitty: ['Here kitty kitty...', 'Aww, a kitty!', 'C\'mere, kitty!'],

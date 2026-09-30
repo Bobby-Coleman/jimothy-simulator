@@ -1,4 +1,4 @@
-import { drawRoundRaccoon, fitText, FONT_BODY, FONT_SERIF, FONT_SIGN, FONT_TITLE, roundRect, sparkle, textLines } from './signs';
+import { drawJimothy, fitText, FONT_BODY, FONT_SERIF, FONT_SIGN, FONT_TITLE, roundRect, sparkle, textLines } from './signs';
 
 /** Canvas art for Downtown: City Hall banners, flags, statue plaque, Noodle signage, tower lobby signs. */
 type Ctx = CanvasRenderingContext2D;
@@ -12,8 +12,8 @@ export function drawFriezeBanner(ctx: Ctx, w: number, h: number) {
   ctx.strokeStyle = '#f2c14e';
   ctx.lineWidth = h * 0.06;
   ctx.strokeRect(h * 0.08, h * 0.08, w - h * 0.16, h - h * 0.16);
-  drawRoundRaccoon(ctx, h * 0.62, h / 2, h * 0.32, { sunglasses: true });
-  drawRoundRaccoon(ctx, w - h * 0.62, h / 2, h * 0.32, { sunglasses: true });
+  drawJimothy(ctx, h * 0.62, h / 2, h * 0.32, { sunglasses: true });
+  drawJimothy(ctx, w - h * 0.62, h / 2, h * 0.32, { sunglasses: true });
   fitText(ctx, 'JIMOTHY SUMMER', w * 0.5, h * 0.4, w * 0.7, h * 0.46, FONT_TITLE, { fill: '#ffe14d', stroke: '#4a0a06', strokeW: h * 0.06 });
   fitText(ctx, '— OFFICIAL PROCLAMATION —', w * 0.5, h * 0.78, w * 0.6, h * 0.17, FONT_SERIF, { fill: '#fff4d6', weight: 'bold' });
 }
@@ -27,7 +27,7 @@ export function drawVerticalBanner(ctx: Ctx, w: number, h: number, i: number) {
   ctx.lineTo(w / 2, h * 0.93);
   ctx.lineTo(w, h);
   ctx.fill();
-  drawRoundRaccoon(ctx, w / 2, h * 0.3, w * 0.3);
+  drawJimothy(ctx, w / 2, h * 0.3, w * 0.3);
   fitText(ctx, 'JIMOTHY', w / 2, h * 0.58, w * 0.9, w * 0.22, FONT_TITLE, { fill: '#fff' });
   fitText(ctx, 'SUMMER', w / 2, h * 0.68, w * 0.9, w * 0.2, FONT_TITLE, { fill: '#ffe14d' });
   fitText(ctx, '2026', w / 2, h * 0.8, w * 0.7, w * 0.16, FONT_SIGN, { fill: '#fff' });
@@ -44,7 +44,7 @@ export function drawFlag(ctx: Ctx, w: number, h: number, i: number) {
       ctx.beginPath();
       ctx.arc(w / 2, h / 2, h * 0.36, 0, Math.PI * 2);
       ctx.fill();
-      drawRoundRaccoon(ctx, w / 2, h / 2 + h * 0.02, h * 0.24, { flat: true });
+      drawJimothy(ctx, w / 2, h / 2 + h * 0.02, h * 0.24, { flat: true });
       break;
     }
     case 1: {
@@ -75,7 +75,7 @@ export function drawFlag(ctx: Ctx, w: number, h: number, i: number) {
       for (let k = 0; k < 9; k++) sparkle(ctx, w * (0.1 + (k % 3) * 0.1), h * (0.15 + Math.floor(k / 3) * 0.15), h * 0.05, '#fff');
       ctx.fillStyle = '#fff';
       for (let k = 0; k < 4; k++) ctx.fillRect(w * 0.42, h * (0.08 + k * 0.23), w * 0.58, h * 0.1);
-      drawRoundRaccoon(ctx, w * 0.2, h * 0.75, h * 0.14, { flat: true });
+      drawJimothy(ctx, w * 0.2, h * 0.75, h * 0.14, { flat: true });
     }
   }
 }
@@ -105,7 +105,7 @@ export function drawCitySeal(ctx: Ctx, w: number, h: number) {
   ctx.beginPath();
   ctx.arc(w / 2, h / 2, r * 0.84, 0, Math.PI * 2);
   ctx.fill();
-  drawRoundRaccoon(ctx, w / 2, h / 2 + r * 0.05, r * 0.45, { flat: true });
+  drawJimothy(ctx, w / 2, h / 2 + r * 0.05, r * 0.45, { flat: true });
   ctx.fillStyle = '#d4a017';
   ctx.font = `bold ${r * 0.14}px ${FONT_SERIF}`;
   ctx.textAlign = 'center';

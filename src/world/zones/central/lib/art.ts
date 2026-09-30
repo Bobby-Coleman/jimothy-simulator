@@ -1,4 +1,4 @@
-import { drawRoundRaccoon, fitText, FONT_BODY, FONT_SIGN, FONT_TITLE, roundRect, sparkle, textLines } from './signs';
+import { drawJimothy, fitText, FONT_BODY, FONT_SIGN, FONT_TITLE, roundRect, sparkle, textLines } from './signs';
 
 /**
  * Canvas art for ads, posters and street signs. Every function draws into a (w × h) region.
@@ -27,7 +27,7 @@ export function busStopSign(ctx: Ctx, w: number, h: number, route: string) {
   ctx.fill();
   fitText(ctx, 'BUS STOP', w / 2, 8 + h * 0.18, w - 30, h * 0.24, FONT_SIGN, { fill: '#fff' });
   fitText(ctx, route, w / 2, h * 0.62, w - 30, h * 0.2, FONT_SIGN, { fill: '#1d1d1d' });
-  drawRoundRaccoon(ctx, w / 2, h * 0.84, h * 0.09, { flat: true });
+  drawJimothy(ctx, w / 2, h * 0.84, h * 0.09, { flat: true });
 }
 
 export const AD_COUNT = 7;
@@ -50,7 +50,7 @@ export function drawAd(ctx: Ctx, w: number, h: number, i: number) {
         ctx.fillRect(0, -6, w, 12);
         ctx.restore();
       }
-      drawRoundRaccoon(ctx, w / 2, h * 0.45, w * 0.26, { sunglasses: true });
+      drawJimothy(ctx, w / 2, h * 0.45, w * 0.26, { sunglasses: true });
       fitText(ctx, 'JIMOTHY', w / 2, h * 0.1, w * 0.9, w * 0.2, FONT_TITLE, { fill: '#fff', stroke: '#b3261e', strokeW: 10 });
       fitText(ctx, 'SUMMER', w / 2, h * 0.2, w * 0.9, w * 0.16, FONT_TITLE, { fill: '#fff', stroke: '#b3261e', strokeW: 8 });
       textLines(ctx, ['Officially proclaimed by the City.', 'Round by nature.'], w / 2, h * 0.84, w * 0.86, w * 0.06, FONT_BODY, '#4a1b0c', 1.25, { weight: '800' });
@@ -103,7 +103,7 @@ export function drawAd(ctx: Ctx, w: number, h: number, i: number) {
         ctx.fillRect(0, (k / 14) * h, w, 4 + (k % 3) * 3);
       }
       fitText(ctx, 'SLOPCORP', w / 2, h * 0.12, w * 0.9, w * 0.16, FONT_TITLE, { fill: '#7cf7ff' });
-      drawRoundRaccoon(ctx, w / 2, h * 0.42, w * 0.2, { body: '#9b7bd6', mask: '#2a1850' });
+      drawJimothy(ctx, w / 2, h * 0.42, w * 0.2, { body: '#9b7bd6', mask: '#2a1850' });
       // too many eyes
       ctx.fillStyle = '#fff';
       for (const [x, y] of [[0.43, 0.33], [0.58, 0.35], [0.5, 0.3]]) {
@@ -122,7 +122,7 @@ export function drawAd(ctx: Ctx, w: number, h: number, i: number) {
       ctx.fillRect(0, 0, w, h * 0.22);
       fitText(ctx, 'PLEASE', w / 2, h * 0.08, w * 0.9, w * 0.11, FONT_SIGN, { fill: '#fff' });
       fitText(ctx, "DON'T APPROACH", w / 2, h * 0.17, w * 0.9, w * 0.09, FONT_SIGN, { fill: '#ffd64a' });
-      drawRoundRaccoon(ctx, w / 2, h * 0.47, w * 0.2);
+      drawJimothy(ctx, w / 2, h * 0.47, w * 0.2);
       fitText(ctx, 'JIMOTHY', w / 2, h * 0.7, w * 0.9, w * 0.14, FONT_TITLE, { fill: '#2f5d3a' });
       textLines(ctx, ["He's fine. He's wild.", "He's washing your phone."], w / 2, h * 0.82, w * 0.88, w * 0.06, FONT_BODY, '#333', 1.2, { weight: '800' });
       fitText(ctx, 'Dept. of Fish & Wiggles', w / 2, h * 0.94, w * 0.9, w * 0.05, FONT_BODY, { fill: '#2f5d3a', weight: '900' });

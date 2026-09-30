@@ -9,6 +9,7 @@
  *  - Grandma Rosie's porch (grandmaPorch), Danny's perfect lawn (dannyLawn), radar speed sign.
  */
 import * as THREE from 'three';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Game } from '../../../core/Game';
 import type { World, ZoneBuilder } from '../../World';
 import type { WaterSystem } from '../../Water';
@@ -28,6 +29,7 @@ import {
   smoothPath,
   footprint,
   colliderBox,
+  colliderHull,
   addAnimator,
   rng,
   pick,
@@ -940,17 +942,34 @@ function furryPark(game: Game, world: World, mats: MatSet, b: Batch, zCres: numb
   // posts behind the board (they used to stick out through its face over the lettering)
   b.box('wood', ox - 10.6, sy + 0.9, zs - 0.9 - 0.13, 0.14, 1.8, 0.14, 0x4a3220);
   b.box('wood', ox - 8.4, sy + 0.9, zs - 0.9 - 0.13, 0.14, 1.8, 0.14, 0x4a3220);
-  // "Round Form #7" bronze sculpture of a very round raccoon
-  const sx = ox + 9,
-    sz = oz - 6.5;
+  // "Round Form #7": modern art, a polished bronze abstraction of Jimothy on a stone block (east of the viewpoint,
+  // clear of the Hilltop Lanes wall)
+  const sx = ox + 11,
+    sz = oz - 5.5;
   const g = world.heightAt(sx, sz);
   b.box('stone', sx, g + 0.5, sz, 1.6, 1.0, 1.6, 0xd6d0c4);
   world.collider(new THREE.Vector3(sx, g + 0.5, sz), new THREE.Vector3(1.6, 1.0, 1.6));
-  const bronze = 0x9c6b3a;
-  b.add('metal', GEO.sphere, trs(sx, g + 1.75, sz, 1.6, 1.5, 1.7), bronze);
-  for (const s of [-1, 1]) b.add('metal', GEO.sphere, trs(sx + s * 0.45, g + 2.45, sz + 0.35, 0.34, 0.34, 0.2), bronze);
-  b.add('metal', GEO.cyl8, trs(sx, g + 1.4, sz - 0.9, 0.36, 0.9, 0.36, 0, 1.1), bronze);
-  colliderBox(game, sx, g + 1.75, sz, 1.4, 1.4, 1.5);
+  // facing down the hill (south-east), his right side (the lifted paw) toward the viewpoint
+  roundForm7(game, world, sx, g + 1.0, sz, 0.6);
+  const plaque = canvasTexture(256, 128, (ctx, w, h) => {
+    const brass = ctx.createLinearGradient(0, 0, w, h);
+    brass.addColorStop(0, '#e3c27a');
+    brass.addColorStop(1, '#b8904a');
+    ctx.fillStyle = brass;
+    roundRect(ctx, 0, 0, w, h, 10);
+    ctx.fill();
+    ctx.strokeStyle = '#7a5a26';
+    ctx.lineWidth = 4;
+    roundRect(ctx, 6, 6, w - 12, h - 12, 7);
+    ctx.stroke();
+    ctx.fillStyle = '#3b2a12';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    fitText(ctx, 'ROUND FORM #7', w / 2, h * 0.4, w - 36, 34, "'Lilita One', sans-serif");
+    fitText(ctx, 'Polished bronze · 2026 · Do not roll', w / 2, h * 0.72, w - 40, 17, "'Nunito', sans-serif", '800');
+  });
+  // on the block's south face (toward the viewpoint)
+  signPanel(world, plaque, sx, g + 0.62, sz + 0.8, 0.56, 0.28, 0, { back: 0x7a5a26, depth: 0.02, collide: false, batch: b });
   // picnic tables, trees around the lawn
   for (const [px, pz] of [
     [-7, zs - 14],
@@ -974,6 +993,104 @@ function furryPark(game: Game, world: World, mats: MatSet, b: Batch, zCres: numb
     [-14, zs - 10],
     [14, zs - 10],
   ], { seed: 42, collider: false });
+}
+
+/**
+ * "Round Form #7": Jimothy abstracted into smooth polished bronze. A domed egg of a back on four long, slender legs,
+ * mid-pace (a front paw lifted and curled), the head a low nub at the front of the dome (no neck) with ear nubs, a
+ * short snout and a dark patina mask, and a tail puff. Figure units: forward +z, his left +x, y up from the top of the
+ * block; `yaw` turns it.
+ */
+function roundForm7(game: Game, world: World, x: number, y: number, z: number, yaw: number) {
+  const K = 1.8; // figure units → metres
+  const parts: THREE.BufferGeometry[] = [];
+  /**
+   * An ellipsoid (radii rx, ry, rz; `belly` squashes its lower half), tilted `pitch` (+ = front end down). `tone` gives
+   * the bronze a darker patina by the vertex's place on the unit sphere (x, y up, z forward).
+   */
+  const egg = (
+    cx: number,
+    cy: number,
+    cz: number,
+    rx: number,
+    ry: number,
+    rz: number,
+    o: { belly?: number; pitch?: number; roll?: number; seg?: number; tone?: (x: number, y: number, z: number) => number } = {},
+  ) => {
+    const s = new THREE.SphereGeometry(1, o.seg ?? 40, Math.round((o.seg ?? 40) * 0.6));
+    const p = s.getAttribute('position');
+    const col = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) col.fill(o.tone ? o.tone(p.getX(i), p.getY(i), p.getZ(i)) : 1, i * 3, i * 3 + 3);
+    s.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    if (o.belly) for (let i = 0; i < p.count; i++) if (p.getY(i) < 0) p.setY(i, p.getY(i) * o.belly);
+    s.scale(rx, ry, rz);
+    s.rotateX(o.pitch ?? 0);
+    s.rotateZ(o.roll ?? 0);
+    s.translate(cx, cy, cz);
+    parts.push(s);
+  };
+  /** A long leg through its joints (hip / shoulder first), tapering from r0 at the top to r1, ending in a paw. */
+  const leg = (pts: [number, number, number][], r0: number, r1: number, paw: [number, number, number]) => {
+    const curve = new THREE.CatmullRomCurve3(pts.map((q) => new THREE.Vector3(q[0], q[1], q[2])));
+    const T = 20;
+    const R = 12;
+    const tube = new THREE.TubeGeometry(curve, T, 1, R, false);
+    const p = tube.getAttribute('position');
+    const c = new THREE.Vector3();
+    for (let i = 0; i <= T; i++) {
+      curve.getPointAt(i / T, c);
+      const t = i / T;
+      const r = r0 + (r1 - r0) * Math.sqrt(t);
+      for (let j = 0; j <= R; j++) {
+        const k = i * (R + 1) + j;
+        p.setXYZ(k, c.x + (p.getX(k) - c.x) * r, c.y + (p.getY(k) - c.y) * r, c.z + (p.getZ(k) - c.z) * r);
+      }
+    }
+    tube.setAttribute('color', new THREE.BufferAttribute(new Float32Array(p.count * 3).fill(1), 3));
+    parts.push(tube);
+    egg(paw[0], paw[1], paw[2], 0.036, 0.024, 0.05, { seg: 14 });
+  };
+  egg(0, 0.47, -0.02, 0.2, 0.225, 0.3, { belly: 0.72, pitch: 0.12, seg: 56 }); // the dome of his back, peaking aft
+  // head: low at the front of the dome, no neck. His face in patina: the bandit mask a dark band across the eyes, the
+  // brows above it and the muzzle below polished bright, the nose dark. (The head is pitched nose-down, so eye level
+  // is high on its unit sphere.)
+  const face = (x: number, y: number, z: number) => {
+    if (z < 0.15) return 1;
+    const band = y - 0.62 + Math.abs(x) * 0.2; // sweeping down toward the cheeks
+    if (Math.abs(band) < 0.17) return 0.15;
+    if (band >= 0.17 && band < 0.33 && z > 0.3) return 1.3;
+    return band <= -0.17 && z > 0.55 ? 1.2 : 1;
+  };
+  egg(0, 0.43, 0.29, 0.088, 0.096, 0.125, { pitch: 0.75, tone: face });
+  // a short, pointed snout, down and forward
+  egg(0, 0.372, 0.382, 0.036, 0.036, 0.075, { pitch: 0.9, seg: 20, tone: (_x, _y, z) => (z > 0.82 ? 0.15 : 1.25) });
+  for (const s of [-1, 1]) egg(s * 0.068, 0.53, 0.255, 0.038, 0.046, 0.018, { roll: -s * 0.3, seg: 16 }); // round ears
+  egg(0, 0.47, -0.33, 0.07, 0.07, 0.06, { seg: 24 }); // the tail: a short puff
+  // long, slender legs mid-pace, as in the photos: right front paw lifted and curled, left hind reaching back
+  leg([[-0.1, 0.36, 0.15], [-0.115, 0.23, 0.24], [-0.115, 0.17, 0.26]], 0.055, 0.026, [-0.115, 0.158, 0.228]);
+  leg([[0.1, 0.36, 0.15], [0.1, 0.19, 0.19], [0.1, 0.03, 0.21]], 0.055, 0.024, [0.1, 0.024, 0.23]);
+  leg([[-0.11, 0.38, -0.16], [-0.125, 0.2, -0.1], [-0.115, 0.03, -0.06]], 0.065, 0.026, [-0.115, 0.024, -0.04]);
+  leg([[0.11, 0.38, -0.16], [0.115, 0.2, -0.22], [0.11, 0.03, -0.27]], 0.065, 0.026, [0.11, 0.024, -0.25]);
+  // one smooth mesh, welded before the normals are worked out (no seams on the polish)
+  for (const p of parts) {
+    p.deleteAttribute('uv');
+    p.deleteAttribute('normal');
+  }
+  const geo = mergeVertices(mergeGeometries(parts, false)!);
+  geo.computeVertexNormals();
+  const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(K, K, K));
+  geo.applyMatrix4(m);
+  const bronze = new THREE.MeshStandardMaterial({ color: 0xb4793a, metalness: 0.9, roughness: 0.2, envMapIntensity: 1.6, vertexColors: true, name: 'north:polishedBronze' });
+  const mesh = new THREE.Mesh(geo, bronze);
+  mesh.name = 'roundForm7';
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  world.staticRoot.add(mesh);
+  // one convex hull around it all (dome, head, tail, paws), so he can climb it and stand on its back
+  const pos = geo.getAttribute('position');
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i < pos.count; i += 5) pts.push(new THREE.Vector3().fromBufferAttribute(pos, i));
+  colliderHull(game, pts);
 }
 
 function dannysLawn(game: Game, world: World, mats: MatSet, b: Batch, water: WaterSystem, info: HouseInfo) {

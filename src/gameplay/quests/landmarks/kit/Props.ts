@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { World } from '../../../../world/World';
-import { bannerTexture, canvasTexture, drawRaccoon, fitText, roundRect, SIGN_FONT } from './text';
+import { bannerTexture, canvasTexture, drawJimothyFigure, fitText, roundRect, SIGN_FONT } from './text';
 
 /** Procedural props + fallback set pieces for the landmark events. */
 
@@ -110,13 +110,12 @@ export function rookieCardTexture() {
     // ballpark grass
     ctx.fillStyle = '#3f9c4a';
     ctx.fillRect(18, 200, w - 36, 68);
-    drawRaccoon(ctx, w / 2, 150, 62);
-    // tiny baseball cap
-    ctx.fillStyle = '#0c2c56';
+    // the rookie himself, strolling onto the field in his Barnacles cap
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.beginPath();
-    ctx.ellipse(w / 2, 98, 44, 20, 0, Math.PI, 0);
+    ctx.ellipse(w / 2 + 4, 238, 76, 9, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillRect(w / 2 - 4, 96, 58, 8);
+    drawJimothyFigure(ctx, w / 2, 152, 92, { cap: '#0c2c56' });
     // nameplate
     ctx.fillStyle = '#0c2c56';
     roundRect(ctx, 18, 276, w - 36, 66, 10);
@@ -302,6 +301,57 @@ export function buildGradStage(world: World, origin: THREE.Vector3, yaw: number)
   };
 }
 
+/** The city seal on the podium's lectern: the real Jimothy, mid-stroll, inside a gold ring with the city's name. */
+export function drawCitySealArt(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const cx = w / 2;
+  const cy = h / 2;
+  const R = w / 2 - 4;
+  const gold = '#f2c14e';
+  ctx.fillStyle = '#1f3d7a';
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = gold;
+  ctx.lineWidth = 10;
+  ctx.stroke();
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R - 36, 0, Math.PI * 2);
+  ctx.stroke();
+  // the name around the top of the ring, two stars at the bottom
+  const text = 'CITY OF BALLARD-ISH';
+  const tr = R - 21;
+  ctx.font = `900 21px ${SIGN_FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = gold;
+  const widths = [...text].map((ch) => ctx.measureText(ch).width * 1.06);
+  let a = -Math.PI / 2 - widths.reduce((s, x) => s + x, 0) / tr / 2;
+  for (let i = 0; i < text.length; i++) {
+    const mid = a + widths[i] / tr / 2;
+    ctx.save();
+    ctx.translate(cx + Math.cos(mid) * tr, cy + Math.sin(mid) * tr);
+    ctx.rotate(mid + Math.PI / 2);
+    ctx.fillText(text[i], 0, 0);
+    ctx.restore();
+    a += widths[i] / tr;
+  }
+  for (const s of [-1, 1]) {
+    const sa = Math.PI / 2 + s * 0.55;
+    const sx = cx + Math.cos(sa) * tr;
+    const sy = cy + Math.sin(sa) * tr;
+    ctx.beginPath();
+    for (let k = 0; k < 10; k++) {
+      const ang = -Math.PI / 2 + (k * Math.PI) / 5;
+      const rr = k % 2 ? 4 : 9.5;
+      ctx.lineTo(sx + Math.cos(ang) * rr, sy + Math.sin(ang) * rr);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  drawJimothyFigure(ctx, cx, cy + 8, 66);
+}
+
 /**
  * City Hall proclamation podium (3 tiers + lectern + backdrop). origin = ground center; faces +Z.
  * Returns the podium top (Jimothy's spot), the mayor's spot and the backdrop sign (for re-texturing).
@@ -321,17 +371,7 @@ export function buildPodium(world: World, origin: THREE.Vector3, yaw: number) {
   ramp(world, local(origin, yaw, 0, 0.0, 5.4), local(origin, yaw, 0, top, 0.3), 2.2, carpet);
   // lectern with the city seal
   world.box(local(origin, yaw, 0, top + 0.6, -2.4), new THREE.Vector3(1.0, 1.2, 0.6), stdMat(0x5b3a22, { roughness: 0.6 }), { rotY: yaw });
-  const seal = canvasTexture(256, 256, (ctx, w, h) => {
-    ctx.fillStyle = '#1f3d7a';
-    ctx.beginPath();
-    ctx.arc(w / 2, h / 2, w / 2 - 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#f2c14e';
-    ctx.lineWidth = 10;
-    ctx.stroke();
-    drawRaccoon(ctx, w / 2, h / 2 + 10, 58);
-    fitText(ctx, 'CITY OF BALLARD-ISH', w / 2, 40, 200, 22, { color: '#f2c14e' });
-  });
+  const seal = canvasTexture(256, 256, drawCitySealArt);
   const sealSign = signBoard(0.7, 0.7, seal, 0x5b3a22);
   sealSign.position.copy(local(origin, yaw, 0, top + 0.72, -2.08));
   sealSign.rotation.y = yaw;

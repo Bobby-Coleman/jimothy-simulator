@@ -1,8 +1,10 @@
 import { assetUrl } from '../../core/Assets';
+import { drawJimothy } from '../../fx/jimothyArt';
 
 /**
- * Canvas art for the slop content. The AI images are glossy, over-saturated and subtly wrong (extra eyes, six
- * fingers, garbled text); the "human made" reveals are warm, painterly and round.
+ * Canvas art for the slop content. The AI images are glossy, over-saturated and wrong (an AI's attempt at Jimothy:
+ * a giraffe neck, a long ringed tail, six legs, three eyes, six fingers, garbled text); the "human made" reveals are
+ * warm paintings of the real, round Jimothy.
  */
 
 let fontsP: Promise<void> | null = null;
@@ -50,150 +52,419 @@ function ellipse(ctx: Ctx, x: number, y: number, rx: number, ry: number, rot = 0
   ctx.ellipse(x, y, Math.max(0.1, rx), Math.max(0.1, ry), rot, 0, TAU);
 }
 
-// ------------------------------------------------------------------ raccoons
+// ------------------------------------------------------------------ Jimothys
 
-/** Front view of a round raccoon centred at (x, y) with body radius r. */
-function raccoon(ctx: Ctx, x: number, y: number, r: number, style: 'painted' | 'slop', rand: () => number) {
-  const slop = style === 'slop';
-  const fur = slop ? '#9b8fb0' : '#8b8178';
-  const furDark = slop ? '#5d4f78' : '#6e655d';
-  const belly = slop ? '#efe3ff' : '#d9d0c3';
-  const mask = slop ? '#1b1030' : '#231e1b';
-  const white = slop ? '#ffffff' : '#f3efe7';
-  // tail peeking out on the right
+/**
+ * The real Jimothy as a painting (the "human made" reveals): the shared doodle (fx/jimothyArt), then worked over
+ * with brush strokes in its own colours, laid back and down like his fur, with a warm brown line. Fits the circle
+ * (x, y, r) like the doodle does.
+ */
+function paintedJimothy(ctx: Ctx, x: number, y: number, r: number, rand: () => number, facing: 1 | -1 = 1) {
+  const S = Math.ceil(r * 2.5);
+  const c = S / 2;
+  const off = document.createElement('canvas');
+  off.width = off.height = S;
+  const o = off.getContext('2d', { willReadFrequently: true })!;
+  drawJimothy(o, c, c, r, { outline: '#3b2a1f', facing });
+  const px = o.getImageData(0, 0, S, S).data;
+  o.globalCompositeOperation = 'source-atop';
+  o.lineCap = 'round';
+  // keep his eye (and its glint) crisp
+  const ex = c + facing * 0.82 * r;
+  const ey = c - 0.33 * r;
+  const n = Math.round(2600 * (r / 130) ** 2);
+  for (let i = 0; i < n; i++) {
+    const sx = c + (rand() * 2 - 1) * r * 1.05;
+    const sy = c + (rand() * 2 - 1) * r;
+    const k = ((sy | 0) * S + (sx | 0)) * 4;
+    if (px[k + 3] < 250 || Math.hypot(sx - ex, sy - ey) < r * 0.08) continue;
+    const lum = (px[k] + px[k + 1] + px[k + 2]) / 765;
+    // a touch lighter or darker, and warmer, like mixed oil paint
+    const v = 0.84 + rand() * 0.32;
+    const warm = lum > 0.2 && lum < 0.85 ? 10 : 3;
+    const col = [px[k] * v + warm, px[k + 1] * v + warm * 0.4, px[k + 2] * v - warm * 0.3].map((q) => Math.max(0, Math.min(255, q | 0)));
+    o.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${0.4 + rand() * 0.35})`;
+    o.lineWidth = r * (0.016 + rand() * 0.024) * (lum < 0.2 || lum > 0.85 ? 0.7 : 1);
+    const len = r * (0.045 + rand() * 0.075);
+    const a = (facing === 1 ? Math.PI * 0.86 : Math.PI * 0.14) + (rand() - 0.5) * 0.7;
+    const dx = Math.cos(a) * len;
+    const dy = Math.sin(a) * len;
+    o.beginPath();
+    o.moveTo(sx, sy);
+    o.quadraticCurveTo(sx + dx * 0.5 - dy * 0.25, sy + dy * 0.5 + dx * 0.25 * facing, sx + dx, sy + dy);
+    o.stroke();
+  }
+  // a little light on the top of his back, shadow under the belly (dry-brushed)
+  for (let i = 0; i < 70; i++) {
+    const top = i < 40;
+    const t = rand();
+    const sx = c + facing * (-0.55 + t * 1.1) * r;
+    const sy = top ? c - (0.8 - Math.abs(t - 0.5) * 0.5) * r + rand() * r * 0.12 : c + (0.2 + rand() * 0.14) * r;
+    o.strokeStyle = top ? `rgba(255,248,232,${0.12 + rand() * 0.12})` : `rgba(40,30,24,${0.1 + rand() * 0.12})`;
+    o.lineWidth = r * (0.03 + rand() * 0.03);
+    o.beginPath();
+    o.moveTo(sx, sy);
+    o.lineTo(sx - facing * r * (0.08 + rand() * 0.1), sy + r * 0.03);
+    o.stroke();
+  }
+  ctx.drawImage(off, x - c, y - c);
+}
+
+export interface SlopJimothyOpts {
+  /** 1 = facing right (default), -1 = facing left. */
+  facing?: 1 | -1;
+  /** Holding a phone up in the six-fingered paw (a selfie). */
+  phone?: boolean;
+  /** Eyes (default 3). */
+  eyes?: number;
+  /** Fingers on the raised paw (default 6). */
+  fingers?: number;
+}
+
+/** Where the slop Jimothy's head and raised paw ended up (canvas units), for hats, spells and props. */
+export interface SlopJimothyInfo {
+  head: { x: number; y: number; r: number };
+  paw: { x: number; y: number };
+}
+
+// the slop figure's design units (y down, facing right) and the fit that puts it in the circle (x, y, r)
+const SLOP_K = 0.79;
+const SLOP_OX = 0.06;
+const SLOP_OY = 0.285;
+const SLOP_HEAD = { x: 0.56, y: -1.1, rx: 0.35, ry: 0.315 };
+const SLOP_PAW = { x: 1.0, y: -0.04 };
+
+/**
+ * An AI's attempt at the real Jimothy (the "slop" style). It kept his domed back, his long legs and his mask, then
+ * got the rest wrong: a giraffe neck (he has none) holding his head up high and turned to face us, a long ringed
+ * tail (his is a puff), six legs, three eyes, a melting mask, a spare ear and a six-fingered paw, all rendered
+ * over-smooth, glossy and lavender. Fits the circle (x, y, r) like drawJimothy (the tail and ears reach a bit past).
+ */
+export function drawSlopJimothy(ctx: Ctx, x: number, y: number, r: number, opts: SlopJimothyOpts = {}): SlopJimothyInfo {
+  const f = opts.facing ?? 1;
+  const u = r * SLOP_K;
+  const lw = Math.max(1.5, r * 0.034) / u;
+  const ink = '#2a1245';
+  const fur = '#a7a2c8';
+  const furDark = '#5a5480';
+  const shine = '#f3f0ff';
+  const pale = '#f6f2ff';
+  const mask = '#1a0f2e';
+  const paw = '#170c28';
+
   ctx.save();
-  ctx.translate(x + r * 0.78, y + r * 0.45);
-  ctx.rotate(-0.5);
-  for (let i = 0; i < 6; i++) {
-    ctx.fillStyle = i % 2 ? (slop ? '#2d1f45' : '#2e2723') : slop ? '#c7b7e2' : '#b6ab9c';
-    ellipse(ctx, r * 0.18 * i, -r * 0.05 * i, r * 0.2, r * 0.17);
+  ctx.translate(x, y);
+  ctx.scale(u * f, u);
+  ctx.translate(SLOP_OX, SLOP_OY);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  const outline = (p: Path2D, width = lw) => {
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = width;
+    ctx.stroke(p);
+  };
+
+  // --- the tail it gave him: long, ringed and curling (his real one is a short puff)
+  const bez = (t: number, a: number[], b: number[], c: number[], d: number[]) => {
+    const m = 1 - t;
+    return [m * m * m * a[0] + 3 * m * m * t * b[0] + 3 * m * t * t * c[0] + t * t * t * d[0], m * m * m * a[1] + 3 * m * m * t * b[1] + 3 * m * t * t * c[1] + t * t * t * d[1]];
+  };
+  const T0 = [-0.6, -0.12];
+  const T1 = [-1.04, -0.08];
+  const T2 = [-1.24, -0.58];
+  const T3 = [-0.97, -0.98];
+  const beads: [number, number, number, number][] = [];
+  for (let i = 0; i <= 36; i++) {
+    const t = i / 36;
+    const [bx, by] = bez(t, T0, T1, T2, T3);
+    beads.push([bx, by, 0.14 - t * 0.06, Math.min(6, Math.floor(t * 7))]);
+  }
+  ctx.fillStyle = ink;
+  for (const [bx, by, br] of beads) {
+    ctx.beginPath();
+    ctx.arc(bx, by, br + lw * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (let i = beads.length - 1; i >= 0; i--) {
+    const [bx, by, br, band] = beads[i];
+    ctx.fillStyle = band % 2 ? '#2d2548' : '#d9d4f2';
+    ctx.beginPath();
+    ctx.arc(bx, by, br, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // --- six legs (it counted wrong): smooth tubes, knees, flat dark paws; far ones darker. The body hides their tops.
+  const leg = (pts: number[][], width: number, far: boolean) => {
+    const p = new Path2D();
+    p.moveTo(pts[0][0], pts[0][1]);
+    p.quadraticCurveTo(pts[1][0], pts[1][1], pts[2][0], pts[2][1]);
+    const a = pts[0];
+    const b = pts[2];
+    const g = ctx.createLinearGradient(a[0], a[1], b[0], b[1]);
+    g.addColorStop(0, far ? furDark : fur);
+    g.addColorStop(0.55, far ? '#433c68' : '#6f689a');
+    g.addColorStop(1, paw);
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = width + lw * 2;
+    ctx.stroke(p);
+    ctx.strokeStyle = g;
+    ctx.lineWidth = width;
+    ctx.stroke(p);
+  };
+  const foot = (fx: number, fy: number) => {
+    const p = new Path2D();
+    p.ellipse(fx + 0.045, fy, 0.095, 0.048, 0, 0, Math.PI * 2);
+    ctx.fillStyle = paw;
+    ctx.fill(p);
+    outline(p, lw * 0.8);
+  };
+  const LEGS: [number[][], boolean][] = [
+    [[[-0.5, 0.2], [-0.8, 0.52], [-0.94, 0.93]], true],
+    [[[-0.1, 0.3], [-0.12, 0.64], [-0.24, 0.94]], true],
+    [[[0.3, 0.26], [0.5, 0.56], [0.6, 0.93]], true],
+    [[[-0.38, 0.26], [-0.58, 0.6], [-0.6, 0.955]], false],
+    [[[0.04, 0.32], [0.14, 0.66], [0.1, 0.965]], false],
+  ];
+  for (const [pts, far] of LEGS) {
+    leg(pts, far ? 0.13 : 0.155, far);
+    foot(pts[2][0], pts[2][1]);
+  }
+  // the near front leg, raised to show off the paw (it comes out from behind the chest)
+  const P = SLOP_PAW;
+  leg([[0.4, 0.26], [0.84, 0.34], [P.x - 0.01, P.y + 0.05]], 0.15, false);
+
+  // --- the body: his dome, but airbrushed smooth
+  const body = new Path2D();
+  body.moveTo(0.56, 0.25);
+  body.bezierCurveTo(0.66, 0.02, 0.6, -0.3, 0.42, -0.45);
+  body.bezierCurveTo(0.22, -0.62, -0.1, -0.66, -0.35, -0.56);
+  body.bezierCurveTo(-0.62, -0.45, -0.78, -0.18, -0.74, 0.08);
+  body.bezierCurveTo(-0.7, 0.32, -0.48, 0.43, -0.2, 0.43);
+  body.bezierCurveTo(0.1, 0.44, 0.4, 0.42, 0.56, 0.25);
+  body.closePath();
+  const bg = ctx.createRadialGradient(-0.12, -0.42, 0.05, -0.05, -0.1, 0.95);
+  bg.addColorStop(0, shine);
+  bg.addColorStop(0.38, fur);
+  bg.addColorStop(1, furDark);
+  ctx.fillStyle = bg;
+  ctx.fill(body);
+  ctx.save();
+  ctx.clip(body);
+  // gloss: a big specular highlight and an iridescent rim
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.beginPath();
+  ctx.ellipse(-0.22, -0.43, 0.3, 0.085, -0.22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.beginPath();
+  ctx.ellipse(-0.3, -0.44, 0.1, 0.035, -0.25, 0, Math.PI * 2);
+  ctx.fill();
+  const rim = ctx.createLinearGradient(-0.8, -0.6, 0.6, 0.45);
+  rim.addColorStop(0, 'rgba(255,110,235,0.8)');
+  rim.addColorStop(0.5, 'rgba(120,255,255,0.15)');
+  rim.addColorStop(1, 'rgba(255,225,90,0.75)');
+  ctx.strokeStyle = rim;
+  ctx.lineWidth = 0.1;
+  ctx.stroke(body);
+  ctx.restore();
+  outline(body);
+
+  // --- the neck he doesn't have: up, forward and back again, to a head that turned round to face the camera
+  const neck = new Path2D();
+  neck.moveTo(0.14, -0.52);
+  neck.bezierCurveTo(0.36, -0.68, 0.26, -0.92, 0.36, -1.06);
+  neck.lineTo(0.72, -1.02);
+  neck.bezierCurveTo(0.64, -0.8, 0.74, -0.5, 0.6, -0.1);
+  neck.bezierCurveTo(0.5, -0.2, 0.3, -0.38, 0.14, -0.52);
+  neck.closePath();
+  const ng = ctx.createLinearGradient(0.25, -0.5, 0.75, -0.6);
+  ng.addColorStop(0, furDark);
+  ng.addColorStop(0.45, fur);
+  ng.addColorStop(1, '#dcd7f5');
+  ctx.fillStyle = ng;
+  ctx.fill(neck);
+  ctx.save();
+  ctx.clip(neck);
+  ctx.strokeStyle = 'rgba(246,242,255,0.8)';
+  ctx.lineWidth = 0.07;
+  ctx.beginPath();
+  ctx.moveTo(0.66, -0.98);
+  ctx.bezierCurveTo(0.6, -0.8, 0.7, -0.5, 0.58, -0.16);
+  ctx.stroke();
+  ctx.restore();
+  // its outline, except where it grows out of the body
+  ctx.save();
+  const outside = new Path2D();
+  outside.rect(-3, -3, 6, 6);
+  outside.addPath(body);
+  ctx.clip(outside, 'evenodd');
+  outline(neck);
+  ctx.restore();
+
+  // --- the head: ears (one spare), white brows, the mask melting, three eyes
+  const H = SLOP_HEAD;
+  const ear = (ex: number, ey: number, er: number) => {
+    const p = new Path2D();
+    p.arc(ex, ey, er, 0, Math.PI * 2);
+    ctx.fillStyle = pale;
+    ctx.fill(p);
+    outline(p);
+    ctx.fillStyle = '#3d3560';
+    ctx.beginPath();
+    ctx.arc(ex, ey + er * 0.12, er * 0.56, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  ear(H.x - 0.25, H.y - 0.24, 0.11);
+  ear(H.x + 0.25, H.y - 0.24, 0.11);
+  ear(H.x + 0.03, H.y - 0.33, 0.09);
+  const head = new Path2D();
+  head.ellipse(H.x, H.y, H.rx, H.ry, 0, 0, Math.PI * 2);
+  const hg = ctx.createRadialGradient(H.x - 0.11, H.y - 0.15, 0.02, H.x, H.y, 0.4);
+  hg.addColorStop(0, shine);
+  hg.addColorStop(0.5, fur);
+  hg.addColorStop(1, furDark);
+  ctx.fillStyle = hg;
+  ctx.fill(head);
+  ctx.save();
+  ctx.clip(head);
+  // pale cheeks, white brows
+  ctx.fillStyle = pale;
+  ctx.beginPath();
+  ctx.ellipse(H.x, H.y + 0.23, 0.3, 0.14, 0, 0, Math.PI * 2);
+  ctx.fill();
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(H.x + s * 0.14, H.y - 0.14, 0.13, 0.045, s * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // muzzle and nose
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(H.x, H.y + 0.16, 0.13, 0.09, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // the mask, melting: a band across the eyes, running down the cheeks in glossy drips
+  ctx.fillStyle = mask;
+  ctx.beginPath();
+  ctx.moveTo(H.x - 0.36, H.y - 0.09);
+  ctx.quadraticCurveTo(H.x, H.y - 0.14, H.x + 0.36, H.y - 0.09);
+  ctx.lineTo(H.x + 0.36, H.y + 0.05);
+  ctx.quadraticCurveTo(H.x + 0.15, H.y + 0.07, H.x + 0.08, H.y + 0.04);
+  ctx.quadraticCurveTo(H.x, H.y + 0.02, H.x - 0.08, H.y + 0.04);
+  ctx.quadraticCurveTo(H.x - 0.15, H.y + 0.07, H.x - 0.36, H.y + 0.05);
+  ctx.closePath();
+  ctx.fill();
+  const drips: [number, number, number][] = [
+    [-0.26, 0.18, 0.036],
+    [-0.16, 0.085, 0.028],
+    [0.22, 0.13, 0.034],
+  ];
+  for (const [dx, len, dw] of drips) {
+    const top = H.y + 0.04;
+    ctx.fillStyle = mask;
+    ctx.beginPath();
+    ctx.moveTo(H.x + dx - dw * 1.4, top - 0.01);
+    ctx.quadraticCurveTo(H.x + dx - dw, top + 0.02, H.x + dx - dw, top + len);
+    ctx.arc(H.x + dx, top + len, dw, Math.PI, 0, true);
+    ctx.quadraticCurveTo(H.x + dx + dw, top + 0.02, H.x + dx + dw * 1.4, top - 0.01);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.ellipse(H.x + dx - dw * 0.35, top + len - dw * 0.1, dw * 0.25, dw * 0.45, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
-  // ears
-  for (const s of [-1, 1]) {
-    ctx.fillStyle = furDark;
-    ellipse(ctx, x + s * r * 0.55, y - r * 0.82, r * 0.22, r * 0.2);
-    ctx.fill();
-    ctx.fillStyle = white;
-    ellipse(ctx, x + s * r * 0.55, y - r * 0.8, r * 0.13, r * 0.11);
-    ctx.fill();
-  }
-  // body ball
-  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.45, r * 0.15, x, y, r * 1.05);
-  g.addColorStop(0, slop ? '#d6ccef' : '#a39a90');
-  g.addColorStop(0.6, fur);
-  g.addColorStop(1, furDark);
-  ctx.fillStyle = g;
-  ellipse(ctx, x, y, r, r * 0.97);
-  ctx.fill();
-  if (!slop) {
-    // painterly fur strokes
-    ctx.strokeStyle = 'rgba(60,50,45,0.25)';
-    ctx.lineWidth = Math.max(1, r * 0.012);
-    for (let i = 0; i < 220; i++) {
-      const a = rand() * TAU;
-      const d = Math.sqrt(rand()) * r * 0.95;
-      const px = x + Math.cos(a) * d;
-      const py = y + Math.sin(a) * d;
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(px + Math.cos(a) * r * 0.06, py + Math.sin(a) * r * 0.06 + r * 0.02);
-      ctx.stroke();
-    }
-  }
-  // belly
-  ctx.fillStyle = belly;
-  ellipse(ctx, x, y + r * 0.45, r * 0.55, r * 0.4);
-  ctx.globalAlpha = 0.85;
-  ctx.fill();
-  ctx.globalAlpha = 1;
-  // mask band
+  outline(head);
   ctx.fillStyle = mask;
-  ellipse(ctx, x - r * 0.3, y - r * 0.28, r * 0.3, r * 0.17, 0.25);
+  ctx.beginPath();
+  ctx.ellipse(H.x, H.y + 0.105, 0.055, 0.037, 0, 0, Math.PI * 2);
   ctx.fill();
-  ellipse(ctx, x + r * 0.3, y - r * 0.28, r * 0.3, r * 0.17, -0.25);
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.beginPath();
+  ctx.ellipse(H.x - 0.02, H.y + 0.094, 0.016, 0.01, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillRect(x - r * 0.12, y - r * 0.36, r * 0.24, r * 0.12);
-  // brows
-  ctx.fillStyle = white;
-  ellipse(ctx, x - r * 0.3, y - r * 0.5, r * 0.2, r * 0.07, 0.15);
-  ctx.fill();
-  ellipse(ctx, x + r * 0.3, y - r * 0.5, r * 0.2, r * 0.07, -0.15);
-  ctx.fill();
-  // eyes
-  const eye = (ex: number, ey: number, er: number) => {
-    ctx.fillStyle = '#050404';
-    ellipse(ctx, ex, ey, er, er);
+  ctx.strokeStyle = mask;
+  ctx.lineWidth = lw * 0.75;
+  ctx.beginPath();
+  ctx.moveTo(H.x - 0.065, H.y + 0.19);
+  ctx.quadraticCurveTo(H.x, H.y + 0.235, H.x + 0.065, H.y + 0.19);
+  ctx.stroke();
+  // three eyes, no two the same size
+  const eye = (ex: number, ey: number, er: number, iris: string) => {
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(ex, ey, er, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = iris;
+    ctx.beginPath();
+    ctx.arc(ex + er * 0.12, ey + er * 0.1, er * 0.62, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
-    ellipse(ctx, ex - er * 0.3, ey - er * 0.35, er * 0.3, er * 0.3);
+    ctx.beginPath();
+    ctx.arc(ex - er * 0.2, ey - er * 0.25, er * 0.28, 0, Math.PI * 2);
     ctx.fill();
   };
-  if (slop) {
-    eye(x - r * 0.3, y - r * 0.27, r * 0.11);
-    eye(x + r * 0.33, y - r * 0.25, r * 0.08); // mismatched
-    eye(x + r * 0.02, y - r * 0.55, r * 0.07); // extra
-  } else {
-    eye(x - r * 0.3, y - r * 0.28, r * 0.075);
-    eye(x + r * 0.3, y - r * 0.28, r * 0.075);
-  }
-  // muzzle + nose + smile
-  ctx.fillStyle = white;
-  ellipse(ctx, x + (slop ? r * 0.05 : 0), y - r * 0.06, r * 0.22, r * (slop ? 0.2 : 0.15));
-  ctx.fill();
-  ctx.fillStyle = '#161212';
-  ellipse(ctx, x + (slop ? r * 0.07 : 0), y - r * 0.13, r * 0.07, r * 0.05);
-  ctx.fill();
-  ctx.strokeStyle = '#161212';
-  ctx.lineWidth = Math.max(1.5, r * 0.02);
+  eye(H.x - 0.14, H.y - 0.025, 0.072, '#120a1e');
+  eye(H.x + 0.155, H.y - 0.03, 0.056, '#120a1e');
+  if ((opts.eyes ?? 3) >= 3) eye(H.x + 0.005, H.y - 0.215, 0.052, '#ff2bd6');
+  // gloss on the head too
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
   ctx.beginPath();
-  ctx.arc(x - r * 0.04, y - r * 0.04, r * 0.05, 0.2, Math.PI - 0.2);
-  ctx.arc(x + r * 0.06, y - r * 0.04, r * 0.05, 0.2, Math.PI - 0.2);
-  ctx.stroke();
-  // tiny hands
-  const hand = (hx: number, hy: number, fingers: number, up = false) => {
-    ctx.fillStyle = mask;
-    ellipse(ctx, hx, hy, r * 0.1, r * 0.08);
+  ctx.ellipse(H.x - 0.16, H.y - 0.22, 0.08, 0.028, -0.45, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- the raised paw: six fingers (optionally holding up a phone for a selfie)
+  if (opts.phone) {
+    ctx.save();
+    ctx.translate(P.x + 0.02, P.y - 0.16);
+    ctx.rotate(0.12);
+    ctx.fillStyle = '#10131a';
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = lw * 0.8;
+    ctx.beginPath();
+    ctx.roundRect(-0.08, -0.15, 0.16, 0.29, 0.026);
     ctx.fill();
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = mask;
-    ctx.lineWidth = Math.max(2, r * 0.035);
-    for (let f = 0; f < fingers; f++) {
-      const a = (up ? -Math.PI / 2 : Math.PI / 2) + (f - (fingers - 1) / 2) * 0.32;
+    ctx.stroke();
+    const sg = ctx.createLinearGradient(0, -0.13, 0, 0.13);
+    sg.addColorStop(0, '#9ffcff');
+    sg.addColorStop(1, '#ff7df0');
+    ctx.fillStyle = sg;
+    ctx.beginPath();
+    ctx.roundRect(-0.062, -0.13, 0.124, 0.245, 0.016);
+    ctx.fill();
+    ctx.restore();
+  }
+  const palm = new Path2D();
+  palm.ellipse(P.x, P.y, 0.075, 0.065, 0, 0, Math.PI * 2);
+  ctx.fillStyle = paw;
+  ctx.fill(palm);
+  const fingers = opts.fingers ?? 6;
+  for (let pass = 0; pass < 2; pass++) {
+    ctx.strokeStyle = pass ? paw : ink;
+    ctx.lineWidth = pass ? 0.03 : 0.03 + lw * 1.4;
+    for (let i = 0; i < fingers; i++) {
+      const a = -Math.PI / 2 + (i - (fingers - 1) / 2) * 0.3;
+      const len = 0.11 + (i % 2) * 0.028;
       ctx.beginPath();
-      ctx.moveTo(hx, hy);
-      ctx.lineTo(hx + Math.cos(a) * r * 0.16, hy + Math.sin(a) * r * 0.16);
+      ctx.moveTo(P.x + Math.cos(a) * 0.04, P.y + Math.sin(a) * 0.04);
+      ctx.lineTo(P.x + Math.cos(a) * (0.04 + len), P.y + Math.sin(a) * (0.04 + len));
       ctx.stroke();
     }
-  };
-  if (slop) {
-    hand(x - r * 0.95, y - r * 0.35, 6, true);
-    hand(x + r * 0.98, y - r * 0.4, 7, true);
-  } else {
-    hand(x - r * 0.22, y + r * 0.62, 5);
-    hand(x + r * 0.22, y + r * 0.62, 5);
+    if (!pass) outline(palm);
   }
-  // feet
-  ctx.fillStyle = mask;
-  ellipse(ctx, x - r * 0.4, y + r * 0.95, r * 0.14, r * 0.07);
-  ctx.fill();
-  ellipse(ctx, x + r * 0.4, y + r * 0.95, r * 0.14, r * 0.07);
-  ctx.fill();
-  if (slop) {
-    // a third foot, why not
-    ellipse(ctx, x + r * 0.02, y + r * 1.0, r * 0.12, r * 0.06);
-    ctx.fill();
-    // glossy rim light
-    const rim = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
-    rim.addColorStop(0, 'rgba(255,120,240,0.55)');
-    rim.addColorStop(0.5, 'rgba(120,255,255,0.0)');
-    rim.addColorStop(1, 'rgba(255,230,90,0.55)');
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = r * 0.06;
-    ellipse(ctx, x, y, r * 1.0, r * 0.97);
-    ctx.stroke();
-  }
+  ctx.fillStyle = paw;
+  ctx.fill(palm);
+  ctx.restore();
+
+  return slopJimothyLayout(x, y, r, f);
+}
+
+/** Where drawSlopJimothy(x, y, r) puts his head and raised paw, without drawing (to paint spells behind him). */
+export function slopJimothyLayout(x: number, y: number, r: number, facing: 1 | -1 = 1): SlopJimothyInfo {
+  const u = r * SLOP_K;
+  const at = (px: number, py: number) => ({ x: x + facing * u * (px + SLOP_OX), y: y + u * (py + SLOP_OY) });
+  const hc = at(SLOP_HEAD.x, SLOP_HEAD.y);
+  return { head: { x: hc.x, y: hc.y, r: u * SLOP_HEAD.rx }, paw: at(SLOP_PAW.x, SLOP_PAW.y) };
 }
 
 function sparkle(ctx: Ctx, x: number, y: number, s: number, color = '#ffffff') {
@@ -245,6 +516,37 @@ function glossyText(ctx: Ctx, text: string, x: number, y: number, size: number, 
   ctx.fillText(text, x, y);
 }
 
+/** Set the largest `font(size)` (≤ size) at which `text` fits `maxW`; returns that size. */
+function fitFont(ctx: Ctx, text: string, maxW: number, size: number, font: (s: number) => string) {
+  let s = Math.round(size);
+  ctx.font = font(s);
+  while (s > 8 && ctx.measureText(text).width > maxW) {
+    s -= s > 40 ? 2 : 1;
+    ctx.font = font(s);
+  }
+  return s;
+}
+
+/** A starry wizard hat, its brim centred on (x, y), sized for a head of radius hr. */
+function wizardHat(ctx: Ctx, x: number, y: number, hr: number) {
+  ctx.lineJoin = 'round';
+  ctx.fillStyle = '#3b1e8c';
+  ctx.strokeStyle = '#2a0f45';
+  ctx.lineWidth = Math.max(2, hr * 0.07);
+  ctx.beginPath();
+  ctx.moveTo(x - hr * 1.05, y);
+  ctx.quadraticCurveTo(x - hr * 0.3, y - hr * 1.3, x + hr * 0.55, y - hr * 2.35);
+  ctx.quadraticCurveTo(x + hr * 0.2, y - hr * 1.2, x + hr * 1.05, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ellipse(ctx, x, y, hr * 1.4, hr * 0.26);
+  ctx.fill();
+  ctx.stroke();
+  sparkle(ctx, x - hr * 0.15, y - hr * 0.75, hr * 0.26, '#ffe36e');
+  sparkle(ctx, x + hr * 0.3, y - hr * 1.45, hr * 0.17, '#ffe36e');
+}
+
 // ------------------------------------------------------------------ billboard
 
 /** The AI billboard: "Jimothy Casting Spells" energy, maximum gloss. */
@@ -294,30 +596,23 @@ export function drawSlopBillboard(ctx: Ctx, w: number, h: number) {
   ctx.lineTo(w * 0.66, h * 0.37);
   ctx.fill();
   for (let i = 0; i < 7; i++) ctx.fillRect(w * 0.575 + i * w * 0.013, h * 0.43, 3, h * 0.07);
-  // the "Jimothy", casting spells
-  raccoon(ctx, w * 0.3, h * 0.6, h * 0.3, 'slop', r);
-  // wizard hat
-  ctx.fillStyle = '#3b1e8c';
-  ctx.beginPath();
-  ctx.moveTo(w * 0.3 - h * 0.2, h * 0.35);
-  ctx.lineTo(w * 0.3 + h * 0.2, h * 0.35);
-  ctx.lineTo(w * 0.33, h * 0.02);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#ffe36e';
-  for (let i = 0; i < 6; i++) sparkle(ctx, w * 0.27 + r() * h * 0.2, h * 0.12 + r() * h * 0.2, 6 + r() * 6, '#ffe36e');
-  // spells
-  lightning(ctx, w * 0.3 - h * 0.28, h * 0.45, h * 0.4, r);
-  lightning(ctx, w * 0.3 + h * 0.3, h * 0.42, h * 0.38, r);
+  // the "Jimothy" (an AI's idea of him: giraffe neck, six legs, three eyes...), casting spells
+  // spells, out of the six-fingered paw (painted first, so they come from behind it)
+  const J = slopJimothyLayout(w * 0.27, h * 0.5, h * 0.38);
+  lightning(ctx, J.paw.x + 4, J.paw.y, h * 0.4, r);
+  lightning(ctx, w * 0.27 - h * 0.42, h * 0.5, h * 0.36, r);
+  drawSlopJimothy(ctx, w * 0.27, h * 0.5, h * 0.38);
+  wizardHat(ctx, J.head.x, J.head.y - J.head.r * 0.55, J.head.r);
+  for (let i = 0; i < 6; i++) sparkle(ctx, J.head.x + (r() - 0.5) * J.head.r * 4, J.head.y - J.head.r * (1 + r() * 1.6), 6 + r() * 6, '#ffe36e');
   for (let i = 0; i < 40; i++) sparkle(ctx, r() * w, r() * h, 3 + r() * 9, r() < 0.5 ? '#ffffff' : '#9ffcff');
   // headline + garbled copy
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   glossyText(ctx, 'JIMOTHY: REAL & ROUND', w * 0.72, h * 0.62, h * 0.16, w * 0.52);
-  ctx.font = `800 ${Math.round(h * 0.06)}px Nunito, system-ui, sans-serif`;
+  fitFont(ctx, 'Offical Jimothy Summmer 20§6 — Now With Extra Leggs!', w * 0.52, h * 0.06, (s) => `800 ${s}px Nunito, system-ui, sans-serif`);
   ctx.fillStyle = '#ffffff';
   ctx.fillText('Offical Jimothy Summmer 20§6 — Now With Extra Leggs!', w * 0.72, h * 0.73);
-  ctx.font = `700 ${Math.round(h * 0.045)}px Nunito, system-ui, sans-serif`;
+  fitFont(ctx, '100% autentic raccon • Certainly! Here is a billboard:', w * 0.52, h * 0.045, (s) => `700 ${s}px Nunito, system-ui, sans-serif`);
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.fillText('100% autentic raccon • Certainly! Here is a billboard:', w * 0.72, h * 0.81);
   // brand bar
@@ -374,24 +669,27 @@ export function drawHumanBillboard(ctx: Ctx, w: number, h: number) {
     ellipse(ctx, r() * w, h * 0.78 + r() * h * 0.22, 4 + r() * 10, 2 + r() * 4, r() * Math.PI);
     ctx.fill();
   }
-  // Jimothy, as he actually is: round
-  raccoon(ctx, w * 0.27, h * 0.56, h * 0.3, 'painted', r);
+  // Jimothy, as he actually is: round of back, short of neck and tail, long of leg, mid-stroll
+  ctx.fillStyle = 'rgba(52,74,36,0.35)';
+  ellipse(ctx, w * 0.255, h * 0.835, h * 0.34, h * 0.035);
+  ctx.fill();
+  paintedJimothy(ctx, w * 0.25, h * 0.53, h * 0.33, r);
   // hand lettering
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.save();
   ctx.translate(w * 0.69, h * 0.45);
   ctx.rotate(-0.04);
-  ctx.font = `${Math.round(h * 0.25)}px "Luckiest Guy", Impact, sans-serif`;
+  fitFont(ctx, 'HUMAN MADE', w * 0.52, h * 0.25, (s) => `${s}px "Luckiest Guy", Impact, sans-serif`);
   ctx.fillStyle = '#3a2a1c';
   ctx.fillText('HUMAN MADE', 4, 6);
   ctx.fillStyle = '#c0392b';
   ctx.fillText('HUMAN MADE', 0, 0);
   ctx.restore();
-  ctx.font = `800 ${Math.round(h * 0.075)}px Nunito, Georgia, serif`;
+  fitFont(ctx, 'Jimothy, actual size: round.', w * 0.52, h * 0.075, (s) => `800 ${s}px Nunito, Georgia, serif`);
   ctx.fillStyle = '#3a2a1c';
   ctx.fillText('Jimothy, actual size: round.', w * 0.69, h * 0.64);
-  ctx.font = `italic 700 ${Math.round(h * 0.05)}px Nunito, Georgia, serif`;
+  fitFont(ctx, 'painted with a brush, by a person, over a weekend', w * 0.52, h * 0.05, (s) => `italic 700 ${s}px Nunito, Georgia, serif`);
   ctx.fillStyle = 'rgba(58,42,28,0.8)';
   ctx.fillText('painted with a brush, by a person, over a weekend', w * 0.69, h * 0.73);
   // little heart + signature scribble
@@ -423,14 +721,16 @@ export function drawSpellPoster(ctx: Ctx, w: number, h: number, variant = 0) {
   ctx.fillRect(0, 0, w, h);
   for (let i = 0; i < 60; i++) sparkle(ctx, r() * w, r() * h, 2 + r() * 7, r() < 0.5 ? '#ffffff' : '#ffe36e');
   const titles = ['JIMOTHY CASTING SPELLS', 'JIMOTHY VS THE RAID BOSS', 'JIMOTHY RIDES A DRAGON', 'JIMOTHY: THE MOVIE (AI)'];
-  raccoon(ctx, w * 0.5, h * 0.55, w * 0.28, 'slop', r);
-  // magic circle
+  // magic circle under his (six) feet
   ctx.strokeStyle = 'rgba(125,249,255,0.8)';
   ctx.lineWidth = 4;
   ellipse(ctx, w * 0.5, h * 0.84, w * 0.42, h * 0.05);
   ctx.stroke();
-  lightning(ctx, w * 0.2, h * 0.45, h * 0.25, r);
-  lightning(ctx, w * 0.8, h * 0.44, h * 0.25, r);
+  const J = slopJimothyLayout(w * 0.47, h * 0.57, w * 0.4);
+  lightning(ctx, J.paw.x, J.paw.y, h * 0.26, r);
+  lightning(ctx, w * 0.12, h * 0.5, h * 0.25, r);
+  drawSlopJimothy(ctx, w * 0.47, h * 0.57, w * 0.4, { fingers: 6 + (variant % 2) });
+  if (variant % titles.length === 0) wizardHat(ctx, J.head.x, J.head.y - J.head.r * 0.55, J.head.r * 0.9);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   glossyText(ctx, titles[variant % titles.length], w * 0.5, h * 0.14, w * 0.12, w * 0.92);
@@ -445,14 +745,25 @@ export function drawSpellPoster(ctx: Ctx, w: number, h: number, variant = 0) {
 export function drawPosterReal(ctx: Ctx, w: number, h: number) {
   const r = rng(909);
   paper(ctx, w, h, '#fbf6ea', r);
-  raccoon(ctx, w * 0.5, h * 0.52, w * 0.3, 'painted', r);
+  // a strip of painted grass to stand on
+  for (let i = 0; i < 120; i++) {
+    ctx.fillStyle = `rgba(${70 + r() * 50},${120 + r() * 60},${50 + r() * 30},0.3)`;
+    ellipse(ctx, w * (0.08 + r() * 0.84), h * (0.74 + r() * 0.06), 4 + r() * 9, 2 + r() * 3, r() * Math.PI);
+    ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(52,74,36,0.3)';
+  ellipse(ctx, w * 0.51, h * 0.77, w * 0.36, h * 0.02);
+  ctx.fill();
+  paintedJimothy(ctx, w * 0.5, h * 0.53, w * 0.38, r);
   ctx.textAlign = 'center';
-  ctx.font = `${Math.round(w * 0.14)}px "Luckiest Guy", Impact, sans-serif`;
+  ctx.textBaseline = 'alphabetic';
+  fitFont(ctx, 'HUMAN MADE', w * 0.9, w * 0.14, (s) => `${s}px "Luckiest Guy", Impact, sans-serif`);
   ctx.fillStyle = '#c0392b';
   ctx.fillText('HUMAN MADE', w * 0.5, h * 0.16);
-  ctx.font = `800 ${Math.round(w * 0.055)}px Nunito, Georgia, serif`;
+  const s = fitFont(ctx, 'Jimothy casting: nothing.', w * 0.9, w * 0.065, (px) => `800 ${px}px Nunito, Georgia, serif`);
   ctx.fillStyle = '#3a2a1c';
-  ctx.fillText('Jimothy casting: nothing. He is a raccoon.', w * 0.5, h * 0.9);
+  ctx.fillText('Jimothy casting: nothing.', w * 0.5, h * 0.87);
+  ctx.fillText('He is a raccoon.', w * 0.5, h * 0.87 + s * 1.25);
 }
 
 // ------------------------------------------------------------------ signs

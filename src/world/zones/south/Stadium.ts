@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { Game } from '../../../core/Game';
 import type { World, ZoneBuilder } from '../../World';
+import { profileColliders } from '../../profileColliders';
+import { drawJimothy } from '../../../fx/jimothyArt';
 import { getKit, Batch, tree, bench, rng, canvasTex, fitText, roundRect, FONT_TITLE, FONT_ROUND, FONT_BODY, GEO, bake, type Kit, type V3 } from './kit';
 import { lamps } from './decor';
 import { addNightRig, multiplyPoolMaterial } from './nightLight';
@@ -65,6 +67,7 @@ export const StadiumZone: ZoneBuilder = {
     scoreboard(kit, b);
     lightTowers(kit, b);
     plaza(kit, b);
+    await giantBobblehead(kit, b, 86, 155);
     seawall(kit, b, 66.5, 180);
 
     world.poi.set('stadiumCenter', V(FC.x, 0, FC.z));
@@ -608,6 +611,90 @@ function dugouts(kit: Kit, b: Batch) {
 
 // ------------------------------------------------------------------ scoreboard
 
+/**
+ * Jimothy in scoreboard lights, side on and facing right like the town's doodle (fx/jimothyArt): the round, domed back
+ * running straight into his head (no neck), the ear with its pale rim, white brow over the black mask (eye glint),
+ * white muzzle, black nose; long legs mid-stride, dark toward the paws, the near front paw lifted and curled; a short
+ * tail puff with a faint ring.
+ */
+const PIXEL_JIMOTHY = [
+  '.........GGGGG........',
+  '.......GGGGGGGGG..WW..',
+  '.....GGGGGGGGGGGGGWI..',
+  '..TT.GGGGGGGGGGGGGGG..',
+  '.TTtGGGGGGGGGGGGGGWWW.',
+  'TTtTGGGGGGGGGGGGGKKKK.',
+  'TtTTGGGGGGGGGGGGGKKEKK',
+  '.TTTGGGGGGGGGGGGCCKKKK',
+  '..T.GGGGGGGGGGGGCCWWWK',
+  '....GGGGGGGGGGGGCCWW..',
+  '....GGGGGGGGGGGGGC....',
+  '.....GGGGGGGGGGGGG....',
+  '.....GGGGGGGGGGG.GG...',
+  '.....GGGGGGGGGG...DD..',
+  '....DD...DD...DD..DD..',
+  '....DD....DDD.DD.PP...',
+  '...DD..........DD.....',
+  '...DD..........DD.....',
+  '...PPP..........PPP...',
+];
+// (the board glows: the coat is kept a mid grey so the white brow and muzzle still stand out, and the mask a dark grey
+// rather than black, so it reads as his mask and not as a hole in his face)
+const PIXEL_COLORS: Record<string, string> = {
+  G: '#827d77', // coat
+  W: '#f4f1ea', // brow, muzzle, ear rim
+  C: '#aea9a2', // pale cheek ruff
+  T: '#a0957f', // tail puff
+  t: '#6a6254', // its faint ring
+  D: '#57504b', // legs, darker toward the paws
+  P: '#3a3531', // paws
+  K: '#35302d', // mask, nose
+  E: '#ffffff', // eye glint
+  I: '#4d4b52', // inside the ear
+};
+
+/** The scoreboard's face (2048 × 860 canvas): JIMOTHY NIGHT, the pixel Jimothy, the line score. */
+export function drawScoreboard(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  ctx.fillStyle = '#0b0f18';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#0f8a93';
+  ctx.fillRect(0, 0, w, 120);
+  fitText(ctx, 'TEE-HEE PARK', w / 2, 62, w * 0.6, 92, FONT_TITLE, { fill: '#fff' });
+  // JIMOTHY NIGHT
+  fitText(ctx, 'JIMOTHY NIGHT', w * 0.62, 250, w * 0.66, 190, FONT_TITLE, { fill: '#ffd23a', glow: '#ff9d00', glowBlur: 30 });
+  fitText(ctx, 'AUG 5 · BOBBLEHEAD GIVEAWAY · ROOKIE CARDS', w * 0.62, 370, w * 0.66, 50, FONT_ROUND, { fill: '#e9ffff' });
+  // pixel Jimothy (the lamp grid between the header and the line score, left of the title)
+  const px = 17;
+  PIXEL_JIMOTHY.forEach((row, j) =>
+    [...row].forEach((ch, i) => {
+      if (ch === '.') return;
+      ctx.fillStyle = PIXEL_COLORS[ch];
+      ctx.fillRect(62 + i * px, 138 + j * px, px - 2, px - 2);
+    }),
+  );
+  // line score
+  ctx.font = `64px ${FONT_TITLE}`;
+  const rows = [
+    ['', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'R'],
+    ['VISITORS', '0', '1', '0', '0', '2', '0', '0', '-', '-', '3'],
+    ['BARNACLES', '1', '0', '0', '3', '0', '1', '0', '-', '-', '5'],
+  ];
+  rows.forEach((r, j) =>
+    r.forEach((cell, i) => {
+      ctx.fillStyle = j === 0 ? '#9fe3ff' : i === 10 ? '#ffd23a' : '#ffffff';
+      ctx.textAlign = i === 0 ? 'left' : 'center';
+      ctx.fillText(cell, i === 0 ? 70 : 520 + i * 118, 520 + j * 90);
+    }),
+  );
+  ctx.fillStyle = '#ff6f61';
+  ctx.textAlign = 'left';
+  ctx.font = `52px ${FONT_TITLE}`;
+  ctx.fillText('BALLS 2   STRIKES 1   OUTS 2', 70, 800);
+  ctx.fillStyle = '#7cff6b';
+  ctx.textAlign = 'right';
+  ctx.fillText('ROUND BOY CAM ●', w - 70, 800);
+}
+
 function scoreboard(kit: Kit, b: Batch) {
   const [cx, cz] = onArc(-Math.PI / 2, FR + 6.5);
   const W = 24;
@@ -616,61 +703,7 @@ function scoreboard(kit: Kit, b: Batch) {
   for (const dx of [-7, 7]) b.box([cx + dx, y0 / 2, cz], [1.2, y0, 1.2], 0x2a2f38, { mat: 'metal' });
   b.box([cx, y0 + Hb / 2, cz + 0.3], [W + 0.6, Hb + 0.6, 1.4], 0x1b1f28, { mat: 'metal' });
   b.box([cx, y0 + Hb + 0.4, cz + 0.3], [W + 1, 0.4, 1.8], TEAL, { mat: 'glossy' });
-  const tex = canvasTex(2048, 860, (ctx, w, h) => {
-    ctx.fillStyle = '#0b0f18';
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#0f8a93';
-    ctx.fillRect(0, 0, w, 120);
-    fitText(ctx, 'TEE-HEE PARK', w / 2, 62, w * 0.6, 92, FONT_TITLE, { fill: '#fff' });
-    // JIMOTHY NIGHT
-    fitText(ctx, 'JIMOTHY NIGHT', w * 0.62, 250, w * 0.66, 190, FONT_TITLE, { fill: '#ffd23a', glow: '#ff9d00', glowBlur: 30 });
-    fitText(ctx, 'AUG 5 · BOBBLEHEAD GIVEAWAY · ROOKIE CARDS', w * 0.62, 370, w * 0.66, 50, FONT_ROUND, { fill: '#e9ffff' });
-    // pixel Jimothy face
-    const px = 26;
-    const face = [
-      '..XX.......XX..',
-      '.XWWX.....XWWX.',
-      '.XXXXXXXXXXXXX.',
-      'XGGGGGGGGGGGGGX',
-      'XGKKKKGGGKKKKGX',
-      'XKKWKKKGKKKWKKX',
-      'XKKKKKGGGKKKKKX',
-      'XGGGGWWWWWGGGGX',
-      'XGGGWWWKWWWGGGX',
-      '.XGGGWWWWWGGGX.',
-      '..XXGGGGGGGXX..',
-      '....XXXXXXX....',
-    ];
-    const colMap: Record<string, string> = { X: '#1b1b1b', W: '#f4f1ea', G: '#9a9591', K: '#2a2624' };
-    face.forEach((row, j) =>
-      [...row].forEach((ch, i) => {
-        if (ch === '.') return;
-        ctx.fillStyle = colMap[ch];
-        ctx.fillRect(60 + i * px, 150 + j * px, px - 2, px - 2);
-      }),
-    );
-    // line score
-    ctx.font = `64px ${FONT_TITLE}`;
-    const rows = [
-      ['', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'R'],
-      ['VISITORS', '0', '1', '0', '0', '2', '0', '0', '-', '-', '3'],
-      ['BARNACLES', '1', '0', '0', '3', '0', '1', '0', '-', '-', '5'],
-    ];
-    rows.forEach((r, j) =>
-      r.forEach((cell, i) => {
-        ctx.fillStyle = j === 0 ? '#9fe3ff' : i === 10 ? '#ffd23a' : '#ffffff';
-        ctx.textAlign = i === 0 ? 'left' : 'center';
-        ctx.fillText(cell, i === 0 ? 70 : 520 + i * 118, 520 + j * 90);
-      }),
-    );
-    ctx.fillStyle = '#ff6f61';
-    ctx.textAlign = 'left';
-    ctx.font = `52px ${FONT_TITLE}`;
-    ctx.fillText('BALLS 2   STRIKES 1   OUTS 2', 70, 800);
-    ctx.fillStyle = '#7cff6b';
-    ctx.textAlign = 'right';
-    ctx.fillText('ROUND BOY CAM ●', w - 70, 800);
-  });
+  const tex = canvasTex(2048, 860, drawScoreboard);
   kit.sign(b, { pos: [cx, y0 + Hb / 2, cz + 0.3], rotY: 0, w: W, h: Hb, tex, depth: 1.42, emissive: [0.9, 2.4], back: false, collide: false });
   kit.world.poi.set('bobblehead:s10', V(cx, y0 + Hb + 0.7, cz + 0.3));
   kit.world.poi.set('scoreboard', V(cx, 0.2, cz - 4));
@@ -836,49 +869,180 @@ function plaza(kit: Kit, b: Batch) {
     [175, 112],
   ])
     tree(b, x, 0, z, 1.0, Math.floor(x + z));
-  giantBobblehead(kit, b, 86, 155);
 }
 
-function giantBobblehead(kit: Kit, b: Batch, x: number, z: number) {
-  const S = 3.4;
-  b.cyl([x, 0.7, z], 2.4, 1.4, 0x8c8378, { seg: 24, mat: 'stone', collide: true });
-  b.cyl([x, 1.45, z], 2.6, 0.12, 0xb9b3a7, { seg: 24, mat: 'stone', collide: true }); // floor pass: solid plinth cap
-  const fig = P.jimothyFigure();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.05 });
-  const base = new THREE.Group();
-  base.position.set(x, 1.5, z);
-  base.rotation.y = -Math.PI / 2 + 0.35; // greets fans arriving from the west
-  const body = new THREE.Mesh(fig.body, mat);
-  body.scale.setScalar(S);
-  // Barnacles jersey band + cap
-  const jersey = new THREE.Mesh(new THREE.CylinderGeometry(0.505, 0.505, 0.26, 24, 1, true), new THREE.MeshStandardMaterial({ color: TEAL, roughness: 0.5, side: THREE.DoubleSide }));
-  jersey.position.y = 0.5 * S;
-  jersey.scale.setScalar(S);
-  base.add(body, jersey);
-  const neck = new THREE.Group(); // wobbles
-  neck.position.set(0, 0.95 * S, 0.1 * S);
-  const head = new THREE.Mesh(fig.head, mat);
-  head.scale.setScalar(S * 0.95);
-  head.position.y = 0.45 * S;
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: NAVY, roughness: 0.5 }));
-  cap.scale.set(S * 1.12, S * 0.7, S * 1.08);
-  cap.position.set(0, 0.45 * S + 0.22 * S, -0.03 * S);
-  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 20, 1, false, -Math.PI / 2, Math.PI), new THREE.MeshStandardMaterial({ color: TEAL, roughness: 0.5 }));
-  brim.scale.set(S, S, S * 1.2);
-  brim.position.set(0, 0.45 * S + 0.25 * S, 0.3 * S);
-  neck.add(head, cap, brim);
-  base.add(neck);
-  base.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (m.isMesh) {
-      m.castShadow = true;
-      m.receiveShadow = true;
-    }
+/** Model metres → metres for the World's Largest Bobblehead (he stands ~6.5 m tall on his plinth, cap included). */
+const GIANT = 6;
+/**
+ * The Barnacles jersey painted on his torso (his model frame, metres): fur behind its back edge and below its hem, a
+ * white hem, and his number on both flanks (centre z/y, size w/h).
+ */
+const JERSEY = { back: -0.2, hem: 0.35, trim: 0.024, num: { z: -0.015, y: 0.49, w: 0.25, h: 0.19 } };
+
+/** His jersey number: 00. (Round.) */
+function jerseyNumber() {
+  return canvasTex(256, 192, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    fitText(ctx, '00', w / 2, h * 0.54, w * 0.92, 190, FONT_TITLE, { fill: '#f4f1e6', stroke: '#1d3557', strokeW: 14 });
   });
-  kit.root.add(base);
-  kit.state.wobblers.push({ obj: neck, amp: 0.1, speed: 2.3 });
-  kit.ballCollider([x, 1.5 + 0.5 * S, z], 0.5 * S);
-  kit.ballCollider([x, 1.5 + 0.95 * S + 0.45 * S, z], 0.55 * S);
+}
+
+/**
+ * Painted resin: his own coat under a glossy clear coat, the fur carved by the coat as a bump. With `jersey`, a teal
+ * Barnacles jersey (white hem, 00 on the flanks) is painted over his torso, by position in his model frame: the
+ * geometry must stay in that frame (place the mesh, don't bake the placement in).
+ */
+function resinMaterial(coat: THREE.Texture | null, jersey: boolean) {
+  const m = new THREE.MeshPhysicalMaterial({ map: coat, color: 0xe4e4e4, roughness: 0.5, clearcoat: 0.55, clearcoatRoughness: 0.3 });
+  if (coat) {
+    m.bumpMap = coat;
+    m.bumpScale = 1;
+  }
+  m.name = jersey ? 'giantBobblehead:jersey' : 'giantBobblehead:resin';
+  if (!jersey) return m;
+  const num = { value: jerseyNumber() };
+  const J = JERSEY;
+  const f = (v: number) => v.toFixed(3);
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uJerseyNum = num;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vFigPos;\nvarying vec3 vFigNormal;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFigPos = position;\nvFigNormal = normal;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vFigPos;\nvarying vec3 vFigNormal;\nuniform sampler2D uJerseyNum;').replace(
+      '#include <map_fragment>',
+      /* glsl */ `#include <map_fragment>
+      {
+        // how far inside the jersey's back edge and hem this is (negative: bare fur)
+        float inside = min( vFigPos.z - (${f(J.back)}), vFigPos.y - (${f(J.hem)}) );
+        float cloth = smoothstep( -0.003, 0.003, inside );
+        float hemBand = 1.0 - smoothstep( ${f(J.trim - 0.003)}, ${f(J.trim + 0.003)}, inside );
+        float lum = dot( diffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
+        vec3 paint = mix( vec3( 0.006, 0.26, 0.29 ), vec3( 0.86 ), hemBand ) * ( 0.8 + 0.7 * lum );
+        // the number, projected across each flank so it reads left to right from either side
+        vec2 nuv = vec2( ( vFigPos.z - (${f(J.num.z)}) ) / ${f(J.num.w)}, ( vFigPos.y - (${f(J.num.y)}) ) / ${f(J.num.h)} );
+        nuv.x = vFigPos.x > 0.0 ? 0.5 - nuv.x : 0.5 + nuv.x;
+        nuv.y += 0.5;
+        if ( nuv.x > 0.0 && nuv.x < 1.0 && nuv.y > 0.0 && nuv.y < 1.0 ) {
+          vec4 n = texture2D( uJerseyNum, nuv );
+          paint = mix( paint, n.rgb, n.a * smoothstep( 0.45, 0.75, abs( normalize( vFigNormal ).x ) ) );
+        }
+        diffuseColor.rgb = mix( diffuseColor.rgb, paint, cloth );
+      }`,
+    );
+  };
+  m.customProgramCacheKey = () => 'giantBobbleheadJersey';
+  return m;
+}
+
+/** A Ballard Barnacles cap for his head, in the hat frame (bottom centre at the origin, +Y up out of the crown, +Z forward). */
+function barnaclesCap(width: number) {
+  const r = (width / 2) * 1.1;
+  // crown: a half-ellipsoid (depth/height relative to r), pulled a little down over the skull
+  const cz = 1.08;
+  const cy = 0.86;
+  const sink = r * 0.1;
+  const g = new THREE.Group();
+  g.name = 'BarnaclesCap';
+  const cloth = bake([
+    { geo: new THREE.SphereGeometry(1, 30, 12, 0, Math.PI * 2, 0, Math.PI / 2), scale: [r, r * cy, r * cz], pos: [0, -sink, 0], color: NAVY },
+    { geo: GEO.sphere(10, 8), scale: r * 0.09, pos: [0, r * cy - sink, 0], color: TEAL },
+    { geo: new THREE.CylinderGeometry(1, 1, 1, 28, 1, false, -Math.PI / 2, Math.PI), scale: [r * 1.02, r * 0.08, r * 0.98], pos: [0, -sink * 0.4, r * 0.42], rot: [0.12, 0, 0], color: TEAL },
+  ]);
+  const capMesh = new THREE.Mesh(cloth, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62 }));
+  const logo = canvasTex(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#f4f1e6';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#0f8a93';
+    ctx.beginPath();
+    ctx.arc(w / 2, h / 2, w * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    fitText(ctx, 'B', w / 2, h * 0.53, w * 0.6, 150, FONT_TITLE, { fill: '#f4f1e6', stroke: '#0b4a50', strokeW: 8 });
+  });
+  const patch = new THREE.Mesh(new THREE.CircleGeometry(r * 0.32, 28), new THREE.MeshStandardMaterial({ map: logo, roughness: 0.7 }));
+  // on the front of the crown, square to its surface there
+  const th = 0.6;
+  const n = new THREE.Vector2(Math.cos(th) / cz, Math.sin(th) / cy).normalize(); // (z, y)
+  patch.position.set(0, r * cy * Math.sin(th) - sink + n.y * r * 0.03, r * cz * Math.cos(th) + n.x * r * 0.03);
+  patch.rotation.x = -Math.atan2(n.y, n.x);
+  patch.userData.cullDist = 120; // (small, but it's the cap's logo)
+  g.add(capMesh, patch);
+  return g;
+}
+
+/**
+ * JIMOTHY NIGHT's "World's Largest Bobblehead*" outside the main gate: the giveaway bobblehead (the real Jimothy, mid-
+ * stride with a paw up, big head on a spring) in painted resin, in a Barnacles cap and jersey, on a stone plinth.
+ * Climbable: stepped colliders follow his back, head and cap (bobblehead s12 sits on the cap).
+ */
+async function giantBobblehead(kit: Kit, b: Batch, x: number, z: number) {
+  const top = 1.5;
+  const PR = 3.1;
+  b.cyl([x, 0.7, z], PR - 0.2, 1.4, 0x8c8378, { seg: 28, mat: 'stone', collide: true });
+  b.cyl([x, 1.45, z], PR, 0.12, 0xb9b3a7, { seg: 28, mat: 'stone', collide: true }); // floor pass: solid plinth cap
+  const yaw = -Math.PI / 2 + 0.35; // greets fans arriving from the west
+  const parts = await P.jimothyBobble(kit.game, P.BOBBLEHEAD);
+  let crown = V(x, top + 0.1, z);
+  if (parts) {
+    const bb = parts.bodyBox;
+    const fig = new THREE.Group();
+    fig.name = 'GiantBobblehead';
+    fig.position.set(x, top, z);
+    fig.rotation.y = yaw;
+    fig.scale.setScalar(GIANT);
+    // his feet centred on the plinth
+    const model = new THREE.Group();
+    model.position.set(-(bb.min.x + bb.max.x) / 2, 0, -(bb.min.z + bb.max.z) / 2);
+    fig.add(model);
+    const mesh = (g: THREE.BufferGeometry, m: THREE.Material) => {
+      const o = new THREE.Mesh(g, m);
+      o.castShadow = o.receiveShadow = true;
+      return o;
+    };
+    const jersey = resinMaterial(parts.coat, true);
+    for (const p of parts.body) model.add(mesh(p.geometry, jersey));
+    // the head: big, tipped up to look at the fans, on a wobbling spring at his neck
+    const neck = new THREE.Group();
+    neck.position.copy(parts.neck);
+    neck.rotation.x = -P.BOBBLEHEAD.headPitch;
+    neck.scale.setScalar(P.BOBBLEHEAD.headScale);
+    const wobble = new THREE.Group();
+    neck.add(wobble);
+    model.add(neck);
+    const headResin = resinMaterial(parts.coat, false);
+    for (const p of parts.head) {
+      const o = mesh(p.geometry, p.material.map ? headResin : p.material);
+      // eyes, glints, nose: tiny parts the DetailCuller would drop at 30 m, leaving a blank face on a 6 m statue
+      if (!p.material.map) o.userData.cullDist = 90;
+      wobble.add(o);
+    }
+    const cap = barnaclesCap(parts.hat.width);
+    cap.position.copy(parts.hat.pos);
+    cap.quaternion.copy(parts.hat.quat);
+    cap.traverse((o) => ((o as THREE.Mesh).isMesh ? ((o as THREE.Mesh).castShadow = (o as THREE.Mesh).receiveShadow = true) : 0));
+    wobble.add(cap);
+    kit.root.add(fig);
+    kit.state.wobblers.push({ obj: wobble, amp: 0.05, speed: 2.3 });
+    // climbable: stepped boxes up his legs, back and head (the wobble is small), and the cap's own dome as a hull,
+    // so a raccoon (or bobblehead s12) can stand on its crown
+    fig.updateMatrixWorld(true);
+    profileColliders(kit.world, fig, { rotY: yaw, cell: 0.42, inset: 0.05 });
+    const pts: number[] = [];
+    const v = new THREE.Vector3();
+    crown.y = -Infinity;
+    cap.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const pos = m.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+        pts.push(v.x, v.y, v.z);
+        if (v.y > crown.y) crown.copy(v);
+      }
+    });
+    kit.hullCollider(pts);
+  } else {
+    console.warn('[stadium] giant bobblehead: no baked Jimothy (plinth only)');
+  }
   const t = kit.textSign(
     [
       { text: 'JIMOTHY NIGHT', px: 60, color: '#ffd23a', stroke: '#1d3557' },
@@ -887,60 +1051,49 @@ function giantBobblehead(kit: Kit, b: Batch, x: number, z: number) {
     ],
     { w: 2.4, h: 1, bg: '#0f8a93', border: '#ffd23a' },
   );
-  // Free-standing on two posts in front of the plinth, facing the fans arriving from the west. (It used to lean
-  // half inside the 2.4 m stone plinth, which hid its right side.)
-  const sy = -Math.PI / 2 + 0.35;
+  // Free-standing on two posts in front of the plinth (off to his right, clear of the big head), facing the fans
+  // arriving from the west.
+  const sy = yaw;
   const fx = Math.sin(sy),
     fz = Math.cos(sy);
-  const px = x + fx * 3.5,
-    pz = z + fz * 3.5;
+  const px = x + fx * (PR + 1.2) - fz * 1.6,
+    pz = z + fz * (PR + 1.2) + fx * 1.6;
   for (const s of [-0.8, 0.8]) b.cyl([px + Math.cos(sy) * s - fx * 0.06, 0.72, pz - Math.sin(sy) * s - fz * 0.06], 0.045, 1.44, 0x1d3557, { seg: 6, collide: false });
   kit.sign(b, { pos: [px, 1.05, pz], rotY: sy, w: 1.92, h: 0.8, tex: t, depth: 0.03, collide: false, back: false });
-  kit.world.poi.set('bobblehead:s12', V(x, 1.5 + 0.95 * S + 0.45 * S + 0.55 * S + 0.35, z));
-  kit.world.poi.set('giantBobblehead', V(x + 3, 0.2, z + 3));
+  kit.world.poi.set('bobblehead:s12', V(crown.x, crown.y + 0.35, crown.z));
+  kit.world.poi.set('giantBobblehead', V(x + 3.5, 0.2, z + 3.5));
+}
+
+const STAND_BANNERS: { bg: string; fg: string; lines: string[]; jimothy?: 1 | -1 }[] = [
+  { bg: '#0f8a93', fg: '#ffd23a', lines: ['JIMOTHY', 'NIGHT', 'AUG 5'], jimothy: 1 },
+  { bg: '#1d3557', fg: '#ffffff', lines: ['GO', 'BARN-', 'ACLES!', '★★★'] },
+  // faces the other way, so the two Jimothys on a wall walk toward each other
+  { bg: '#ff8c1a', fg: '#fff8e1', lines: ['ROUND', 'BOY', 'FOREVER'], jimothy: -1 },
+];
+
+/** One of the vertical stand banners (256 × 460 canvas): JIMOTHY NIGHT and ROUND BOY FOREVER carry the real Jimothy. */
+export function drawStandBanner(ctx: CanvasRenderingContext2D, w: number, h: number, kind: number) {
+  const s = STAND_BANNERS[kind % STAND_BANNERS.length];
+  ctx.fillStyle = s.bg;
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(0, 0, w, 18);
+  ctx.fillRect(0, h - 18, w, 18);
+  if (s.jimothy) {
+    // mid-stride, a paw up, on a pale medallion so the grey coat reads on the team colours
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.beginPath();
+    ctx.arc(w / 2, 128, 104, 0, Math.PI * 2);
+    ctx.fill();
+    drawJimothy(ctx, w / 2, 131, 90, { facing: s.jimothy });
+  }
+  s.lines.forEach((t, i) => fitText(ctx, t, w / 2, (s.jimothy ? 276 : 120) + i * 66, w * 0.86, 62, FONT_TITLE, { fill: s.fg, stroke: 'rgba(0,0,0,0.3)', strokeW: 6 }));
 }
 
 let _banners: THREE.Texture[] | null = null;
 /** Vertical JIMOTHY NIGHT / Barnacles banners for the outside of the stands (shared artwork → one atlas rect each). */
 function bannerTextures() {
   if (_banners) return _banners;
-  const mk = (bg: string, fg: string, lines: string[], face: boolean) =>
-    canvasTex(256, 460, (ctx, w, h) => {
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = 'rgba(255,255,255,0.15)';
-      ctx.fillRect(0, 0, w, 18);
-      ctx.fillRect(0, h - 18, w, 18);
-      if (face) {
-        ctx.fillStyle = '#9a9591';
-        ctx.beginPath();
-        ctx.arc(w / 2, 120, 78, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#2a2624';
-        ctx.beginPath();
-        ctx.ellipse(w / 2, 112, 70, 24, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(w / 2 - 28, 110, 10, 0, Math.PI * 2);
-        ctx.arc(w / 2 + 28, 110, 10, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#f4f1ea';
-        ctx.beginPath();
-        ctx.ellipse(w / 2, 150, 30, 20, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#2a2624';
-        ctx.beginPath();
-        ctx.arc(w / 2 - 58, 58, 18, 0, Math.PI * 2);
-        ctx.arc(w / 2 + 58, 58, 18, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      lines.forEach((t, i) => fitText(ctx, t, w / 2, (face ? 260 : 120) + i * 72, w * 0.86, 64, FONT_TITLE, { fill: fg, stroke: 'rgba(0,0,0,0.3)', strokeW: 6 }));
-    });
-  _banners = [
-    mk('#0f8a93', '#ffd23a', ['JIMOTHY', 'NIGHT', 'AUG 5'], true),
-    mk('#1d3557', '#ffffff', ['GO', 'BARN-', 'ACLES!', '★★★'], false),
-    mk('#ff8c1a', '#fff8e1', ['ROUND', 'BOY', 'FOREVER'], true),
-  ];
+  _banners = STAND_BANNERS.map((_, i) => canvasTex(256, 460, (ctx, w, h) => drawStandBanner(ctx, w, h, i)));
   return _banners;
 }

@@ -6,6 +6,27 @@ import { Emote } from '../../../entities/animals';
 import type { HeartCtx, HeartQuest } from './ctx';
 import { buildBowl, buildKnittedHat, buildRockingChair, mergeVertexColored, spawnFallbackGrapes, type RockingChair } from './props';
 import { buildGrandma, buildKnitting, type Figure } from './humans';
+import { Attachment, type HeadAnchors } from '../../mutators/accessories';
+
+/** Brim to brim, the knitted hat as built (props.ts buildKnittedHat). */
+const KNIT_HAT_WIDTH = 0.4;
+
+/** The knitted hat on his head (Head-part frame), as the mutator hats sit (see accessories.ts). */
+function fitKnittedHat(a: HeadAnchors): THREE.Object3D {
+  const hat = buildKnittedHat();
+  if (a.quad) {
+    // the walking Jimothy: as wide as his head between the ears, on his crown, tilted with his down-turned head
+    hat.scale.setScalar((a.quad.hatWidth * 1.05) / KNIT_HAT_WIDTH);
+    hat.position.copy(a.quad.hatBase);
+    hat.rotation.x = a.quad.tilt;
+  } else {
+    // the ball's round head
+    hat.scale.setScalar(a.scale);
+    hat.position.copy(a.crown).add(new THREE.Vector3(0, -0.03 * a.scale, 0));
+    hat.rotation.x = -0.12;
+  }
+  return hat;
+}
 
 /**
  * Grandma's Favorite: Grandma Rosie rocks and knits on her porch. At night she leaves out a bowl of grapes,
@@ -55,7 +76,7 @@ export class GrandmaQuest implements HeartQuest {
   private rock = 0;
   private visiting = false;
   private hatFlight: { obj: THREE.Object3D; t: number; from: THREE.Vector3 } | null = null;
-  private fallbackHat: THREE.Object3D | null = null;
+  private fallbackHat: Attachment | null = null;
   private waveT = 0;
 
   init(ctx: HeartCtx) {
@@ -217,7 +238,7 @@ export class GrandmaQuest implements HeartQuest {
     }
     if (d > 7) this.near = false;
 
-    // the hat flying from her lap onto Jimothy's head
+    // the hat flying from her lap onto Jimothy's head (shrinking to fit the walking Jimothy's smaller head)
     const hf = this.hatFlight;
     if (hf && player) {
       hf.t += dt / 1.0;
@@ -227,6 +248,9 @@ export class GrandmaQuest implements HeartQuest {
       p.y += Math.sin(k * Math.PI) * 1.0;
       hf.obj.position.copy(p);
       hf.obj.rotation.set(0, k * Math.PI * 4, Math.sin(k * Math.PI) * 0.6);
+      const quad = player.model?.quad;
+      const fit = quad ? ((quad.headAnchors().hatWidth * 1.05) / KNIT_HAT_WIDTH) * (player.sizeMul ?? 1) : 1;
+      hf.obj.scale.setScalar(THREE.MathUtils.lerp(1, fit, k * k));
       if (k >= 1) {
         hf.obj.removeFromParent();
         this.hatFlight = null;
@@ -234,6 +258,8 @@ export class GrandmaQuest implements HeartQuest {
       }
     }
     this.fig?.animate(dt, ctx.time, { knit: this.visiting ? 0 : 1, wave: this.waveT > 0 ? 1 : 0, lookYaw: player ? this.lookYawTo(player.position) : 0 });
+    // (the fallback hat follows him between his forms: walking / rolled up)
+    if (this.fallbackHat && player?.model) this.fallbackHat.ensure(player.model);
   }
 
   private lookYawTo(p: THREE.Vector3) {
@@ -301,7 +327,7 @@ export class GrandmaQuest implements HeartQuest {
     ctx.after(0.9, () => {
       ctx.dialog(
         'Grandma Rosie',
-        ["Oh! It's you, sweet pea. I made you something.", 'A little hat, for that perfectly round head of yours. Hold still now...'],
+        ["Oh! It's you, sweet pea. I made you something.", 'A little hat for that sweet little head. The rest of you is round enough to stay warm! Hold still now...'],
         () => this.throwHat(),
         { portrait: '👵', color: '#b05a7a' },
       );
@@ -362,15 +388,15 @@ export class GrandmaQuest implements HeartQuest {
     ctx.hint("Grandma's Favorite! She knitted you a hat. (Toggle it in the pause menu: Mutators)", 4.5);
   }
 
-  /** If the mutator isn't available, just stick a knitted hat on his head ourselves. */
+  /**
+   * If the mutator isn't available, stick the knitted hat on his head ourselves: fitted like the mutator's hats (his
+   * crown's fur tucked under it), and kept on whichever form he's in.
+   */
   private attachFallbackHat() {
-    const head = this.ctx.player?.model?.headPivot as THREE.Object3D | undefined;
-    if (!head || this.fallbackHat) return;
-    const hat = buildKnittedHat();
-    hat.position.set(0, 0.2, -0.02);
-    hat.rotation.x = -0.12;
-    head.add(hat);
-    this.fallbackHat = hat;
+    const model = this.ctx.player?.model;
+    if (!model || this.fallbackHat) return;
+    this.fallbackHat = new Attachment('Head', (a) => ({ obj: fitKnittedHat(a), glb: false }), [], true);
+    this.fallbackHat.ensure(model);
   }
 
   private putOutGrapes() {

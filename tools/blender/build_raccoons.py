@@ -3,7 +3,7 @@ build_raccoons.py - procedurally builds the Jimothy Simulator raccoons and expor
 
 Usage (from the project root):
   "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup \
-      -P tools/blender/build_raccoons.py -- [--only jimothy,danny,slopothy,mom,kit] [--no-render]
+      -P tools/blender/build_raccoons.py -- [--only jimothy,danny,mom,kit] [--no-render]
 
 All geometry is authored in game space (+Y up, +Z forward, +X = character's left, metres).
 """
@@ -747,69 +747,6 @@ def danny_cfg():
     return cfg
 
 
-# ---------------------------------------------------------------------------------------------
-# Slopothy: AI-slop fake Jimothy
-# ---------------------------------------------------------------------------------------------
-
-def slop_cfg():
-    cfg = RoundCfg(root='Slopothy', fur_mat='Slop', seed=13)
-    cfg.pal = dict(JIMOTHY_PAL)
-    cfg.pal.update(top='#8a7c86', side='#aa9daf', dark='#62566a', belly='#eadfe8', tip='#dcd0e2',
-                   mask='#1e1523', white='#f8f0fa', stripe='#4c3b53', brow='#fdf5ff',
-                   leg='#766b7d', leg_low='#3a3141', paw='#2e2632',
-                   ear_inner='#43313f', ear_rim='#f5e9f2', ear_back='#55485c',
-                   tail_light='#b6a3ae', tail_dark='#2f2434', tail_tip='#281d2c')
-    cfg.symmetric = False
-    cfg.head_tris = 3300
-    cfg.body_n = 10
-    cfg.face_asym = 0.45
-    cfg.face_warp = 0.012
-    cfg.fingers = 7
-    cfg.ear_scale = (1.8, 0.85)
-    cfg.mouth_asym = 0.5
-    cfg.eyes = [dict(name='EyeL', x=0.112, y=0.112, r=0.058, out=0.25, up=-0.05),
-                dict(name='EyeR', x=-0.094, y=0.152, r=0.044, out=-0.05, up=0.08),
-                dict(name='ExtraEye1', x=0.012, y=0.228, r=0.031, out=0.1, up=0.3, res=(12, 8)),
-                dict(name='ExtraEye2', x=-0.19, y=0.035, r=0.027, out=-0.6, up=-0.1, res=(10, 7))]
-    # melted, off-centre muzzle
-    cfg.muz_c = np.array([0.018, 0.04, 0.378])
-    cfg.tip_c = np.array([0.036, 0.016, 0.442])
-    cfg.muz_pitch = D(17)
-
-    def extra(P, d):
-        # sagging "melted" chin drip + lumpy cheek
-        d = smin(d, sd_ellipsoid(P, (-0.05, -0.06, 0.345), (0.038, 0.075, 0.035)), 0.03)
-        d = smin(d, sd_sphere(P, (-0.055, -0.13, 0.33), 0.022), 0.02)
-        d = smin(d, sd_ellipsoid(P, (0.2, -0.02, 0.24), (0.07, 0.06, 0.07)), 0.03)
-        return d
-    cfg.head_extra = extra
-    cfg.tail_rings = 7
-    cfg.tail_yaw = D(35)
-    return cfg
-
-
-def slop_hook(model, cfg, ctx):
-    # two extra legs sprouting from the middle of the sides
-    for i, side in enumerate((1, -1)):
-        c2 = RoundCfg(**{k: v for k, v in vars(cfg).items()})
-        c2.hip = np.array([0.17, -0.15, 0.0])
-        c2.ankle = np.array([0.215 + 0.02 * i, -0.382, 0.02 - 0.03 * i])
-        c2.leg_r = (0.06, 0.042)
-        leg, H = build_leg(c2, side, n_toes=6, lod=0.75)
-        lp = model.add('ExtraLeg%d' % (i + 1), 'Body', T(H))
-        lp.add_mesh(leg)
-    # a second (smaller) tail growing out of the top of the head
-    c3 = RoundCfg(**{k: v for k, v in vars(cfg).items()})
-    c3.tail_base = np.array([0.04, 0.26, 0.08])
-    c3.tail_len = 0.42
-    c3.tail_pitch0 = D(80)
-    c3.tail_pitch1 = D(5)
-    c3.tail_yaw = D(-25)
-    c3.tail_rings = 3
-    build_tail(c3, model, 'Head', prefix='ExtraTail', count=3, radius_scale=0.62, n_around=9)
-
-
-# ---------------------------------------------------------------------------------------------
 # =============================================================================================
 # quadruped raccoons (Mom, Kit)
 # =============================================================================================
@@ -1258,19 +1195,9 @@ def build_danny(render=True):
     return model
 
 
-def build_slopothy(render=True):
-    rlib.reset_scene()
-    cfg = slop_cfg()
-    model = round_raccoon(cfg, slop_hook)
-    mats = raccoon_materials('Slop')
-    finish(model, mats, 'slopothy', render, closeup=((0, 0.1, 0.3), 0.34))
-    return model
-
-
 BUILDERS = {
     'jimothy': build_jimothy,
     'danny': build_danny,
-    'slopothy': build_slopothy,
     'mom': build_mom,
     'kit': build_kit,
 }

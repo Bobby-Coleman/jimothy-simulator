@@ -10,12 +10,14 @@ import { seawall } from './Locks';
 import * as P from './props';
 import { profileColliders } from '../../profileColliders';
 import { spawnItem } from '../../../gameplay/items';
+import { loadMerged } from '../central/lib/models';
 
 /**
  * S zone — Waterfront + "Pike's Plaice Market": the market arcade with its big neon sign, fish stall with
  * ice beds (the fish-thrower spot), fruit & flower stalls, the Gum Wall in Post Alley (sticky! see SouthSystem),
- * a bronze Jimothy piggy-bank, the waterfront park with kiosks and The Pretty Good Wheel, a plank boardwalk,
- * piers, a marina, a floating dock (with a lost kit hiding under the boardwalk) and the ferry M/V Round Boy.
+ * a bronze piggy bank of Jimothy rolled into a ball, the waterfront park with kiosks and The Pretty Good Wheel,
+ * a plank boardwalk, piers, a marina, a floating dock (with a lost kit hiding under the boardwalk) and the ferry
+ * M/V Round Boy.
  */
 
 const AREA = 'Waterfront';
@@ -44,6 +46,7 @@ export const WaterfrontZone: ZoneBuilder = {
     fruitStall(kit, b);
     flowerStall(kit, b);
     frontPlaza(kit, b);
+    const bank = bronzeBallBank(kit);
     gumWall(kit, b);
     park(kit, b);
     prettyGoodWheel(kit, b);
@@ -51,6 +54,7 @@ export const WaterfrontZone: ZoneBuilder = {
     piers(kit, b);
     ferry(kit, b);
     await boats(kit);
+    await bank;
 
     world.poi.set('market', V(0, 0.1, 80));
     world.poi.set('waterfront', V(0, DECK + 0.1, 163));
@@ -481,31 +485,11 @@ function flowerStall(kit: Kit, b: Batch) {
 function frontPlaza(kit: Kit, b: Batch) {
   const game = kit.game;
   b.decal([-12, 0.02, 72.6], [82, 10.8], 0xe6ddcf, { mat: 'paving' });
-  // Bronze "Jimothy the Bronze Ball" piggy bank (parody of the market's famous bronze pig)
-  const sx = 0;
-  const sz = 72.5;
-  b.box([sx, 0.45, sz], [1.9, 0.9, 1.5], 0x8c8378, { mat: 'stone' });
-  b.box([sx, 0.93, sz], [2.1, 0.08, 1.7], 0x9f968a, { mat: 'stone', collide: false });
-  const fig = P.jimothyFigure();
-  const bronze = new THREE.MeshStandardMaterial({ color: 0xb07a3a, metalness: 0.85, roughness: 0.32 });
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(fig.body, bronze);
-  const head = new THREE.Mesh(fig.head, bronze);
-  head.position.set(0, 0.95, 0.35);
-  head.scale.setScalar(0.7);
-  g.add(body, head);
-  g.scale.setScalar(1.25);
-  g.position.set(sx, 0.97, sz);
-  g.rotation.y = Math.PI;
-  g.traverse((o) => ((o as THREE.Mesh).isMesh ? ((o as THREE.Mesh).castShadow = true) : 0));
-  kit.root.add(g);
-  kit.ballCollider([sx, 0.97 + 0.62, sz], 0.62);
-  // polish: head collider matches the visual head (was 0.3 m too high and r 0.45 < the camera's "thin" cut-off, so the
-  // camera clipped inside the bronze head)
-  kit.ballCollider([sx, 0.97 + 1.19, sz - 0.44], 0.52);
-  // …and the ringed tail (sticks out 1.2 m toward the plaza; the camera used to park inside it). r ≥ 0.5 so the camera
-  // doesn't treat it as a "thin" pole.
-  kit.ballCollider([sx, 0.97 + 0.6, sz + 0.95], 0.5);
+  // Bronze "Jimothy the Bronze Ball" piggy bank (parody of the market's famous bronze pig): the plinth and plaque; the
+  // bronze itself is cast by bronzeBallBank()
+  const { x: sx, z: sz } = BANK;
+  b.box([sx, 0.45, sz], [1.9, 0.9, 1.7], 0x8c8378, { mat: 'stone' });
+  b.box([sx, 0.93, sz], [2.1, 0.08, 1.9], 0x9f968a, { mat: 'stone', collide: false });
   const plaque = kit.textSign(
     [
       { text: 'JIMOTHY THE BRONZE BALL', px: 44, color: '#3b2a12' },
@@ -513,7 +497,7 @@ function frontPlaza(kit: Kit, b: Batch) {
     ],
     { w: 1.7, h: 0.5, bg: '#d9b36a', border: '#8a6a2a', pxPerM: 240 },
   );
-  kit.sign(b, { pos: [sx, 0.5, sz - 0.76], rotY: Math.PI, w: 1.6, h: 0.44, tex: plaque, depth: 0.02, back: false, collide: false });
+  kit.sign(b, { pos: [sx, 0.5, sz - 0.86], rotY: Math.PI, w: 1.6, h: 0.44, tex: plaque, depth: 0.02, back: false, collide: false });
   // "Please do not feed the raccoon" municipal sign
   const t = canvasTex(900, 640, (ctx, w, h) => {
     ctx.fillStyle = '#ffffff';
@@ -562,6 +546,103 @@ function frontPlaza(kit: Kit, b: Batch) {
   b.cyl([30, 2.7, 74], 1.2, 0.4, 0xffd23a, { rTop: 0.05, seg: 10, collide: false, mat: 'glossy' });
   const cs = kit.textSign([{ text: 'MINI DONUTS', px: 64, color: '#fff', stroke: '#1d3557' }], { w: 1.7, h: 0.45, bg: '#ff8c3a' });
   kit.sign(b, { pos: [30, 0.75, 73.47], rotY: Math.PI, w: 1.6, h: 0.42, tex: cs, depth: 0.02, collide: false, back: false });
+}
+
+/** The bronze piggy bank on the market plaza: plinth centre (x, z) and the top of its plinth. */
+const BANK = { x: 0, z: 72.5, top: 0.97 };
+
+/**
+ * "Jimothy the Bronze Ball": a bronze piggy bank of Jimothy tucked into the ball he rolls in (`jimothy_ball.glb`, his
+ * rolling form, short tail and all), facing the plaza, with a coin slot on his back. The ball model's own colours come
+ * through as patina (a dark mask, pale brows and muzzle), and his nose and eye glints are rubbed bright, as a lucky
+ * bronze's are.
+ */
+async function bronzeBallBank(kit: Kit) {
+  const { x: sx, z: sz, top } = BANK;
+  const S = 1.65;
+  const FEET = 0.421; // model units from the ball's centre down to his feet
+  const model = await loadMerged(kit.game, 'assets/models/jimothy_ball.glb');
+  // (less metallic than the statue's bronze: he stands in the market's shade, where a mirror-like bronze only reflects
+  // the blue sky and turns his back grey-green)
+  const bronze = new THREE.MeshStandardMaterial({ color: 0xb4793a, metalness: 0.68, roughness: 0.36, vertexColors: true, name: 'bank:bronze' });
+  const rubbed = new THREE.MeshStandardMaterial({ color: 0xf2c67c, metalness: 0.95, roughness: 0.14, envMapIntensity: 1.6, name: 'bank:rubbed' });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x140d07, metalness: 0.4, roughness: 0.75, name: 'bank:slot' });
+  const smooth = (a: number, b: number, x: number) => {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  };
+  /**
+   * Bronze tone per vertex: `k` for all of them, or patina from the model's own colours: his coat plain bronze, the
+   * mask, paws and tail rings darker, the brows, muzzle and ear rims a little lighter.
+   */
+  const patina = (src: THREE.BufferGeometry, k?: number) => {
+    const geo = src.clone();
+    const c = geo.getAttribute('color') as THREE.BufferAttribute | undefined;
+    const n = geo.getAttribute('position').count;
+    const out = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const lum = c ? Math.sqrt(0.2126 * c.getX(i) + 0.7152 * c.getY(i) + 0.0722 * c.getZ(i)) : 0.5;
+      out.fill(k ?? 0.5 + 0.5 * smooth(0.22, 0.4, lum) + 0.14 * smooth(0.65, 0.85, lum), i * 3, i * 3 + 3);
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(out, 3));
+    return geo;
+  };
+  const g = new THREE.Group();
+  g.name = 'jimothyBronzeBall';
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+  };
+  // the ball's body is an ellipsoid (radii 0.365 / 0.35 / 0.378 model units); the coin slot sits on it
+  const R = { x: 0.365, y: 0.35, z: 0.378 };
+  if (model) {
+    for (const p of model.parts) {
+      const name = p.mat.name;
+      if (name === 'Nose' || name === 'EyeHighlight') add(p.geo.clone(), rubbed);
+      else add(patina(p.geo, name === 'Eye' ? 0.38 : undefined), bronze);
+    }
+  } else {
+    // no model: a plain bronze ball with ears and a tail puff
+    add(patina(new THREE.SphereGeometry(1, 32, 20).scale(R.x, R.y, R.z), 0.9), bronze);
+    for (const s of [-1, 1]) add(patina(new THREE.SphereGeometry(0.08, 12, 8).scale(1, 1, 0.55).translate(s * 0.17, 0.3, 0.08), 0.8), bronze);
+    add(patina(new THREE.SphereGeometry(0.13, 14, 10).translate(0, -0.12, -0.42), 0.75), bronze);
+  }
+  // coin slot along his spine, behind the ears: a raised oval boss hugging the ball, and the slot in it
+  const surf = (x: number, z: number) => R.y * Math.sqrt(Math.max(0, 1 - (x / R.x) ** 2 - (z / R.z) ** 2));
+  const B = { z: -0.1, a: 0.06, c: 0.105, h: 0.03, sink: 0.01 };
+  const bossTop = (x: number, z: number) => surf(x, z) - B.sink + B.h * Math.sqrt(Math.max(0, 1 - (x / B.a) ** 2 - ((z - B.z) / B.c) ** 2));
+  const boss = new THREE.SphereGeometry(1, 28, 14);
+  const bp = boss.getAttribute('position');
+  for (let i = 0; i < bp.count; i++) {
+    const x = bp.getX(i) * B.a;
+    const z = B.z + bp.getZ(i) * B.c;
+    bp.setXYZ(i, x, surf(x, z) - B.sink + bp.getY(i) * B.h, z);
+  }
+  boss.computeVertexNormals();
+  add(patina(boss, 0.95), bronze);
+  const slot = new THREE.BoxGeometry(0.024, 0.02, 0.13, 1, 1, 14);
+  const sp = slot.getAttribute('position');
+  for (let i = 0; i < sp.count; i++) {
+    const x = sp.getX(i);
+    const z = B.z + sp.getZ(i);
+    sp.setXYZ(i, x, bossTop(x, z) - 0.004 + sp.getY(i), z);
+  }
+  slot.computeVertexNormals();
+  add(slot, dark);
+  // feet on the plinth, facing the plaza (-z); nose to tail centred on the plinth
+  const cy = top + FEET * S;
+  const cz = sz - 0.047 * S;
+  g.position.set(sx, cy, cz);
+  g.rotation.y = Math.PI;
+  g.scale.setScalar(S);
+  kit.root.add(g);
+  // colliders (model +z = world -z): the ball, his face (it bulges out in front of the ball) and the tail stub.
+  // The first two are r ≥ 0.5 so the camera doesn't treat them as "thin" poles and park inside the bronze.
+  kit.ballCollider([sx, cy, cz], R.x * S * 0.98);
+  kit.ballCollider([sx, cy, cz - 0.18 * S], 0.5);
+  kit.ballCollider([sx, cy - 0.13 * S, cz + 0.47 * S], 0.2);
 }
 
 /** Open-air fish cart with an umbrella (visual only, so NPC spawns under it work). Faces +z rotated by rotY. */

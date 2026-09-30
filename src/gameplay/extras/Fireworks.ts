@@ -228,23 +228,15 @@ export class BigFireworks {
         break;
       }
       case 'raccoon': {
-        // a round face, two round ears and a bandit mask with two bright eyes — Jimothy in the sky
-        const n = Math.round(110 * k);
-        const face: [number, number, number] = [1.9, 1.8, 1.7];
-        const mask: [number, number, number] = [0.9, 0.95, 1.4];
-        flat(n, (i, o) => o.set(Math.cos((i / n) * Math.PI * 2), Math.sin((i / n) * Math.PI * 2), 0), 20 * s, face, 2.8);
-        for (const ex of [-0.62, 0.62]) {
-          const m = Math.round(24 * k);
-          flat(m, (i, o) => o.set(ex + Math.cos((i / m) * Math.PI * 2) * 0.28, 0.95 + Math.sin((i / m) * Math.PI * 2) * 0.28, 0), 20 * s, face, 2.8);
+        // Jimothy in the sky, in profile mid-stroll: his domed back, the head carried low with the bandit mask and
+        // a bright eye, long legs (a front paw lifted and curled) and the little puff of a tail
+        for (const g of jimothySparks()) {
+          const n = g.always ? g.pts.length : Math.max(1, Math.round(g.pts.length * k));
+          flat(n, (i, o) => {
+            const p = g.pts[Math.floor((i * g.pts.length) / n)];
+            o.set(p[0], p[1], 0);
+          }, 20 * s, g.color, 2.8);
         }
-        const mm = Math.round(40 * k);
-        flat(mm, (i, o) => o.set(-0.75 + (i / mm) * 1.5, 0.12 + Math.sin((i / mm) * Math.PI) * -0.12, 0), 20 * s, mask, 2.8);
-        for (const ex of [-0.33, 0.33]) {
-          const m = Math.round(10 * k);
-          flat(m, (i, o) => o.set(ex + Math.cos((i / m) * Math.PI * 2) * 0.07, 0.15 + Math.sin((i / m) * Math.PI * 2) * 0.07, 0), 20 * s, [2.8, 2.6, 1.2], 2.8);
-        }
-        const nose = Math.round(8 * k);
-        flat(nose, (i, o) => o.set(Math.cos((i / nose) * Math.PI * 2) * 0.06, -0.3 + Math.sin((i / nose) * Math.PI * 2) * 0.05, 0), 20 * s, [1, 0.9, 1], 2.8);
         break;
       }
       case 'willow': {
@@ -379,4 +371,125 @@ function randDir(out: THREE.Vector3) {
   const a = Math.random() * Math.PI * 2;
   const s = Math.sqrt(1 - u * u);
   return out.set(s * Math.cos(a), u, s * Math.sin(a));
+}
+
+// ------------------------------------------------------------------------------------------------ Jimothy in sparks
+
+type Pt2 = [number, number];
+interface SparkGroup {
+  pts: Pt2[];
+  color: [number, number, number];
+  /** Keep every point at low quality (the eye and nose are only a few sparks). */
+  always?: boolean;
+}
+let sparkGroups: SparkGroup[] | null = null;
+
+/**
+ * Jimothy's side profile as spark points (x toward his nose, y up, about ±1), built once. Traced from the shared 2D
+ * doodle (fx/jimothyArt, same figure units): the outline of his domed back running straight into his low head (no
+ * neck), his legs where they show below the body (a front paw lifted and curled), the ear and the short tail puff
+ * where they stick out, the bandit mask round a bright eye, and his nose.
+ */
+function jimothySparks(): SparkGroup[] {
+  if (sparkGroups) return sparkGroups;
+  // canvas-style (y down) like the doodle; flipped to y up at the end
+  const BODY: Pt2[] = [
+    [1.0, -0.075], [0.975, -0.14], [0.93, -0.25], [0.86, -0.39], [0.8, -0.52], [0.72, -0.6], [0.6, -0.7], [0.44, -0.83],
+    [0.24, -0.9], [0.0, -0.915], [-0.24, -0.885], [-0.44, -0.79], [-0.6, -0.64], [-0.68, -0.4], [-0.67, -0.12], [-0.62, 0.14],
+    [-0.53, 0.32], [-0.37, 0.34], [-0.2, 0.34], [0.1, 0.37], [0.36, 0.31], [0.54, 0.17], [0.65, 0.07], [0.76, 0.0],
+    [0.86, -0.025], [0.95, -0.035],
+  ];
+  const LEGS: Pt2[][] = [
+    [[-0.2, 0.08], [-0.12, 0.4], [0.0, 0.5], [0.18, 0.5]],
+    [[0.36, 0.04], [0.34, 0.4], [0.4, 0.7], [0.47, 0.86], [0.56, 0.885]],
+    [[-0.44, -0.08], [-0.46, 0.34], [-0.64, 0.57], [-0.71, 0.84], [-0.59, 0.9]],
+    [[0.55, -0.04], [0.6, 0.28], [0.71, 0.38], [0.7, 0.5], [0.64, 0.55]],
+  ];
+  const MASK: Pt2[] = [[0.68, -0.43], [0.79, -0.44], [0.87, -0.37], [0.925, -0.26], [0.89, -0.18], [0.8, -0.14], [0.71, -0.14], [0.655, -0.25]];
+  const EYE: Pt2 = [0.82, -0.33];
+  const STEP = 0.05;
+  const body = spline(BODY, true, 8);
+  const outside = (p: Pt2) => !insidePoly(p, body);
+  const oval = (cx: number, cy: number, rx: number, ry: number, rot: number): Pt2[] => {
+    const out: Pt2[] = [];
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      const x = Math.cos(a) * rx;
+      const y = Math.sin(a) * ry;
+      out.push([cx + x * Math.cos(rot) - y * Math.sin(rot), cy + x * Math.sin(rot) + y * Math.cos(rot)]);
+    }
+    return out;
+  };
+  const legs = LEGS.flatMap((l) => resample(spline(l, false, 8), STEP, false)).filter(outside);
+  const ear = resample(oval(0.7, -0.63, 0.085, 0.12, -0.3), STEP * 0.8, true).filter(outside);
+  const tail = resample(oval(-0.75, -0.47, 0.19, 0.255, 0.55), STEP, true).filter(outside);
+  // the mask as a ring of blue sparks round the eye (filled in, the sparks just add up to a white blob)
+  const mask = resample(spline(MASK, true, 6), 0.036, true);
+  const up = (list: Pt2[]) => list.map(([x, y]) => [x, -y] as Pt2);
+  sparkGroups = [
+    { pts: up([...resample(body, STEP, true), ...ear]), color: [2.3, 2.0, 1.55] },
+    { pts: up(legs), color: [2.2, 1.7, 1.1] },
+    { pts: up(tail), color: [2.5, 1.35, 0.5] },
+    { pts: up(mask), color: [0.55, 0.8, 2.6] },
+    { pts: up([EYE, EYE, [EYE[0] - 0.006, EYE[1] - 0.006]]), color: [2.9, 2.8, 1.9], always: true },
+    { pts: up([[0.99, -0.09], [0.985, -0.084]]), color: [2.7, 0.55, 0.85], always: true },
+  ];
+  return sparkGroups;
+}
+
+/** A Catmull-Rom curve through `pts`, sampled `per` times a segment. */
+function spline(pts: Pt2[], closed: boolean, per: number): Pt2[] {
+  const n = pts.length;
+  const at = (i: number) => (closed ? pts[(i + n) % n] : pts[Math.max(0, Math.min(n - 1, i))]);
+  const out: Pt2[] = [];
+  for (let i = 0; i < (closed ? n : n - 1); i++) {
+    const p0 = at(i - 1);
+    const p1 = at(i);
+    const p2 = at(i + 1);
+    const p3 = at(i + 2);
+    for (let j = 0; j < per; j++) {
+      const t = j / per;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const cr = (a: number, b: number, c: number, d: number) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+      out.push([cr(p0[0], p1[0], p2[0], p3[0]), cr(p0[1], p1[1], p2[1], p3[1])]);
+    }
+  }
+  if (!closed) out.push(pts[n - 1]);
+  return out;
+}
+
+/** Points every `step` along a polyline. */
+function resample(poly: Pt2[], step: number, closed: boolean): Pt2[] {
+  const out: Pt2[] = [poly[0]];
+  let need = step;
+  const m = closed ? poly.length : poly.length - 1;
+  for (let i = 0; i < m; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    let pos = 0;
+    while (len - pos >= need) {
+      pos += need;
+      need = step;
+      const t = pos / len;
+      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+    need -= len - pos;
+  }
+  if (closed && out.length > 1) {
+    const l = out[out.length - 1];
+    if (Math.hypot(l[0] - out[0][0], l[1] - out[0][1]) < step * 0.5) out.pop();
+  }
+  return out;
+}
+
+function insidePoly(p: Pt2, poly: Pt2[]) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
 }

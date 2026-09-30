@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { RaccoonRig, RIGS, defaultPose, buildCrow, KIT_NAMES, type RigPose } from '../../entities/animals';
+import { RaccoonRig, RIGS, defaultPose, buildCrow, KIT_NAMES, JIMOTHY_LOOKALIKE_KIT, type RigPose } from '../../entities/animals';
 import type { ExtrasFeature, ExtrasHost } from './host';
 import { BigFireworks, type Pattern } from './Fireworks';
 import { FinaleOverlay, esc } from './FinaleOverlay';
@@ -488,8 +488,8 @@ export class Finale implements ExtrasFeature {
   private buildActors(stage: Stage) {
     const game = this.game;
     const furOn = (game.renderer as any)?.quality !== 'low';
-    const mk = (kind: Actor['kind'], pos: THREE.Vector3, yaw: number): Actor => {
-      const spec = kind === 'mom' ? RIGS.mom : kind === 'kit' ? RIGS.kit : RIGS.danny;
+    const mk = (kind: Actor['kind'], pos: THREE.Vector3, yaw: number, lookalike = false): Actor => {
+      const spec = kind === 'mom' ? RIGS.mom : kind === 'kit' ? (lookalike ? RIGS.kitJimothy : RIGS.kit) : RIGS.danny;
       const rig = new RaccoonRig(spec);
       rig.root.position.copy(pos);
       rig.root.rotation.y = yaw;
@@ -516,7 +516,8 @@ export class Finale implements ExtrasFeature {
     this.actors = [];
     this.actors.push(mk('mom', stage.mom, stage.yaw + 0.22));
     this.actors.push(mk('danny', stage.danny, stage.yaw - 0.28));
-    stage.kits.forEach((p, i) => this.actors.push(mk('kit', p, stage.yaw + (i - 2) * 0.12 + rand(-0.1, 0.1))));
+    // (slot i is kit index i + 1, KIT_NAMES[i]: Nugget, who takes after Jimothy, gets the lookalike rig)
+    stage.kits.forEach((p, i) => this.actors.push(mk('kit', p, stage.yaw + (i - 2) * 0.12 + rand(-0.1, 0.1), i + 1 === JIMOTHY_LOOKALIKE_KIT)));
   }
 
   private buildCrows(stage: Stage) {
@@ -1233,13 +1234,37 @@ export class Finale implements ExtrasFeature {
         if (e) e.scale.y = Math.min(e.scale.y, squint);
       }
     }
-    const mouth = parts.Mouth as THREE.Object3D | undefined;
-    if (mouth && this.jimChitter > 0) mouth.scale.y = 1 + Math.abs(Math.sin(t * 34)) * 2 * this.jimChitter;
-    if (this.jimWave > 0) {
-      const arm = parts.ArmR as THREE.Object3D | undefined;
-      const k = Math.min(1, this.jimWave * 2);
-      arm?.rotateX((-2.5 + Math.sin(t * 10) * 0.35) * k);
+    const quad = player.model.quad;
+    if (this.jimChitter > 0) {
+      const chat = Math.abs(Math.sin(t * 34)) * Math.min(1, this.jimChitter * 1.5);
+      // the walking Jimothy's jaw chatters; the ball's little mouth stretches
+      if (quad?.bones.Jaw) quad.bones.Jaw.rotateX(0.3 * chat);
+      else {
+        const mouth = parts.Mouth as THREE.Object3D | undefined;
+        if (mouth) mouth.scale.y = 1 + chat * 2;
+      }
     }
+    if (this.jimWave > 0) {
+      const k = Math.min(1, this.jimWave * 2);
+      if (quad) {
+        // he sits up on his haunches and waves a front paw at them (his animator poses it, next frame): the paw on
+        // the side they're on (Danny on his left, Grandma down the alley on his right)
+        quad.waveW = k;
+        quad.waveSide = this.waveSide(player.position, player.facing);
+      } else {
+        const arm = parts.ArmR as THREE.Object3D | undefined;
+        arm?.rotateX((-2.5 + Math.sin(t * 10) * 0.35) * k);
+      }
+    }
+  }
+
+  /** Which front paw to wave (+1 = his left): toward whoever he's waving at (Grandma for her line, else Danny). */
+  private waveSide(pos: THREE.Vector3, facing: number) {
+    const s = this.stage;
+    if (!s) return -1;
+    const to = this.shot === 'grandma' ? s.grandma : (this.actors.find((a) => a.kind === 'danny')?.pos ?? s.danny);
+    // his left is (cos f, 0, -sin f)
+    return (to.x - pos.x) * Math.cos(facing) - (to.z - pos.z) * Math.sin(facing) >= 0 ? 1 : -1;
   }
 
   lateUpdate(dt: number) {

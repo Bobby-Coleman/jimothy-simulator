@@ -214,18 +214,60 @@ function buildBat(): THREE.Object3D {
   return g;
 }
 
+/** Where the walking Jimothy grips the bat (Head-bone frame): crosswise in his mouth, behind the muzzle. */
+const BAT_GRIP = new THREE.Vector3(0.005, -0.152, 0.082);
+/** Which way the barrel sticks out of his mouth at rest (Head-bone frame): out past his right cheek and up, square
+ * to the camera behind him so it shows its full length. */
+const BAT_OUT = new THREE.Vector3(-1, 0.58, -0.06).normalize();
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+
+/**
+ * The Rookie's swing (the walking Jimothy swings the bat in his teeth): turn of the bat about his head's up axis
+ * (+ = from his right side round the front to his left) and a downward chop, `t` seconds after the bonk.
+ */
+function swingPose(t: number): [number, number] {
+  if (t < 0.08) {
+    const u = t / 0.08;
+    return [-0.35 * u, 0];
+  }
+  if (t < 0.2) {
+    const u = (t - 0.08) / 0.12;
+    const e = 1 - (1 - u) * (1 - u);
+    return [-0.35 + 3.05 * e, 0.35 * Math.sin(Math.PI * u)];
+  }
+  const u = Math.min(1, (t - 0.2) / 0.45);
+  const e = u * u * (3 - 2 * u);
+  return [2.7 * (1 - e), 0];
+}
+
 export function rookie(): MutatorImpl {
   const names = ['BaseballCap', 'RookieCap', 'Cap'];
   const cap = new Attachment('Head', (a) => glbOr(names, 'hat', a, () => buildBaseballCap(a)), names, true);
-  const bat = new Attachment('HandR', (a) => {
+  // the ball holds its bat up in a paw
+  const batHand = new Attachment('HandR', (a) => {
     const b = buildBat();
     b.scale.setScalar(a.scale);
     b.position.set(0, -0.01 * a.scale, 0.03 * a.scale);
     b.rotation.set(1.1, 0, 0);
     return { obj: b, glb: false };
   });
+  // the walking Jimothy's front paws are for walking: he carries the bat in his mouth like a stick (grip crosswise
+  // in his teeth, the barrel sticking out past his right cheek) and swings it round with a twist of his head
+  const batMouth = new Attachment('Head', () => {
+    const pivot = new THREE.Group();
+    pivot.name = 'RookieBatGrip';
+    pivot.position.copy(BAT_GRIP);
+    const b = buildBat();
+    b.scale.setScalar(0.9);
+    b.quaternion.setFromUnitVectors(Y_AXIS, BAT_OUT);
+    pivot.add(b);
+    return { obj: pivot, glb: false };
+  });
   const labels = new FloatingLabels();
   let off: (() => void) | null = null;
+  let offSwing: (() => void) | null = null;
+  let swingT = 9;
   let lastHR = -10;
   let hrCount = 0;
 
@@ -271,20 +313,36 @@ export function rookie(): MutatorImpl {
     },
     enable(game) {
       off = game.events.on('bonk', (ev) => onBonk(game, ev));
+      offSwing = game.events.on('bonkStart', () => (swingT = 0));
       game.hint('Rookie: batter up! Bonks now hit it out of the park.', 3);
     },
     disable() {
       off?.();
       off = null;
+      offSwing?.();
+      offSwing = null;
+      swingT = 9;
       cap.remove();
-      bat.remove();
+      batHand.remove();
+      batMouth.remove();
       labels.clear();
     },
     post(game, dt) {
       const p = getPlayer(game);
       if (!p) return;
       cap.ensure(p.model);
-      bat.ensure(p.model);
+      swingT += dt;
+      const quad = p.model.quad;
+      if (quad) {
+        // (each form keeps its own bat: rolling in and out doesn't rebuild them)
+        const grip = batMouth.ensure(p.model);
+        if (grip) {
+          const [turn, chop] = swingT < 1 ? swingPose(swingT) : [0, 0];
+          grip.quaternion.setFromAxisAngle(Y_AXIS, turn).multiply(_q.setFromAxisAngle(X_AXIS, chop));
+        }
+        // jaws parted round the grip
+        quad.bones.Jaw?.rotateX(0.12);
+      } else batHand.ensure(p.model);
       labels.update(dt);
     },
   };

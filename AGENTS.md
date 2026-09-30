@@ -70,13 +70,21 @@ water.volumeAt(p), water.nearWater(p, r)   // kinds: bay pond fountain puddle po
 // Player — src/player/Jimothy.ts (game.get<Jimothy>('player'))
 player.position, velocity, speed, facing, mode ('walk'|'climb'|'roll'|'ragdoll'|'swim'|'hang'), grounded, held?.entity,
 player.ragdoll(cause, secs, impulse?), teleport(pos, facing?), release(thrown), frozen, speedMul/jumpMul/gravityMul/sizeMul,
-player.model (JimothyModel: root, pivot, parts: Body/Head/EarL/…/Tail5, headPivot for hats), player.stats
+player.model (JimothyModel: root, pivot, form 'body'|'ball', parts, headPivot, quad, backTop()), player.stats
+//   body form (walking, flopping…) = jimothy.glb, skinned; its bones are posed by JimothyQuad (model.quad). parts =
+//   quad.parts(): Body→Spine2, Head, EyeL/R, Nose, EarL/R, ArmL/R→front upper legs, HandL/R→front paws,
+//   LegL/R→thighs, Tail1→the tail puff (no Tail2-5). Hats/glasses: quad.headAnchors() (in the Head bone's frame).
+//   ball form (only while rolling) = jimothy_ball.glb with rigid parts Body/Head/EarL/…/Tail5.
+// Jimothy anywhere else in the world (share these, never fork them):
+//   drawJimothy(ctx, x, y, r, opts)  src/fx/jimothyArt.ts: the 2D side profile (signs, murals, flags, ads)
+//   await bakeJimothy(game, { pose, phase, fur, splitHead })  src/player/JimothyBake.ts: the real model posed and
+//     frozen into static meshes (statues, bobbleheads); cached, so clone the geometry before editing it
 game.get<CameraRig>('camera').shake(amount), .override (cutscene camera fn), .yaw/.pitch
 ```
 
 ## Asset locations
 * Kenney CC0 kits: `public/assets/models/kenney/<kit>/...glb` — see `ASSETS.md` and `public/assets/catalog.json`
   (raw sizes; Kenney units are small — scale to meters). Load with `await game.assets.model('assets/models/…glb')`.
-* Our Blender models: `public/assets/models/{jimothy,mom,kit,danny,slopothy,accessories}.glb` (see `tools/blender/README.md`).
+* Our Blender models: `public/assets/models/{jimothy,jimothy_ball,mom,kit,danny,slopothy,accessories}.glb` (see `tools/blender/README.md`).
 * Textures: `public/assets/textures/<name>/{color,normal,rough}.jpg`. Fonts: `public/assets/fonts/`. Audio keys: `src/audio/SOUNDS.md`.
 * Asset paths passed to loaders are relative (no leading slash): `'assets/models/kenney/…'`.

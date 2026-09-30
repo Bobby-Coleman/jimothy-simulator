@@ -94,6 +94,7 @@ const _qp = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _s = new THREE.Vector3();
 const X = new THREE.Vector3(1, 0, 0);
+const Y = new THREE.Vector3(0, 1, 0);
 
 const REQUIRED = ['Hips', 'Spine1', 'Spine2', 'Chest', 'Neck', 'Head', 'Jaw', 'EarL', 'EarR', 'Tail'] as const;
 
@@ -123,6 +124,12 @@ export class JimothyQuad {
    */
   stareW = 0;
   stareShake = 0;
+  /**
+   * "Wave" emote weight (0..1): he sits up on his haunches, looks up and waves one front paw (`waveSide` +1 = his
+   * left, -1 = his right). Set every frame by whoever wants the wave (the finale); consumed (reset) by the next animate().
+   */
+  waveW = 0;
+  waveSide = -1;
 
   static fits(root: THREE.Object3D) {
     return REQUIRED.every((n) => !!root.getObjectByName(n)) && !!root.getObjectByName('ThighL') && !!root.getObjectByName('ArmL');
@@ -550,19 +557,23 @@ export class JimothyQuad {
       hipsZ += 0.03;
     }
     const stare = this.sm('stare', this.stareW, 8, dt);
-    const sit = Math.max(stare, groom);
+    const wave = this.sm('wave', this.waveW, 6, dt);
+    const sit = Math.max(stare, groom, wave);
+    // (waving, he looks up at whoever he waves to instead of down at his paws)
+    const waving = wave > Math.max(stare, groom);
     if (sit > 0.001) {
       // sit up on his haunches, head bowed over his paws (staring at them, or washing his face)
       hipsPitch = lerp(hipsPitch, -0.95, sit);
       hipsZ += 0.04 * sit;
       hipsY -= 0.11 * sit;
       flex = lerp(flex, -0.1, sit);
-      headPitch = lerp(headPitch, 0.4 + groom * (0.12 + Math.sin(t * 8) * 0.08), sit);
-      headYaw = lerp(headYaw, stare > groom ? this.stareShake : Math.sin(t * 2.1) * 0.12, sit);
-      headTilt += groom * Math.sin(t * 4) * 0.15;
+      headPitch = lerp(headPitch, waving ? 0.3 : 0.4 + groom * (0.12 + Math.sin(t * 8) * 0.08), sit);
+      headYaw = lerp(headYaw, waving ? 0 : stare > groom ? this.stareShake : Math.sin(t * 2.1) * 0.12, sit);
+      headTilt += groom * Math.sin(t * 4) * 0.15 + wave * Math.sin(t * 3.1) * 0.1;
       for (const leg of L) if (leg.hind) leg.want.z += 0.06 * sit;
     }
     this.stareW = 0;
+    this.waveW = 0;
     if (s.sinceChitter < 0.8) {
       const u = 1 - s.sinceChitter / 0.8;
       jaw = Math.max(jaw, Math.abs(Math.sin(s.sinceChitter * 34)) * 0.28 * u);
@@ -646,6 +657,14 @@ export class JimothyQuad {
         leg.want.lerp(_v.set(leg.sx * lerp(0.05, 0.035, groom), -0.2 + 0.035 * rub, 0.02 + 0.03 * groom).applyMatrix4(_m), sit);
         leg.endPitch = lerp(leg.endPitch, -1.6 - 0.3 * rub, sit);
       }
+      if (wave > 0.001) {
+        // waving: that paw goes up high above his shoulder (arm nearly straight) and flaps, palm forward; the other
+        // stays tucked against his chest
+        const leg = L[this.waveSide > 0 ? 2 : 3];
+        _v2.setFromMatrixPosition(leg.upper.matrixWorld).applyMatrix4(this.armInv);
+        leg.want.lerp(_v2.add(_v.set(0, 0.34, 0.07)), wave);
+        leg.endPitch = lerp(leg.endPitch, -1.45 + 0.45 * Math.sin(t * 9), wave);
+      }
     }
     const kLeg = mode === 'ragdoll' ? 14 : 110;
     for (const leg of L) {
@@ -653,6 +672,12 @@ export class JimothyQuad {
       const endPitch = this.sm('ep' + leg.key, leg.endPitch, 24, dt);
       const abd = this.sm('ab' + leg.key, leg.abduct, 10, dt);
       this.solveLeg(leg, endPitch, abd);
+    }
+    if (wave > 0.001 && sit > 0.001) {
+      // ...and the raised arm swings out beside his head and waves side to side (about his chest's own up: the leg
+      // plane's abduction can't, with the arm lying along its axis)
+      const leg = L[this.waveSide > 0 ? 2 : 3];
+      leg.upper.quaternion.premultiply(_q.setFromAxisAngle(Y, leg.sx * wave * (0.5 + 0.28 * Math.sin(t * 9))));
     }
   }
 

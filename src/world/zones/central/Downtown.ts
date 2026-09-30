@@ -11,6 +11,7 @@ import { loadFonts, sharedAtlas, type AtlasRect } from './lib/signs';
 import { drawFriezeBanner, drawVerticalBanner, drawFlag, FLAG_COUNT, drawStatuePlaque, drawCitySeal, drawNoodleSign, drawCafeSign, drawLobbySign, drawNewsVanLogo } from './lib/civicart';
 import { ashlarTexture, cached, towerTexture } from './lib/textures';
 import { loadMerged } from './lib/models';
+import { bakeJimothy } from '../../../player/JimothyBake';
 import { profileCollidersFromParts } from '../../profileColliders';
 import { cylinderCollider, glowAtNight, onFrame, Rng, trimeshFromGeometry, boxColliderEuler } from './lib/util';
 import { terrainHeight } from '../../terrain';
@@ -179,39 +180,58 @@ async function buildStatue(game: Game, world: World, batch: Batch) {
   batch.add(atlas.quad(plaque, 2.0, 1.0), brass, { matrix: T(x - PL.w / 2 - 0.01, y + 0.3 + PL.h / 2, z, -Math.PI / 2), castShadow: false });
 
   const bronze = cached('mat:bronze', () => new THREE.MeshStandardMaterial({ color: 0xb4793a, metalness: 0.85, roughness: 0.32, envMapIntensity: 2.2 }));
-  const S = 4;
-  // (the round Jimothy for now; the statue gets the real, four-legged Jimothy with the other renditions)
-  const model = await loadMerged(game, 'assets/models/jimothy_ball.glb');
-  // statue faces west (toward Old Ballard); model forward is +Z
-  const yaw = -Math.PI / 2;
-  let bodyR = 1.5;
-  let headTop = top + 3.2;
+  // The real Jimothy, mid-stride with a front paw lifted (as in the footage that made him famous), cast from the game
+  // model with his fur sculpted in; his coat texture as a bump map carves the fur and the mask.
+  const S = 4.6;
+  const yaw = -Math.PI / 2; // faces west (toward Old Ballard); model forward is +Z
+  const baked = await bakeJimothy(game, { pose: 'walk', phase: 0.32, fur: 0.9 });
+  let headTop = top + 2.6;
   const headXZ = new THREE.Vector3(x, 0, z);
-  if (model) {
-    const minY = model.min.y;
-    const oy = top - minY * S + 0.02;
-    // shift so the whole thing (incl. tail) sits over the plinth
-    const zc = (model.min.z + model.min.z + model.size.z) / 2;
-    const M = T(x, oy, z, yaw, S).multiply(T(0, 0, -zc));
-    for (const p of model.parts) batch.add(p.geo, bronze, { matrix: M });
-    bodyR = Math.max(model.size.x, 0.8) * S * 0.5;
-    headTop = oy + (model.min.y + model.size.y) * S;
-    const body = new THREE.Vector3(0, 0, 0).applyMatrix4(M);
-    headXZ.set(body.x, 0, body.z);
-    // one cylinder as tall as the statue, so things (and bobbleheads) can sit on its head
-    cylinderCollider(game, body.clone().setY((top + headTop) / 2), bodyR * 0.95, headTop - top);
+  if (baked) {
+    const coat = baked.parts.find((p) => p.name === 'JimothyBody')?.material.map ?? null;
+    const carved = cached('mat:bronzeCarved', () => {
+      const m = bronze.clone();
+      if (coat) {
+        m.bumpMap = coat;
+        m.bumpScale = 3;
+      }
+      return m;
+    });
+    // centre his length over the plinth
+    const zc = (baked.box.min.z + baked.box.max.z) / 2;
+    const M = T(x, top - baked.box.min.y * S + 0.01, z, yaw, S).multiply(T(0, 0, -zc));
+    for (const p of baked.parts) batch.add(p.geometry, p.name === 'JimothyBody' ? carved : bronze, { matrix: M });
+    // stepped boxes that follow his back and head, so he can be climbed and walked on (a bobblehead sits on his head)
+    profileCollidersFromParts(
+      world,
+      baked.parts.map((p) => ({ geo: p.geometry.clone().applyMatrix4(T(0, 0, -zc)) })),
+      { x, y: top - baked.box.min.y * S + 0.01, z, ry: yaw, s: S },
+      { cell: 0.45, inset: 0.06 },
+    );
+    // the crown of his head: the highest point of the front of the head
+    const pos = baked.parts.find((p) => p.name === 'JimothyBody')!.geometry.getAttribute('position');
+    const crown = new THREE.Vector3(0, -1, 0);
+    for (let i = 0; i < pos.count; i++) {
+      const vz = pos.getZ(i);
+      if (vz > 0.28 && Math.abs(pos.getX(i)) < 0.05 && pos.getY(i) > crown.y) crown.set(pos.getX(i), pos.getY(i), vz);
+    }
+    crown.z -= zc;
+    crown.applyMatrix4(T(x, top - baked.box.min.y * S + 0.01, z, yaw, S));
+    headTop = crown.y;
+    headXZ.set(crown.x, 0, crown.z);
   } else {
-    // primitive fallback: a bronze ball with ears, mask band and ringed tail
+    // primitive fallback: a bronze dome on four long legs, low head, tail puff
     const parts = mergeColored([
-      { geo: new THREE.SphereGeometry(1.5, 24, 18), color: 0xffffff, matrix: T(0, 1.5, 0) },
-      { geo: new THREE.SphereGeometry(0.35, 12, 8), color: 0xffffff, matrix: T(0.8, 2.8, 0.4) },
-      { geo: new THREE.SphereGeometry(0.35, 12, 8), color: 0xffffff, matrix: T(-0.8, 2.8, 0.4) },
-      { geo: new THREE.TorusGeometry(1.35, 0.14, 8, 30, Math.PI), color: 0xcccccc, matrix: TR(0, 1.8, 0.2, 0.2, 0, 0) },
-      ...[0, 1, 2, 3, 4].map((k) => ({ geo: new THREE.SphereGeometry(0.45 - k * 0.04, 12, 8), color: k % 2 ? 0x999999 : 0xffffff, matrix: T(0, 0.9 + k * 0.25, -1.4 - k * 0.45) })),
+      { geo: new THREE.SphereGeometry(1, 24, 16).scale(0.8, 0.9, 1.3), color: 0xffffff, matrix: T(0, 2.0, -0.2) },
+      { geo: new THREE.SphereGeometry(0.55, 16, 12), color: 0xffffff, matrix: T(0, 1.9, 1.3) },
+      ...[-1, 1].map((s2) => ({ geo: new THREE.SphereGeometry(0.2, 10, 8), color: 0xffffff, matrix: T(s2 * 0.32, 2.45, 1.15) })),
+      ...[-1, 1].flatMap((s2) => [-1, 1].map((f) => ({ geo: new THREE.CylinderGeometry(0.2, 0.16, 1.4, 10), color: 0xffffff, matrix: T(s2 * 0.45, 0.7, f * 0.9) }))),
+      { geo: new THREE.SphereGeometry(0.4, 12, 8), color: 0xffffff, matrix: T(0, 2.3, -1.6) },
     ]);
     batch.add(parts, bronze, { matrix: T(x, top, z, yaw) });
-    cylinderCollider(game, new THREE.Vector3(x, top + 1.5, z), 1.45, 3.0);
-    headTop = top + 3.2;
+    world.collider(new THREE.Vector3(x, top + 1.45, z), new THREE.Vector3(3.2, 2.9, 1.7));
+    headTop = top + 2.45;
+    headXZ.set(x - 1.3, 0, z);
   }
   // little floodlights
   const glow = lampGlassMat(game);

@@ -1,4 +1,4 @@
-import { drawRoundRaccoon, fitText, FONT_BODY, FONT_SERIF, FONT_SIGN, FONT_TITLE, roundRect, sparkle, textLines } from './signs';
+import { drawJimothy, fitText, FONT_BODY, FONT_SERIF, FONT_SIGN, FONT_TITLE, roundRect, sparkle, textLines } from './signs';
 import { goodwheelLogo } from './art';
 import { Rng } from './util';
 
@@ -401,7 +401,7 @@ export function drawShopWindow(ctx: Ctx, w: number, h: number, theme: string, se
       ctx.fillStyle = '#8e8b88';
       roundRect(ctx, w * 0.45, h * 0.37, w * 0.1, h * 0.28, 8);
       ctx.fill();
-      drawRoundRaccoon(ctx, w * 0.5, h * 0.48, h * 0.05, { flat: true });
+      drawJimothy(ctx, w * 0.5, h * 0.48, h * 0.05, { flat: true });
       ctx.fillStyle = '#d4312b';
       roundRect(ctx, w * 0.72, h * 0.72, w * 0.2, h * 0.16, 6);
       ctx.fill();
@@ -452,7 +452,7 @@ export function drawShopWindow(ctx: Ctx, w: number, h: number, theme: string, se
         const cx = x + w * 0.1,
           cy = y + h * 0.26;
         if (i === 1 || i === 3) {
-          drawRoundRaccoon(ctx, cx, cy, h * 0.12, { outline: '#111' });
+          drawJimothy(ctx, cx, cy, h * 0.12, { outline: '#111' });
           fitText(ctx, i === 1 ? 'ROUND' : 'MOM', cx, y + h * 0.46, w * 0.18, h * 0.06, FONT_TITLE, { fill: '#c62f2f' });
         } else if (i === 0) {
           icons.dagger(ctx, cx, cy, h * 0.14);
@@ -477,7 +477,7 @@ export function drawShopWindow(ctx: Ctx, w: number, h: number, theme: string, se
           ctx.fillStyle = r.pick(['#e8563a', '#1d1d1d', '#2a7de1', '#ffd23f', '#7a2e1c', '#3cb371', '#ff7eb6']);
           ctx.fillRect(x, y, w * 0.13, w * 0.13);
           if (r.chance(0.5)) icons.record(ctx, x + w * 0.065, y + w * 0.065, w * 0.045);
-          else drawRoundRaccoon(ctx, x + w * 0.065, y + w * 0.07, w * 0.035, { flat: true });
+          else drawJimothy(ctx, x + w * 0.065, y + w * 0.07, w * 0.035, { flat: true });
         }
       }
       fitText(ctx, 'NOW PLAYING: THE ROUND BOYS', w / 2, h * 0.85, w * 0.9, h * 0.08, FONT_SIGN, { fill: '#7a2e1c' });
@@ -604,7 +604,7 @@ export function drawShopWindow(ctx: Ctx, w: number, h: number, theme: string, se
         ctx.beginPath();
         ctx.arc(x, y, h * 0.13, 0, Math.PI * 2);
         ctx.fill();
-        if (i === 2) drawRoundRaccoon(ctx, x, y, h * 0.09, { flat: true });
+        if (i === 2) drawJimothy(ctx, x, y, h * 0.09, { flat: true });
         else {
           ctx.fillStyle = 'rgba(160,220,255,0.8)';
           ctx.beginPath();
@@ -678,7 +678,7 @@ export function drawPlaque(ctx: Ctx, w: number, h: number) {
     ctx.arc(x, y, 6, 0, Math.PI * 2);
     ctx.fill();
   }
-  drawRoundRaccoon(ctx, w * 0.14, h * 0.5, h * 0.2, { body: '#7a5520', mask: '#3a2508', outline: '#3a2508', flat: true });
+  drawJimothy(ctx, w * 0.14, h * 0.5, h * 0.2, { body: '#7a5520', mask: '#3a2508', outline: '#3a2508', flat: true });
   textLines(ctx, ['On this spot, July 13 2026,', 'a nice lady thought', 'Jimothy was a cat.'], w * 0.58, h * 0.46, w * 0.78, h * 0.13, FONT_SERIF, '#3a2508', 1.22, { weight: 'bold' });
   fitText(ctx, '— He was not a cat. —', w * 0.58, h * 0.84, w * 0.6, h * 0.08, FONT_SERIF, { fill: '#4a3210', weight: 'italic bold' });
 }
@@ -762,9 +762,9 @@ export function drawCommonsSign(ctx: Ctx, w: number, h: number) {
   ctx.lineWidth = 6;
   roundRect(ctx, 8, 8, w - 16, h - 16, h * 0.16);
   ctx.stroke();
-  drawRoundRaccoon(ctx, h * 0.55, h * 0.5, h * 0.28, { flat: true });
-  // lettering starts right of the raccoon doodle (incl. its tail), inside the gold border
-  const tx0 = h * 1.12,
+  drawJimothy(ctx, h * 0.5, h * 0.5, h * 0.31, { flat: true });
+  // lettering starts just past his nose (his tail is a short puff on the left), inside the gold border
+  const tx0 = h * 0.94,
     tx1 = w - 26;
   fitText(ctx, 'JIMOTHY COMMONS', (tx0 + tx1) / 2, h * 0.42, tx1 - tx0, h * 0.34, FONT_SIGN, { fill: '#fdf3d7' });
   fitText(ctx, 'A public plaza. Please do not approach the raccoon.', (tx0 + tx1) / 2, h * 0.74, tx1 - tx0, h * 0.13, FONT_BODY, { fill: '#e8c25a', weight: '800' });

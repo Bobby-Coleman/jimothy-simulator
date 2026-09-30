@@ -41,6 +41,7 @@ import {
 } from './kit';
 import { plantTrees } from './flora';
 import * as P from './props';
+import { drawSlopJimothy } from '../../../gameplay/slop/SlopArt';
 
 const ZONE = 'SlopCorp Campus';
 
@@ -463,8 +464,12 @@ function portalPad(game: Game, world: World, b: Batch, x: number, z: number) {
 
 // ====================================================================================== billboard
 
-/** Obviously-AI-generated Jimothy (the slop layer the slop system melts away when washed). */
-function drawAIJimothy(ctx: CanvasRenderingContext2D, w: number, h: number) {
+/**
+ * Obviously-AI-generated Jimothy (the slop layer the slop system melts away when washed): an AI's go at the real one
+ * (gameplay/slop/SlopArt drawSlopJimothy: giraffe neck, long ringed tail, six legs, three eyes, a melting mask),
+ * taking a selfie with a six-fingered paw.
+ */
+export function drawAIJimothy(ctx: CanvasRenderingContext2D, w: number, h: number) {
   // melting psychedelic sky
   const g = ctx.createLinearGradient(0, 0, w, h);
   g.addColorStop(0, '#ff7df0');
@@ -505,71 +510,7 @@ function drawAIJimothy(ctx: CanvasRenderingContext2D, w: number, h: number) {
     ctx.arc(w * 0.2, h * 1.05, 330 - i * 16, Math.PI * 1.05, Math.PI * 1.62);
     ctx.stroke();
   });
-  // the "raccoon": round body, three eyes, a melting mask, six fingers per hand
-  const cx = w * 0.46,
-    cy = h * 0.55;
-  ctx.fillStyle = '#8f8f99';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, 250, 215, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#6d6d77';
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.ellipse(cx + s * 150, cy - 185, 56, 64, s * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.fillStyle = '#f1efe9';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + 40, 120, 90, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // melting mask
-  ctx.fillStyle = '#1b1b22';
-  roundRect(ctx, cx - 190, cy - 85, 380, 80, 40);
-  ctx.fill();
-  for (let i = 0; i < 7; i++) {
-    roundRect(ctx, cx - 170 + i * 55, cy - 20, 18, 30 + ((i * 37) % 70), 9);
-    ctx.fill();
-  }
-  // three eyes
-  for (const ex of [-95, 0, 95]) {
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(cx + ex, cy - 45, 26, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = ex === 0 ? '#ff2bd6' : '#111';
-    ctx.beginPath();
-    ctx.arc(cx + ex + 4, cy - 42, 12, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.fillStyle = '#2a2a30';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + 20, 26, 18, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // hands with SIX fingers, one holding a phone
-  for (const s of [-1, 1]) {
-    const hx = cx + s * 250,
-      hy = cy + 90;
-    ctx.fillStyle = '#2e2e36';
-    ctx.beginPath();
-    ctx.ellipse(hx, hy, 58, 50, 0, 0, Math.PI * 2);
-    ctx.fill();
-    for (let f = 0; f < 6; f++) {
-      const a = -Math.PI / 2 + (f - 2.5) * 0.36;
-      ctx.save();
-      ctx.translate(hx + Math.cos(a) * 45, hy + Math.sin(a) * 45);
-      ctx.rotate(a + Math.PI / 2);
-      roundRect(ctx, -9, -58, 18, 60, 9);
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-  ctx.fillStyle = '#10131a';
-  roundRect(ctx, cx + 215, cy - 30, 70, 120, 12);
-  ctx.fill();
-  ctx.fillStyle = '#7df9ff';
-  roundRect(ctx, cx + 222, cy - 22, 56, 100, 8);
-  ctx.fill();
-  // sparkles
+  // sparkles (behind him)
   ctx.fillStyle = '#ffffff';
   for (let i = 0; i < 40; i++) {
     const x = (i * 197) % w,
@@ -581,6 +522,17 @@ function drawAIJimothy(ctx: CanvasRenderingContext2D, w: number, h: number) {
     ctx.fillRect(-12, -3, 24, 6);
     ctx.restore();
   }
+  // the "raccoon": his domed back and long legs, then a giraffe neck, a long ringed tail, six legs, three eyes, a
+  // melting mask, a spare ear and a six-fingered paw holding up a phone (a selfie, obviously)
+  const J = drawSlopJimothy(ctx, w * 0.62, h * 0.49, h * 0.44, { phone: true });
+  // the phone's flash
+  const fy = J.paw.y - J.head.r * 0.75;
+  const fl = ctx.createRadialGradient(J.paw.x, fy, 4, J.paw.x, fy, J.head.r * 1.4);
+  fl.addColorStop(0, 'rgba(255,255,255,0.9)');
+  fl.addColorStop(0.25, 'rgba(160,255,255,0.35)');
+  fl.addColorStop(1, 'rgba(160,255,255,0)');
+  ctx.fillStyle = fl;
+  ctx.fillRect(J.paw.x - J.head.r * 1.4, fy - J.head.r * 1.4, J.head.r * 2.8, J.head.r * 2.8);
   // garbled headline
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';

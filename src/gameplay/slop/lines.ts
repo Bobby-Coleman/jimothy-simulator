@@ -1,5 +1,7 @@
 /** Everything the slop says. Target the slop, never people. */
 
+import { SF } from './SlopGeometry';
+
 export const SLOP_IDLE = [
   'Certainly! Here is a raccoon:',
   'As a large language raccoon, I cannot wash that.',
@@ -20,6 +22,18 @@ export const SLOP_IDLE = [
   'Jimothy (real) (not AI) (4K)',
   '*hallucinates a sandwich*',
 ]
+
+/** A Slopothy bragging about its own mistake (keyed by SF flag). */
+export const SLOP_MISTAKE: Record<number, string[]> = {
+  [SF.eye3]: ['I can see your prompts.', 'Third eye: for spotting trash in 4K.', 'Blink twice if you are real. I blinked three times.'],
+  [SF.legs]: ['Legs: 6. Optimized for walking.', 'I have two spare legs, in case of legs.', 'Four legs seemed low. I rounded up.'],
+  [SF.ears]: ['Four ears. Surround sound.', 'I can hear the trash thinking.'],
+  [SF.tail]: ['Tail length: upgraded.', 'Real raccoons have long tails. Checkmate.', 'Jimothy, but with the tail he deserves.'],
+  [SF.neck]: ['I added a neck. You are welcome.', 'Jimothy has a neck now. It is canon.', 'Neck length: generous.'],
+  [SF.melt]: ['My face is still loading…', 'Rendering face… 60%.', 'Is my face on straight? Please regenerate.'],
+  [SF.earMix]: ['Which ear is the real one? Yes.', 'One ear is for listening. The other is decorative.'],
+  [SF.paws]: ['Look at my hands. Do not count the fingers.', 'I have the correct number of fingers (7).', 'My paws are 40% knuckle.'],
+}
 
 export const SLOP_SPAWN = [
   'Certainly! Here is a raccoon:',
@@ -75,6 +89,9 @@ export const FAN_CHEERS = [
   'Jimothy, can I get a selfie?!',
   'He looks… different today. Still cute!',
   'Is that the real one? It says it is!',
+  'Since when does Jimothy have a neck?!',
+  'His tail got so long!',
+  'Jimothy, why are you floating?',
 ]
 
 export const TECHBRO_UNPLUGGED = [

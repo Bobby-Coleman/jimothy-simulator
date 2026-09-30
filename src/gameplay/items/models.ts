@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { Assets } from '../../core/Assets';
+import type { Game } from '../../core/Game';
+import { drawJimothy } from '../../fx/jimothyArt';
+import { bakeJimothy, type BakedJimothy } from '../../player/JimothyBake';
 
 /**
  * Procedural item models (charming, cheap, no files). Each builder returns a Group whose parts are
@@ -129,8 +133,35 @@ export function mergeByMaterial(root: THREE.Object3D, name = root.name): THREE.G
 }
 
 // ------------------------------------------------------------------ textures
+/**
+ * Jimothy engraved like a banknote portrait: the canonical doodle in flat greens, with fine diagonal hatching over the
+ * figure only. (x, y, r) as drawJimothy's.
+ */
+function engravedJimothy(g: CanvasRenderingContext2D, x: number, y: number, r: number, facing: 1 | -1 = 1) {
+  const s = Math.ceil(r * 2.3);
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const k = c.getContext('2d')!;
+  drawJimothy(k, s / 2, s / 2, r, { flat: true, body: '#7aa56c', mask: '#1d3a1b', outline: '#1d3a1b', smile: false, facing });
+  k.globalCompositeOperation = 'source-atop';
+  k.strokeStyle = 'rgba(24, 58, 22, 0.42)';
+  k.lineWidth = Math.max(0.7, r * 0.022);
+  const step = Math.max(2, r * 0.075);
+  for (let i = -s; i < s; i += step) {
+    k.beginPath();
+    k.moveTo(i, 0);
+    k.lineTo(i + s * 0.55, s);
+    k.stroke();
+  }
+  g.drawImage(c, x - s / 2, y - s / 2);
+}
+
 function billTex() {
-  return canvasTex('bill', 256, 120, (g, w, h) => {
+  return canvasTex('bill', 512, 240, (g) => {
+    // drawn at 256 × 120 and scaled up 2× (a crisper portrait)
+    g.scale(2, 2);
+    const w = 256;
+    const h = 120;
     g.fillStyle = '#9cc98a';
     g.fillRect(0, 0, w, h);
     g.strokeStyle = '#3d6b35';
@@ -138,25 +169,26 @@ function billTex() {
     g.strokeRect(5, 5, w - 10, h - 10);
     g.lineWidth = 2;
     g.strokeRect(13, 13, w - 26, h - 26);
-    // portrait oval: a round raccoon
+    // portrait oval (engraved rings) with Jimothy walking across it, between the two lines of lettering
+    const ox = 36;
+    const oy = 31;
     g.fillStyle = '#d7e8c9';
     g.beginPath();
-    g.ellipse(w / 2, h / 2, 34, 40, 0, 0, Math.PI * 2);
+    g.ellipse(w / 2, h / 2, ox, oy, 0, 0, Math.PI * 2);
     g.fill();
+    g.strokeStyle = 'rgba(61, 107, 53, 0.3)';
+    g.lineWidth = 0.8;
+    for (let k = 4; k < ox; k += 4) {
+      g.beginPath();
+      g.ellipse(w / 2, h / 2, k, (k * oy) / ox, 0, 0, Math.PI * 2);
+      g.stroke();
+    }
+    engravedJimothy(g, w / 2, h / 2 + 1, 27);
     g.strokeStyle = '#3d6b35';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.ellipse(w / 2, h / 2, ox, oy, 0, 0, Math.PI * 2);
     g.stroke();
-    g.fillStyle = '#7d8a78';
-    g.beginPath();
-    g.arc(w / 2, h / 2 + 6, 22, 0, Math.PI * 2);
-    g.fill();
-    g.beginPath();
-    g.arc(w / 2 - 14, h / 2 - 14, 7, 0, Math.PI * 2);
-    g.arc(w / 2 + 14, h / 2 - 14, 7, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = '#2b3a28';
-    g.fillRect(w / 2 - 17, h / 2, 34, 8);
-    g.fillStyle = '#e8f0e0';
-    g.fillRect(w / 2 - 5, h / 2 + 12, 10, 8);
     g.fillStyle = '#2f5a29';
     g.font = `700 13px ${SANS}`;
     g.textAlign = 'center';
@@ -293,6 +325,62 @@ function waffleTex() {
   });
 }
 
+/**
+ * A baseball cap on drawJimothy's head (same x, y, r, facing): the crown sits on his crown, tilted forward like his
+ * head, the bill over his brow, and his ear peeks out behind it. Figure units inside.
+ */
+function drawCap(g: CanvasRenderingContext2D, x: number, y: number, r: number, crown: string, bill: string, facing: 1 | -1 = 1) {
+  const lw = Math.max(1.4, r * 0.045) / r; // drawJimothy's outline width
+  g.save();
+  g.translate(x, y);
+  g.scale(r * facing, r);
+  g.translate(0.84, -0.52);
+  g.rotate(0.55);
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  g.strokeStyle = '#161616';
+  g.lineWidth = lw;
+  // bill
+  g.fillStyle = bill;
+  g.beginPath();
+  g.moveTo(0.06, -0.01);
+  g.quadraticCurveTo(0.3, -0.05, 0.38, 0.03);
+  g.quadraticCurveTo(0.3, 0.07, 0.06, 0.05);
+  g.closePath();
+  g.fill();
+  g.stroke();
+  // crown
+  g.fillStyle = crown;
+  g.beginPath();
+  g.moveTo(-0.2, 0.04);
+  g.bezierCurveTo(-0.22, -0.2, 0.18, -0.24, 0.2, 0.03);
+  g.closePath();
+  g.fill();
+  g.stroke();
+  // a panel seam, the button and the team's B
+  g.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+  g.lineWidth = lw * 0.6;
+  g.beginPath();
+  g.moveTo(0, -0.165);
+  g.quadraticCurveTo(0.06, -0.08, 0.05, 0.03);
+  g.stroke();
+  g.fillStyle = crown;
+  g.strokeStyle = '#161616';
+  g.lineWidth = lw * 0.8;
+  g.beginPath();
+  g.ellipse(0, -0.175, 0.035, 0.022, 0, 0, Math.PI * 2);
+  g.fill();
+  g.stroke();
+  // (un-mirrored, and at a real font size: some canvases round tiny ones)
+  g.scale(0.01 * facing, 0.01);
+  g.fillStyle = '#ffffff';
+  g.font = `900 13px ${FONT}`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('B', 8 * facing, -5);
+  g.restore();
+}
+
 function cardFront(g: CanvasRenderingContext2D, w: number, h: number) {
   const gold = g.createLinearGradient(0, 0, w, h);
   gold.addColorStop(0, '#f7d56b');
@@ -307,40 +395,19 @@ function cardFront(g: CanvasRenderingContext2D, w: number, h: number) {
   g.fillRect(18, 18, w - 36, h - 36);
   g.fillStyle = '#4c9a3f';
   g.fillRect(18, h * 0.62, w - 36, h * 0.38 - 18);
-  // the round boy
+  // chalk baseline under his paws
+  g.fillStyle = 'rgba(255, 255, 255, 0.55)';
+  g.fillRect(18, h * 0.72, w - 36, 3);
+  // Jimothy mid-stride in his Barnacles cap
   const cx = w / 2;
-  const cy = h * 0.52;
-  g.fillStyle = '#8d8f93';
+  const cy = h * 0.5;
+  const r = 92;
+  g.fillStyle = 'rgba(20, 50, 20, 0.28)';
   g.beginPath();
-  g.arc(cx, cy, 62, 0, Math.PI * 2);
+  g.ellipse(cx - 4, cy + r * 0.9, r * 0.72, 7, 0, 0, Math.PI * 2);
   g.fill();
-  g.beginPath();
-  g.arc(cx - 44, cy - 50, 18, 0, Math.PI * 2);
-  g.arc(cx + 44, cy - 50, 18, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#23252a';
-  g.beginPath();
-  g.ellipse(cx, cy - 8, 50, 16, 0, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#fff';
-  g.beginPath();
-  g.arc(cx - 20, cy - 8, 7, 0, Math.PI * 2);
-  g.arc(cx + 20, cy - 8, 7, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#f2f2f2';
-  g.beginPath();
-  g.ellipse(cx, cy + 22, 22, 16, 0, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#111';
-  g.beginPath();
-  g.arc(cx, cy + 16, 6, 0, Math.PI * 2);
-  g.fill();
-  // cap
-  g.fillStyle = '#1c4f8a';
-  g.beginPath();
-  g.arc(cx, cy - 46, 34, Math.PI, 0);
-  g.fill();
-  g.fillRect(cx - 4, cy - 50, 50, 8);
+  drawJimothy(g, cx, cy, r);
+  drawCap(g, cx, cy, r, '#1c4f8a', '#133a66');
   // banner
   g.fillStyle = '#1c4f8a';
   g.fillRect(18, h - 78, w - 36, 44);
@@ -447,6 +514,49 @@ function canTopTex() {
   });
 }
 
+/** A black-and-white snapshot of Jimothy crossing a lawn, too blurry to be sure (w × h canvas). */
+function cryptidPhoto(w: number, h: number) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const k = c.getContext('2d')!;
+  const bg = k.createLinearGradient(0, 0, 0, h);
+  bg.addColorStop(0, '#c4c4c4');
+  bg.addColorStop(0.5, '#a9a9a9');
+  bg.addColorStop(0.62, '#8a8a8a');
+  bg.addColorStop(1, '#6c6c6c');
+  k.fillStyle = bg;
+  k.fillRect(0, 0, w, h);
+  const r = h * 0.34;
+  const x = w * 0.52;
+  const y = h * 0.52;
+  k.filter = 'blur(4px)';
+  // a bush behind him and his shadow on the lawn
+  k.fillStyle = '#7a7a7a';
+  k.beginPath();
+  k.ellipse(w * 0.16, h * 0.44, w * 0.2, h * 0.2, 0, 0, Math.PI * 2);
+  k.fill();
+  k.fillStyle = 'rgba(40, 40, 40, 0.45)';
+  k.beginPath();
+  k.ellipse(x, y + r * 0.9, r * 0.8, r * 0.12, 0, 0, Math.PI * 2);
+  k.fill();
+  // him, twice: he moved
+  k.filter = 'blur(1.3px) grayscale(1)';
+  k.globalAlpha = 0.4;
+  drawJimothy(k, x - r * 0.18, y, r, { smile: false });
+  k.globalAlpha = 0.9;
+  drawJimothy(k, x, y, r, { smile: false });
+  k.globalAlpha = 1;
+  k.filter = 'none';
+  // film grain
+  const rand = prng(1307);
+  for (let i = 0; i < w * h * 0.12; i++) {
+    k.fillStyle = rand() < 0.5 ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.16)';
+    k.fillRect(rand() * w, rand() * h, 1, 1);
+  }
+  return c;
+}
+
 function newspaperTex() {
   return canvasTex('newspaper', 256, 352, (g, w, h) => {
     g.fillStyle = '#eeeae0';
@@ -461,15 +571,11 @@ function newspaperTex() {
     g.fillText('SPOTTED:', w / 2, 98);
     g.font = `900 20px ${SANS}`;
     g.fillText('"IS IT A CAT?"', w / 2, 124);
-    // blurry cryptid photo
-    g.fillStyle = '#9a9a9a';
-    g.fillRect(20, 136, 110, 90);
-    g.filter = 'blur(3px)';
-    g.fillStyle = '#4a4a4a';
-    g.beginPath();
-    g.arc(75, 185, 26, 0, Math.PI * 2);
-    g.fill();
-    g.filter = 'none';
+    // blurry cryptid photo: Jimothy side-on, mid-stride, out of focus, moving and grainy
+    g.drawImage(cryptidPhoto(110, 90), 20, 136);
+    g.strokeStyle = '#555';
+    g.lineWidth = 1;
+    g.strokeRect(20.5, 136.5, 109, 89);
     g.fillStyle = '#777';
     for (let i = 0; i < 16; i++) g.fillRect(140, 140 + i * 11, 96, 4);
     for (let i = 0; i < 10; i++) g.fillRect(20, 236 + i * 11, 216, 4);
@@ -560,12 +666,16 @@ function tvScreenTex() {
     gr.addColorStop(1, '#2a7bd1');
     g.fillStyle = gr;
     g.fillRect(0, 0, w, h);
-    g.fillStyle = '#7d7f84';
-    g.beginPath();
-    g.arc(w / 2, h * 0.45, 40, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = '#23252a';
-    g.fillRect(w / 2 - 34, h * 0.4, 68, 12);
+    // the footage: him, walking across the screen
+    g.fillStyle = '#4c9a3f';
+    g.fillRect(0, h * 0.6, w, h * 0.4);
+    drawJimothy(g, w / 2, h * 0.4, 46);
+    g.fillStyle = '#d62828';
+    g.fillRect(12, 12, 46, 20);
+    g.fillStyle = '#fff';
+    g.font = `900 13px ${SANS}`;
+    g.textAlign = 'center';
+    g.fillText('LIVE', 35, 27);
     g.fillStyle = '#d62828';
     g.fillRect(0, h - 48, w, 34);
     g.fillStyle = '#fff';
@@ -605,15 +715,13 @@ function dumpsterSignTex() {
     g.textAlign = 'center';
     g.fillText('BALLARD DISPOSAL', w / 2 + 34, 34);
     g.fillStyle = '#c62828';
-    g.font = `900 30px ${FONT}`;
-    g.fillText('NO RACCOONS', w / 2 + 34, 76);
-    // crossed-out round raccoon
-    g.fillStyle = '#7d8086';
-    g.beginPath();
-    g.arc(46, 58, 26, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = '#23252a';
-    g.fillRect(24, 50, 44, 10);
+    // shrink to fit right of the icon (the display font is wide)
+    let px = 30;
+    g.font = `900 ${px}px ${FONT}`;
+    while (px > 14 && g.measureText('NO RACCOONS').width > w - 96) g.font = `900 ${--px}px ${FONT}`;
+    g.fillText('NO RACCOONS', (86 + w - 6) / 2, 76);
+    // crossed-out raccoon (him, of course)
+    drawJimothy(g, 46, 60, 25, { flat: true, smile: false });
     g.strokeStyle = '#c62828';
     g.lineWidth = 6;
     g.beginPath();
@@ -666,6 +774,94 @@ function blob(g: THREE.Group, mat: THREE.Material, x: number, y: number, z: numb
   g.add(mesh(lo ? SPH_LO : SPH, mat, [x, y, z], undefined, [r * sx, r * sy, r * sz]));
 }
 
+// ------------------------------------------------------------------ the real Jimothy, baked (for item models)
+
+let itemAssets: Assets | null = null;
+
+/**
+ * The real Jimothy frozen mid-stride (JimothyBake), for item models. Same pose and fur as the Downtown statue's, so
+ * it's normally that bake, cached. bakeJimothy only needs an asset loader, and item builders run without the game, so
+ * they bring their own (it only loads anything if nothing has baked this pose yet).
+ */
+function bakedJimothyForItems(): Promise<BakedJimothy | null> {
+  const game = { assets: (itemAssets ??= new Assets()) } as unknown as Game;
+  return bakeJimothy(game, { pose: 'walk', phase: 0.32, fur: 0.9 });
+}
+
+/**
+ * The Golden Garbage Trophy's tiny Jimothy: his scale, where his feet stand (the cup's floor, where the lathe's inner
+ * wall ends) and the cup's inner radius there.
+ */
+const TROPHY_JIMOTHY = { scale: 0.135, feet: 0.24, inner: 0.058 };
+let trophyJimothy: { geo: THREE.BufferGeometry; mat: THREE.MeshStandardMaterial } | null = null;
+
+/**
+ * The tiny golden Jimothy standing in the Golden Garbage Trophy. Item models are built synchronously, so he starts as
+ * a few gold primitives; once the real model is baked, this one geometry (shared by every trophy, spawned or not) is
+ * swapped in place for his. Kept out of mergeByMaterial for that reason.
+ */
+function trophyJimothyMesh(): THREE.Mesh {
+  if (!trophyJimothy) {
+    const mat = M('trophyJimothy', { color: 0xffc83d, metalness: 1, roughness: 0.22, emissive: 0x3a2400 });
+    trophyJimothy = { geo: trophyJimothyStandIn(), mat };
+    bakedJimothyForItems()
+      .then((baked) => baked && upgradeTrophyJimothy(baked))
+      .catch((err) => console.warn('[items] trophy Jimothy stays a stand-in', err));
+  }
+  const m = new THREE.Mesh(trophyJimothy.geo, trophyJimothy.mat);
+  m.name = 'trophyJimothy';
+  m.userData.keep = true;
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
+/** Gold primitives in his shape (dome, low head and ears, tail puff), until the real model is baked. */
+function trophyJimothyStandIn() {
+  const y = TROPHY_JIMOTHY.feet;
+  const parts = [
+    new THREE.SphereGeometry(1, 16, 12).scale(0.029, 0.034, 0.05).translate(0, y + 0.061, -0.008),
+    new THREE.SphereGeometry(0.019, 12, 10).translate(0, y + 0.05, 0.047),
+    new THREE.SphereGeometry(0.0075, 8, 6).translate(0.013, y + 0.07, 0.042),
+    new THREE.SphereGeometry(0.0075, 8, 6).translate(-0.013, y + 0.07, 0.042),
+    new THREE.SphereGeometry(0.014, 10, 8).translate(0, y + 0.062, -0.062),
+  ];
+  return mergeGeometries(parts, false) ?? parts[0];
+}
+
+/** Swap the stand-in for the baked model (in place: every trophy shares the geometry). */
+function upgradeTrophyJimothy(baked: BakedJimothy) {
+  if (!trophyJimothy) return;
+  const { scale: s, feet } = TROPHY_JIMOTHY;
+  // centred nose to tail over the cup, feet on its floor
+  const zc = (baked.box.min.z + baked.box.max.z) / 2;
+  const xf = new THREE.Matrix4().makeTranslation(0, feet - baked.box.min.y * s, -zc * s).multiply(new THREE.Matrix4().makeScale(s, s, s));
+  const geos: THREE.BufferGeometry[] = [];
+  for (const p of baked.parts) {
+    const g = p.geometry.clone();
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k);
+    if (!g.getAttribute('uv')) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count * 2), 2));
+    g.applyMatrix4(xf);
+    geos.push(g);
+  }
+  const indexed = geos.every((g) => g.index);
+  const merged = mergeGeometries(indexed ? geos : geos.map((g) => (g.index ? g.toNonIndexed() : g)), false);
+  if (!merged) return;
+  const { geo, mat } = trophyJimothy;
+  geo.setIndex(merged.index);
+  for (const k of Object.keys(geo.attributes)) geo.deleteAttribute(k);
+  for (const [k, a] of Object.entries(merged.attributes)) geo.setAttribute(k, a);
+  geo.computeBoundingBox();
+  geo.computeBoundingSphere();
+  // his coat as a bump map carves the fur and the mask into the gold
+  const coat = baked.parts.find((p) => p.name === 'JimothyBody')?.material.map;
+  if (coat) {
+    mat.bumpMap = coat;
+    mat.bumpScale = 0.12;
+    mat.needsUpdate = true;
+  }
+}
+
 // ------------------------------------------------------------------ item builders
 export const BUILD: Record<string, () => THREE.Object3D> = {
   cottonCandy() {
@@ -691,7 +887,8 @@ export const BUILD: Record<string, () => THREE.Object3D> = {
     const g = new THREE.Group();
     const bill = M('bill', { map: billTex(), roughness: 0.85 });
     for (let i = 0; i < 3; i++) g.add(mesh(BOX, bill, [0, 0.008 + i * 0.013, 0], [0, (i - 1) * 0.12, 0], [0.3, 0.012, 0.14]));
-    g.add(mesh(BOX, M('cashBand', { color: 0xe8d38a, roughness: 0.8 }), [0, 0.022, 0], undefined, [0.05, 0.042, 0.146]));
+    // the band off to one side, so the portrait shows
+    g.add(mesh(BOX, M('cashBand', { color: 0xe8d38a, roughness: 0.8 }), [0.092, 0.022, 0], undefined, [0.05, 0.042, 0.146]));
     return mergeByMaterial(g);
   },
 
@@ -1102,10 +1299,10 @@ export const BUILD: Record<string, () => THREE.Object3D> = {
     );
     g.add(mesh(cupGeo, gold, [0, 0.15, 0]));
     for (const s of [-1, 1]) g.add(mesh(new THREE.TorusGeometry(0.035, 0.009, 8, 14, Math.PI), gold, [s * 0.07, 0.23, 0], [0, 0, s * -Math.PI / 2]));
-    // a tiny golden round boy peeking out of the cup
-    blob(g, gold, 0, 0.29, 0, 0.045);
-    blob(g, gold, 0.03, 0.33, 0, 0.014, 1, 1, 1, true);
-    blob(g, gold, -0.03, 0.33, 0, 0.014, 1, 1, 1, true);
+    // the cup's floor (the lathe's inner wall stops short of the bottom), and a tiny golden Jimothy standing in the cup,
+    // peeking out over the rim: dome, low head, lifted paw and tail puff
+    g.add(mesh(new THREE.CircleGeometry(TROPHY_JIMOTHY.inner, 20).rotateX(-Math.PI / 2), gold, [0, TROPHY_JIMOTHY.feet + 0.001, 0]));
+    g.add(trophyJimothyMesh());
     return mergeByMaterial(g);
   },
 

@@ -663,7 +663,7 @@ export class Jimothy implements System {
     const effort = 0.03 + 0.97 * Math.min(1, this.climbSpeed / sprintSpeed);
     this.stamina -= (dt * effort) / (onLadder ? 11 : 2.75);
     if (this.stamina <= 0) {
-      this.game.hint('Jimothy’s tiny arms give out. (Catch your breath on a ledge on the way up.)', 2.2);
+      this.game.hint('Jimothy’s paws lose their grip. (Catch your breath on a ledge on the way up.)', 2.2);
       this.climbCooldown = 1.2;
       this.setMode('walk');
       return;

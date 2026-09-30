@@ -24,6 +24,8 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
 export const KIT_NAMES = ['Pip', 'Bean', 'Nugget', 'Mochi', 'Button'];
+/** Nugget takes after big brother Jimothy (short, arched back, long legs, tiny tail). */
+export const JIMOTHY_LOOKALIKE_KIT = 3;
 
 export class Kit extends RaccoonAnimal {
   readonly index: number;
@@ -69,7 +71,7 @@ export class Kit extends RaccoonAnimal {
         emoteY: 0.52,
         emoteSize: 0.34,
       },
-      RIGS.kit,
+      index === JIMOTHY_LOOKALIKE_KIT ? RIGS.kitJimothy : RIGS.kit,
     );
     this.index = index;
     this.kitName = KIT_NAMES[(index - 1) % KIT_NAMES.length];

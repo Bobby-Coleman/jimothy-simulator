@@ -8,7 +8,7 @@ const CAPTIONS = [
   'this raccoon has no neck and no notes',
   'POV: you thought it was a cat',
   'not a cat. never was a cat.',
-  'honorary graduate, full-time sphere',
+  'honorary graduate, part-time sphere',
   'caught in 4K (the K stands for Kinda blurry)',
   'please do not approach Jimothy (I zoomed in)',
 ];

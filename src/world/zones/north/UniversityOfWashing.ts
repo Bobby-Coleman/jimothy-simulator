@@ -36,6 +36,7 @@ import {
 import { gothicHall, type HallInfo } from './gothic';
 import { plantTrees, TREE_TOP } from './flora';
 import * as P from './props';
+import { drawJimothy } from '../../../fx/jimothyArt';
 
 const ZONE = 'University of Washing';
 const PURPLE = '#4b2a84';
@@ -725,36 +726,7 @@ function gradStage(game: Game, world: World, mats: MatSet, b: Batch, x: number, 
   }
   f.box(b, 'metal', 0, BH + 1.45, bz, BW + 0.4, 0.2, 0.22, 0x2b2f36);
   f.collider(game, 0, BH + 1.45, bz, BW + 0.4, 0.25, 0.4);
-  const banner = canvasTexture(2048, 512, (ctx, w, h) => {
-    const grd = ctx.createLinearGradient(0, 0, 0, h);
-    grd.addColorStop(0, '#5a33a0');
-    grd.addColorStop(1, '#3b1f6b');
-    ctx.fillStyle = grd;
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = GOLD;
-    ctx.lineWidth = 16;
-    ctx.strokeRect(14, 14, w - 28, h - 28);
-    ctx.fillStyle = GOLD;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    fitText(ctx, 'CONGRATULATIONS CLASS OF 2026', w / 2, h * 0.3, w - 120, 150, "'Lilita One', serif");
-    ctx.fillStyle = '#ffffff';
-    fitText(ctx, '+ HONORARY GRADUATE: JIMOTHY', w / 2, h * 0.66, w - 160, 120, "'Luckiest Guy', sans-serif");
-    // little raccoon faces
-    for (const sx of [120, w - 120]) {
-      ctx.fillStyle = '#9a9aa2';
-      ctx.beginPath();
-      ctx.arc(sx, h * 0.5, 60, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#222';
-      ctx.fillRect(sx - 52, h * 0.5 - 22, 104, 30);
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(sx - 22, h * 0.5 - 8, 8, 0, Math.PI * 2);
-      ctx.arc(sx + 22, h * 0.5 - 8, 8, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  });
+  const banner = canvasTexture(2048, 512, drawGradBanner);
   const bp = f.p(0, 1.4 + BH / 2, bz + 0.14);
   signPanel(world, banner, bp.x, bp.y, bp.z, BW - 0.3, BH, 0, { back: 0x3b1f6b, depth: 0.06, collide: true, lit: true, game, batch: b });
   // balloon arches (purple & gold)
@@ -775,6 +747,114 @@ function gradStage(game: Game, world: World, mats: MatSet, b: Batch, x: number, 
   // stage lights (just glowing cans on the frame)
   for (let i = -2; i <= 2; i++) f.geo(b, 'lamp', GEO.cyl8, i * 2.6, BH + 1.2, bz + 0.3, 0.32, 0.3, 0.32, 0xfff4d0, 0, 0.8);
   return { top, tableX: tp.x, tableZ: tp.z };
+}
+
+/**
+ * The graduation banner over the stage: "CONGRATULATIONS CLASS OF 2026 / + HONORARY GRADUATE: JIMOTHY", with the
+ * real Jimothy (the shared doodle) strolling in from each end in a mortarboard, facing the middle.
+ */
+export function drawGradBanner(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const grd = ctx.createLinearGradient(0, 0, 0, h);
+  grd.addColorStop(0, '#5a33a0');
+  grd.addColorStop(1, '#3b1f6b');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 16;
+  ctx.strokeRect(14, 14, w - 28, h - 28);
+  // the graduate, twice
+  const r = h * 0.25;
+  const side = 44 + r;
+  for (const s of [-1, 1] as const) {
+    const cx = s < 0 ? side : w - side;
+    const cy = h * 0.58;
+    ctx.fillStyle = 'rgba(20,8,40,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(cx - s * r * 0.05, cy + r * 0.92, r * 0.8, r * 0.07, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const facing = s < 0 ? 1 : -1;
+    drawJimothy(ctx, cx, cy, r, { facing });
+    mortarboard(ctx, cx, cy, r, facing);
+  }
+  const textW = w - 2 * (side + r + 36);
+  ctx.fillStyle = GOLD;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  fitText(ctx, 'CONGRATULATIONS CLASS OF 2026', w / 2, h * 0.3, textW, 150, "'Lilita One', serif");
+  ctx.fillStyle = '#ffffff';
+  fitText(ctx, '+ HONORARY GRADUATE: JIMOTHY', w / 2, h * 0.68, textW, 120, "'Luckiest Guy', sans-serif");
+}
+
+/**
+ * A mortarboard on the doodle's head (fx/jimothyArt figure units: nose at x = +1, y down; his head is carried low
+ * and tipped forward), the gold tassel hanging off the front and his ear poking out behind.
+ */
+function mortarboard(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, facing: 1 | -1) {
+  const lw = Math.max(1.4, r * 0.045) / r;
+  const ink = '#161616';
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(r * facing, r);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = lw;
+  // his ear, poking out behind the cap
+  ctx.fillStyle = '#f4efe6';
+  ctx.beginPath();
+  ctx.ellipse(0.57, -0.74, 0.075, 0.105, -0.55, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#45434a';
+  ctx.beginPath();
+  ctx.ellipse(0.58, -0.727, 0.045, 0.067, -0.55, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.translate(0.74, -0.6);
+  ctx.rotate(0.22);
+  // skull cap
+  ctx.fillStyle = '#2a2233';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 0.23, 0.2, 0, Math.PI, Math.PI * 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // the board, seen a little from above, with its thick front edge
+  ctx.fillStyle = '#1f1a27';
+  ctx.beginPath();
+  ctx.moveTo(-0.44, -0.2);
+  ctx.lineTo(0.4, -0.2);
+  ctx.lineTo(0.5, -0.33);
+  ctx.lineTo(-0.34, -0.33);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#3d3450';
+  ctx.beginPath();
+  ctx.rect(-0.44, -0.2, 0.84, 0.06);
+  ctx.fill();
+  ctx.stroke();
+  // button + tassel over the front edge
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = lw * 1.1;
+  ctx.beginPath();
+  ctx.moveTo(0.04, -0.265);
+  ctx.quadraticCurveTo(0.3, -0.27, 0.43, -0.2);
+  ctx.lineTo(0.45, 0.0);
+  ctx.stroke();
+  ctx.fillStyle = GOLD;
+  ctx.beginPath();
+  ctx.ellipse(0.04, -0.265, 0.045, 0.024, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(0.45, -0.03);
+  ctx.lineTo(0.405, 0.13);
+  ctx.quadraticCurveTo(0.45, 0.15, 0.495, 0.13);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = lw * 0.6;
+  ctx.stroke();
+  ctx.restore();
 }
 
 /** Pink petal carpets under the cherry trees (terrain-conforming, merged into one mesh). */

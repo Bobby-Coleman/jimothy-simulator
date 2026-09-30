@@ -6,6 +6,7 @@ import type { Jimothy } from '../player/Jimothy';
 import type { CameraRig } from '../player/CameraRig';
 import type { World } from '../world/World';
 import type { WaterSystem } from '../world/Water';
+import { jimothyBobble, BOBBLEHEAD } from '../world/zones/south/props';
 import { ParticlePool, Shape } from './mutators/fx';
 
 /**
@@ -16,8 +17,13 @@ import { ParticlePool, Shape } from './mutators/fx';
  * Progress persists in localStorage. UI helpers: `nearest(pos)`, `collectedCount`, and a small compass shown while
  * the objectives key is held or after the UI emits 'objectivesPanel' {open}.
  *
- * Draw calls: 2 per visible bobblehead (merged statue + merged bobbing head, one vertex-coloured material), plus one
- * shared draw each for all light beams, all glows and the sparkles. Statues beyond 120 m are hidden.
+ * The statuette is the real Jimothy, baked from his model (`jimothyBobble`): mid-stride with a front paw up (his
+ * walk) on an oval base, his head twice size on the "spring" at his neck. Solid gold, toned by his coat so the mask,
+ * dark paws and pale brows still read (see goldMaterial). The bake is awaited in init (cached, and the stadium's giant
+ * bobblehead already made it while the world was built).
+ *
+ * Draw calls: 2 per visible bobblehead (merged statue + merged bobbing head, one shared material), plus one shared
+ * draw each for all light beams, all glows and the sparkles. Statues beyond 120 m are hidden.
  */
 
 const STORE_KEY = 'jimothy.collectibles.v1';
@@ -25,6 +31,14 @@ const TOTAL = 10;
 const PICKUP_R = 0.95;
 const SCALE = 1.35;
 const CULL_DIST = 120;
+
+/** Model metres → statue units (× SCALE in the world): he stands ~0.7 m tall (base and big head included). */
+const FIG = 0.58;
+/** The giveaway bobblehead's big head (about his neck) and its upward tip (the design is shared with the stadium's). */
+const HEAD = BOBBLEHEAD.headScale;
+const HEAD_PITCH = BOBBLEHEAD.headPitch;
+/** Height of the oval base (statue units). */
+const BASE_H = 0.055;
 
 /** Fallback spots (x, z) near landmarks, spread over the 3×3 zone map. Validated/nudged at placement time. */
 const FALLBACKS: { name: string; x: number; z: number }[] = [
@@ -72,7 +86,13 @@ interface Bobble {
   sparkleT: number;
 }
 
-const HEAD_POS = new THREE.Vector3(0, 0.41, 0.08);
+interface BobbleRes {
+  statueGeo: THREE.BufferGeometry;
+  headGeo: THREE.BufferGeometry;
+  mat: THREE.MeshStandardMaterial;
+  /** The head's pivot (his neck) in statue units. */
+  neck: THREE.Vector3;
+}
 
 const BEAM_VERT = /* glsl */ `
 attribute vec3 aBase;
@@ -119,20 +139,73 @@ void main() {
   gl_FragColor = vec4(uColor * a, 1.0);
 }`;
 
-const _c = new THREE.Color();
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 
-function part(geo: THREE.BufferGeometry, color: number, pos: [number, number, number], scale: [number, number, number] = [1, 1, 1], rot: [number, number, number] = [0, 0, 0]) {
-  _m.compose(new THREE.Vector3(...pos), _q.setFromEuler(_e.set(...rot)), new THREE.Vector3(...scale));
-  geo.applyMatrix4(_m);
+/**
+ * Ready a piece for the merged statue: `tone` = its shade of gold (0 antique … 1 bright; -1 = from his coat texture),
+ * `color` = a multiplier (dark eyes, bright glints). Every piece gets the same attributes (uv, aTone, color, index).
+ */
+function tone(geo: THREE.BufferGeometry, t: number, color = 1) {
   const n = geo.getAttribute('position').count;
-  const arr = new Float32Array(n * 3);
-  _c.set(color);
-  for (let i = 0; i < n; i++) arr.set([_c.r, _c.g, _c.b], i * 3);
-  geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  geo.setAttribute('aTone', new THREE.BufferAttribute(new Float32Array(n).fill(t), 1));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(color), 3));
+  if (!geo.getAttribute('uv')) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+  if (!geo.index) geo.setIndex(Array.from({ length: n }, (_, i) => i));
+  for (const k of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv', 'aTone', 'color'].includes(k)) geo.deleteAttribute(k);
   return geo;
+}
+
+/** A primitive piece for the fallback statue (model metres). */
+function part(geo: THREE.BufferGeometry, t: number, pos: [number, number, number], scale: [number, number, number] = [1, 1, 1], rot: [number, number, number] = [0, 0, 0]) {
+  _m.compose(new THREE.Vector3(...pos), _q.setFromEuler(_e.set(...rot)), new THREE.Vector3(...scale));
+  return tone(geo.applyMatrix4(_m), t);
+}
+
+/**
+ * Solid gold toned by his coat: the coat texture's brightness picks the shade between antique and bright gold, so
+ * the black mask, dark paws and white brows still read on a gold statue (flat gold turns his face into a blank). The
+ * coat also carves his fur as a bump map. `aTone` ≥ 0 fixes the shade instead (base, eyes, nose); vertex colours
+ * darken the eyes and light the glints. The emissive glow follows the shade so the mask stays dark.
+ */
+function goldMaterial(coat: THREE.Texture | null) {
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, map: coat, metalness: 0.5, roughness: 0.32, emissive: 0x6b4300, emissiveIntensity: 0.4 });
+  if (coat) {
+    m.bumpMap = coat;
+    m.bumpScale = 1.5;
+  }
+  const uniforms = {
+    uGoldDark: { value: new THREE.Color(0x3a2206) },
+    uGoldBright: { value: new THREE.Color(0xffc43d) },
+    uGoldRamp: { value: new THREE.Vector2(0.015, 0.28) },
+  };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uniforms);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aTone;\nvarying float vTone;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTone = aTone;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uGoldDark;\nuniform vec3 uGoldBright;\nuniform vec2 uGoldRamp;\nvarying float vTone;')
+      .replace(
+        '#include <map_fragment>',
+        /* glsl */ `float toneK = vTone;
+        #ifdef USE_MAP
+          if ( vTone < 0.0 ) toneK = smoothstep( uGoldRamp.x, uGoldRamp.y, dot( texture2D( map, vMapUv ).rgb, vec3( 0.2126, 0.7152, 0.0722 ) ) );
+        #endif
+        vec3 goldTone = mix( uGoldDark, uGoldBright, clamp( toneK, 0.0, 1.0 ) );
+        diffuseColor.rgb *= goldTone;`,
+      )
+      // grazing reflections of the pale sky (Fresnel → white) outlined his fluffy silhouette in grey: keep them gold
+      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\nmaterial.specularF90 = 0.3;')
+      .replace(
+        '#include <emissivemap_fragment>',
+        '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= goldTone / uGoldBright;\n#ifdef USE_COLOR\ntotalEmissiveRadiance *= vColor.rgb;\n#endif',
+      );
+  };
+  m.customProgramCacheKey = () => 'goldBobblehead';
+  m.name = 'GoldenBobblehead';
+  return m;
 }
 
 export class Collectibles implements System {
@@ -145,7 +218,7 @@ export class Collectibles implements System {
   private rescanT = 5;
   private game!: Game;
   private sparkles: ParticlePool | null = null;
-  private res: { statueGeo: THREE.BufferGeometry; headGeo: THREE.BufferGeometry; mat: THREE.MeshStandardMaterial } | null = null;
+  private res: BobbleRes | null = null;
   private beams: { mesh: THREE.Mesh; geo: THREE.BufferGeometry; mat: THREE.ShaderMaterial; template: Float32Array; vpb: number } | null = null;
   private glows: { points: THREE.Points; geo: THREE.BufferGeometry; mat: THREE.ShaderMaterial } | null = null;
   private freeSlots: number[] = [];
@@ -157,7 +230,7 @@ export class Collectibles implements System {
     return Math.min(TOTAL, this.collected.size);
   }
 
-  init(game: Game) {
+  async init(game: Game) {
     this.game = game;
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
@@ -169,6 +242,11 @@ export class Collectibles implements System {
     const panel = (p: any) => (this.compassWanted = !!(p?.open ?? p?.visible));
     game.events.on('objectivesPanel', panel);
     game.events.on('ui:objectives', panel);
+    // the statuettes are placed once the game is playing: have the (async) bake ready by then
+    this.res = await this.buildResources().catch((err) => {
+      console.warn('[collectibles] bobblehead bake failed, using the simple statuette', err);
+      return this.fallbackResources();
+    });
   }
 
   private save() {
@@ -305,40 +383,59 @@ export class Collectibles implements System {
 
   // ------------------------------------------------------------------ shared GPU resources
   private resources() {
-    if (this.res) return this.res;
-    const GOLD = 0xffc43d;
-    const DARK = 0xa8741a;
-    const BASE = 0x7a4c12;
-    const INK = 0x140f08;
-    const s: THREE.BufferGeometry[] = [
-      part(new THREE.CylinderGeometry(0.2, 0.23, 0.1, 28), BASE, [0, 0.05, 0]),
-      part(new THREE.TorusGeometry(0.2, 0.012, 8, 36), GOLD, [0, 0.1, 0], [1, 1, 1], [Math.PI / 2, 0, 0]),
-      part(new THREE.SphereGeometry(0.15, 24, 16), GOLD, [0, 0.25, 0], [1.05, 0.95, 1.08]),
-      part(new THREE.SphereGeometry(0.035, 10, 8), GOLD, [0.08, 0.12, 0.08]),
-      part(new THREE.SphereGeometry(0.035, 10, 8), GOLD, [-0.08, 0.12, 0.08]),
-      part(new THREE.SphereGeometry(0.05, 12, 10), GOLD, [0, 0.22, -0.15]),
-      part(new THREE.SphereGeometry(0.05, 12, 10), DARK, [0, 0.265, -0.2], [0.88, 0.88, 0.88]),
-      part(new THREE.SphereGeometry(0.05, 12, 10), GOLD, [0, 0.31, -0.25], [0.76, 0.76, 0.76]),
-      part(new THREE.CylinderGeometry(0.02, 0.02, 0.06, 10), DARK, [0, 0.38, 0.07]),
-    ];
-    const h: THREE.BufferGeometry[] = [
-      part(new THREE.SphereGeometry(0.1, 22, 16), GOLD, [0, 0.05, 0], [1.12, 0.96, 1]),
-      part(new THREE.SphereGeometry(0.036, 12, 10), GOLD, [0.075, 0.13, -0.01]),
-      part(new THREE.SphereGeometry(0.036, 12, 10), GOLD, [-0.075, 0.13, -0.01]),
-      part(new THREE.SphereGeometry(0.06, 16, 10), DARK, [0, 0.065, 0.055], [1.6, 0.5, 0.75]),
-      part(new THREE.SphereGeometry(0.014, 10, 8), INK, [0.038, 0.068, 0.1]),
-      part(new THREE.SphereGeometry(0.014, 10, 8), INK, [-0.038, 0.068, 0.1]),
-      part(new THREE.SphereGeometry(0.015, 10, 8), INK, [0, 0.03, 0.105]),
-    ];
+    return (this.res ??= this.fallbackResources());
+  }
+
+  /** The statuette from the baked model: one statue geometry (base + body), one head geometry, one material. */
+  private async buildResources(): Promise<BobbleRes> {
+    const parts = await jimothyBobble(this.game, BOBBLEHEAD);
+    if (!parts) return this.fallbackResources();
+    const bb = parts.bodyBox;
+    // his feet centred on the base (and the spin axis), standing on its top; then everything to statue units
+    const cx = (bb.min.x + bb.max.x) / 2;
+    const cz = (bb.min.z + bb.max.z) / 2;
+    const toStatue = new THREE.Matrix4().makeScale(FIG, FIG, FIG).multiply(new THREE.Matrix4().makeTranslation(-cx, BASE_H / FIG, -cz));
+    const s: THREE.BufferGeometry[] = parts.body.map((p) => tone(p.geometry.clone().applyMatrix4(toStatue), -1));
+    const rx = ((bb.max.x - bb.min.x) / 2 + 0.07) * FIG;
+    const rz = ((bb.max.z - bb.min.z) / 2 + 0.05) * FIG;
+    s.push(tone(new THREE.CylinderGeometry(1, 1.07, BASE_H, 44).scale(rx, 1, rz).translate(0, BASE_H / 2, 0), 0.4));
+    s.push(tone(new THREE.TorusGeometry(1, 0.011 / rx, 6, 56).rotateX(Math.PI / 2).scale(rx, rx, rz).translate(0, BASE_H, 0), 1));
+    // the head in its own (neck) frame: eyes near-black, glints bright, nose dark
+    const h = parts.head.map((p) => {
+      const g = p.geometry.clone().scale(FIG, FIG, FIG);
+      if (/^Eye[LR]$/.test(p.name)) return tone(g, 0, 0.3);
+      if (/Glint/.test(p.name)) return tone(g, 1, 1.6);
+      if (p.name === 'Nose') return tone(g, 0, 0.5);
+      return tone(g, -1);
+    });
     const statueGeo = mergeGeometries(s)!;
     const headGeo = mergeGeometries(h)!;
     for (const g of [...s, ...h]) g.dispose();
     statueGeo.computeBoundingSphere();
     headGeo.computeBoundingSphere();
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.5, roughness: 0.28, emissive: 0x6b4300, emissiveIntensity: 0.4 });
-    mat.name = 'GoldenBobblehead';
-    this.res = { statueGeo, headGeo, mat };
-    return this.res;
+    return { statueGeo, headGeo, mat: goldMaterial(parts.coat), neck: parts.neck.clone().applyMatrix4(toStatue) };
+  }
+
+  /** If his model can't be baked: a simple gold Jimothy (domed back, long legs, tail puff, masked face). */
+  private fallbackResources(): BobbleRes {
+    const k = FIG;
+    const s = [
+      part(new THREE.CylinderGeometry(0.26 * k, 0.28 * k, BASE_H, 32), 0.4, [0, BASE_H / 2, 0], [1, 1, 1.5]),
+      part(new THREE.SphereGeometry(0.22 * k, 20, 14), 0.8, [0, BASE_H + 0.36 * k, -0.03 * k], [0.95, 0.85, 1.35]),
+      part(new THREE.SphereGeometry(0.08 * k, 12, 10), 0.7, [0, BASE_H + 0.42 * k, -0.33 * k]),
+      ...[-1, 1].flatMap((x) => [-1, 1].map((z) => part(new THREE.CylinderGeometry(0.045 * k, 0.035 * k, 0.32 * k, 10), 0.15, [x * 0.11 * k, BASE_H + 0.16 * k, z * 0.2 * k]))),
+    ];
+    const h = [
+      part(new THREE.SphereGeometry(0.13 * k, 20, 14), 0.8, [0, -0.03 * k, 0.08 * k]),
+      part(new THREE.SphereGeometry(0.1 * k, 16, 8), 0, [0, -0.02 * k, 0.135 * k], [1.2, 0.4, 0.9]),
+      part(new THREE.SphereGeometry(0.02 * k, 10, 8), 0, [0, -0.07 * k, 0.22 * k]),
+      ...[-1, 1].map((x) => part(new THREE.SphereGeometry(0.04 * k, 10, 8), 0.8, [x * 0.08 * k, 0.1 * k, 0.03 * k], [1, 1, 0.5])),
+    ];
+    const statueGeo = mergeGeometries(s)!;
+    const headGeo = mergeGeometries(h)!;
+    for (const g of [...s, ...h]) g.dispose();
+    for (const g of [statueGeo, headGeo]) g.computeBoundingSphere();
+    return { statueGeo, headGeo, mat: goldMaterial(null), neck: new THREE.Vector3(0, BASE_H + 0.45 * k, 0.2 * k) };
   }
 
   private beamRes() {
@@ -442,7 +539,10 @@ export class Collectibles implements System {
     statue.castShadow = true;
     statue.receiveShadow = true;
     const head = new THREE.Mesh(r.headGeo, r.mat);
-    head.position.copy(HEAD_POS);
+    head.name = 'GoldenBobbleheadHead';
+    head.position.copy(r.neck);
+    head.scale.setScalar(HEAD);
+    head.rotation.x = -HEAD_PITCH;
     head.castShadow = true;
     statue.add(head);
     const slot = this.freeSlots.pop()!;
@@ -507,8 +607,9 @@ export class Collectibles implements System {
       b.statue.visible = visible;
       if (visible) {
         b.statue.rotation.y += dt * 1.3;
-        b.head.rotation.set(Math.sin(t * 5.3 + b.phase) * 0.16, 0, Math.sin(t * 4.4 + b.phase) * 0.24);
-        b.head.position.y = HEAD_POS.y + Math.sin(t * 7 + b.phase) * 0.01;
+        // nods and wobbles on the spring at his neck
+        b.head.rotation.set(-HEAD_PITCH + Math.sin(t * 5.3 + b.phase) * 0.13, 0, Math.sin(t * 4.4 + b.phase) * 0.2);
+        b.head.position.y = (this.res?.neck.y ?? 0) + Math.sin(t * 7 + b.phase) * 0.006;
         if (GA) GA.setX(b.slot, 0.42 + Math.sin(t * 3 + b.phase) * 0.12);
       } else if (GA) GA.setX(b.slot, 0);
       if (this.sparkles && dCam < 60) {

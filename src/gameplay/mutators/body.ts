@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Game } from '../../core/Game';
+import { hasFurShells, setFurLength } from '../../player/Fur';
 import { Attachment, glbOr, buildBubbleHelmet, modelParts } from './accessories';
 import { Shape } from './fx';
 import { sharedFx } from './shared';
@@ -8,6 +9,7 @@ import { getPlayer, PLAYER_R, type MutatorImpl } from './types';
 const _a = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
+const Z = new THREE.Vector3(0, 0, 1);
 
 // ------------------------------------------------------------------ Space Jimothy
 
@@ -80,23 +82,12 @@ export function wetJimothy(): MutatorImpl {
   let dripT = 0;
   let off: (() => void) | null = null;
   let hinted = false;
-  let shellsFor: THREE.Object3D | null = null;
-  let shellLists: THREE.Object3D[][] = [];
-  let hiddenShells: THREE.Object3D[] = [];
+  /** Every furry mesh whose coat we've flattened (either form), to fluff back up on disable. */
+  const flattened = new Set<THREE.Object3D>();
 
-  function collectShells(model: THREE.Object3D) {
-    shellLists = [];
-    const walk = (o: THREE.Object3D) => {
-      if (o.userData.jimAccessory) return;
-      const shells = o.children.filter((c) => c.userData.furShell);
-      if (shells.length) shellLists.push(shells);
-      for (const c of o.children) if (!c.userData.furShell) walk(c);
-    };
-    walk(model);
-  }
-  function restoreShells() {
-    for (const s of hiddenShells) s.visible = true;
-    hiddenShells = [];
+  function restoreFur() {
+    for (const m of flattened) setFurLength(m, 1);
+    flattened.clear();
   }
 
   return {
@@ -133,9 +124,7 @@ export function wetJimothy(): MutatorImpl {
     disable() {
       off?.();
       off = null;
-      restoreShells();
-      shellsFor = null;
-      shellLists = [];
+      restoreFur();
       wet = 0;
       shake = 0;
     },
@@ -163,24 +152,15 @@ export function wetJimothy(): MutatorImpl {
         mods.rot.z += Math.sin(shake * 47) * 0.12 * shake;
         shake -= dt;
       }
-      // flatten the fur: hide the outer shells
-      const child = p.model.pivot.children[0];
-      if (child && child !== shellsFor) {
-        restoreShells();
-        collectShells(child);
-        shellsFor = child;
-      }
-      const keep = Math.round(THREE.MathUtils.lerp(10, 3, THREE.MathUtils.smoothstep(w, 0.1, 0.7)));
-      restoreShells();
-      if (keep < 10) {
-        for (const list of shellLists) {
-          for (let i = keep; i < list.length; i++) {
-            if (list[i].visible) {
-              list[i].visible = false;
-              hiddenShells.push(list[i]);
-            }
-          }
-        }
+      // flatten the fur: soaked, his coat lies short and slick (only the inner shells)
+      const k = THREE.MathUtils.lerp(1, 0.3, THREE.MathUtils.smoothstep(w, 0.1, 0.7));
+      if (k > 0.999) restoreFur();
+      else {
+        p.model.pivot.children[0]?.traverse((o) => {
+          if (o.userData.furShell || !hasFurShells(o)) return;
+          setFurLength(o, k);
+          flattened.add(o);
+        });
       }
       // drips
       if (w > 0.05 && p.mode !== 'swim') {
@@ -202,8 +182,15 @@ export function wetJimothy(): MutatorImpl {
 
 export function bobblehead(): MutatorImpl {
   const SCALE = 2.2;
+  /**
+   * The walking Jimothy's head joint is at the back of his skull (his head hangs forward off a very short neck), so
+   * growing the head about it would swing his face down onto the ground. Grow it about his chin instead (Head-bone
+   * frame): the big head rises up over his shoulders like a figurine's.
+   */
+  const CHIN = new THREE.Vector3(0, -0.13, 0.09);
   let headRef: THREE.Object3D | null = null;
   let savedScale = new THREE.Vector3(1, 1, 1);
+  let savedPos = new THREE.Vector3();
   let th = 0; // pitch
   let tr = 0; // roll
   let wp = 0;
@@ -213,7 +200,10 @@ export function bobblehead(): MutatorImpl {
   const offs: (() => void)[] = [];
 
   function release() {
-    if (headRef) headRef.scale.copy(savedScale);
+    if (headRef) {
+      headRef.scale.copy(savedScale);
+      headRef.position.copy(savedPos);
+    }
     headRef = null;
   }
 
@@ -250,6 +240,7 @@ export function bobblehead(): MutatorImpl {
         release();
         headRef = head;
         savedScale = head.scale.clone();
+        savedPos = head.position.clone();
       }
       head.scale.copy(savedScale).multiplyScalar(SCALE);
       // acceleration in Jimothy's facing frame drives the spring
@@ -267,22 +258,115 @@ export function bobblehead(): MutatorImpl {
       tr = THREE.MathUtils.clamp(tr + wr * dt, -0.75, 0.75);
       _q.setFromEuler(_e.set(th, 0, tr));
       head.quaternion.multiply(_q);
+      // (scaling about the chin = scaling about the joint, then sliding the head back by (s - 1) x the chin offset)
+      if (p.model.quad) head.position.copy(savedPos).addScaledVector(_a.copy(CHIN).multiply(savedScale).applyQuaternion(head.quaternion), 1 - SCALE);
     },
   };
 }
 
 // ------------------------------------------------------------------ Zoomies
 
+/** Soft rotor-blur disc: a bright ring with a few swept streaks, fading to nothing at the hub and the rim. */
+function rotorTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(64, 64, 8, 64, 64, 63);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(0.45, 'rgba(255,255,255,0.25)');
+  g.addColorStop(0.8, 'rgba(255,255,255,0.7)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 3; i++) {
+    ctx.lineWidth = 3 - i * 0.6;
+    ctx.beginPath();
+    ctx.arc(64, 64, 50 - i * 9, i * 2.1, i * 2.1 + 1.3);
+    ctx.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.center.set(0.5, 0.5); // spins about the hub
+  return t;
+}
+
 export function zoomies(): MutatorImpl {
   const MUL = 2;
+  /** The tail's rest direction in its own bone frame (from the joint to the middle of the puff): back and up. */
+  const QUAD_TAIL = new THREE.Vector3(0, 0.046, -0.047);
+  const BALL_TAIL = new THREE.Vector3(0, 0.25, -1);
   let applied = false;
   let dustT = 0;
+  let heli = 0;
+  let rotor = 0;
+  let tailRef: THREE.Object3D | null = null;
+  let blur: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial> | null = null;
+  const _d = new THREE.Vector3();
+  const _u = new THREE.Vector3();
+  const _w = new THREE.Vector3();
+
+  // (both forms' tails rest at scale 1; nothing else scales them except an AI glitch, which puts it back itself)
+  function releaseTail() {
+    tailRef?.scale.setScalar(1);
+    tailRef = null;
+    blur?.removeFromParent();
+  }
+
+  /** Tail helicopter: his little tail puff swells and whirls round like a rotor, with a faint motion-blur disc. */
+  function helicopter(game: Game, dt: number) {
+    const p = getPlayer(game)!;
+    const tail = modelParts(p.model).Tail1 ?? null;
+    if (tail !== tailRef) {
+      releaseTail();
+      tailRef = tail;
+    }
+    const want = tail && p.speed > 1 && p.mode !== 'roll' ? Math.min(1, (p.speed - 1) / 3) : 0;
+    heli = THREE.MathUtils.damp(heli, want, 6, dt);
+    if (!tail) return;
+    const k = 1 + 0.7 * heli;
+    tail.scale.setScalar(k);
+    if (heli < 0.02 || !tail.parent) {
+      blur?.removeFromParent();
+      return;
+    }
+    rotor += dt * 32; // ~5 turns a second
+    const rest = p.model.quad ? QUAD_TAIL : BALL_TAIL;
+    const len = rest.length() * k;
+    // tilt the tail off its rest axis by A, the tilt direction going round: the puff's middle traces a circle
+    const A = 0.75 * heli;
+    _d.copy(rest).normalize();
+    _u.set(1, 0, 0);
+    _w.crossVectors(_d, _u).normalize();
+    const axis = _u.multiplyScalar(Math.cos(rotor)).addScaledVector(_w, Math.sin(rotor)).normalize();
+    // the rotor disc sits across the tail's current (pre-whirl) axis, in the tail's parent frame
+    const dq = _d.applyQuaternion(tail.quaternion);
+    tail.quaternion.multiply(_q.setFromAxisAngle(axis, A));
+    if (!blur) {
+      const map = rotorTexture();
+      blur = new THREE.Mesh(
+        new THREE.CircleGeometry(1, 36),
+        new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, opacity: 0 }),
+      );
+      blur.name = 'ZoomiesRotor';
+      blur.renderOrder = 5;
+      blur.userData.jimAccessory = true;
+    }
+    if (blur.parent !== tail.parent) tail.parent.add(blur);
+    blur.position.copy(tail.position).addScaledVector(dq, len * Math.cos(A));
+    blur.quaternion.setFromUnitVectors(Z, dq);
+    blur.scale.setScalar(len * Math.sin(A) + 0.075 * k + 0.01);
+    blur.material.opacity = 0.4 * heli;
+    blur.material.map!.rotation = -rotor;
+  }
+
   return {
     def: {
       id: 'zoomies',
       name: 'Zoomies',
       desc: '2× speed. He cannot stop. He will not stop.',
-      unlockHint: "Complete 'Tiny Legs, Big Journey' (walk 2 km).",
+      unlockHint: "Complete 'Legs For Days' (walk 2 km).",
     },
     enable(game) {
       const p = getPlayer(game);
@@ -299,6 +383,14 @@ export function zoomies(): MutatorImpl {
         if (Math.abs(p.speedMul - 1) < 1e-6) p.speedMul = 1;
       }
       applied = false;
+      releaseTail();
+      heli = 0;
+      if (blur) {
+        blur.geometry.dispose();
+        blur.material.map?.dispose();
+        blur.material.dispose();
+        blur = null;
+      }
     },
     post(game, dt) {
       const p = getPlayer(game);
@@ -316,12 +408,7 @@ export function zoomies(): MutatorImpl {
           fx.puffs.spawn(pos, new THREE.Vector3(-p.velocity.x * 0.15, 0.6 + Math.random() * 0.5, -p.velocity.z * 0.15), 0xd9cdb8, 0.2 + Math.random() * 0.15, 0.55, { drag: 2.5, grow: 2.5, alpha: 0.55 });
         }
       }
-      // tail helicopter
-      const tail = modelParts(p.model).Tail1;
-      if (tail && p.speed > 1 && p.mode !== 'roll') {
-        _q.setFromAxisAngle(_a.set(0, 1, 0), Math.sin(game.time * 26) * 0.55);
-        tail.quaternion.multiply(_q);
-      }
+      helicopter(game, dt);
     },
   };
 }

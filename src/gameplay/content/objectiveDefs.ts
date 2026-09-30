@@ -21,7 +21,7 @@ export const OBJECTIVES: ObjectiveDef[] = [
   { id: 'spaceNoodle', category: 'raccoon', points: 3000, title: 'Climb the Space Noodle', desc: 'Reach the top of the Space Noodle. Wave at the tourists.', reward: 'spaceJimothy' },
   { id: 'nocturnal', category: 'raccoon', points: 750, target: 60, title: 'Nocturnal', desc: 'Stay out for a full minute of night. Raccoon business hours.' },
   { id: 'bathTime', category: 'raccoon', points: 1500, target: 4, title: 'Bath Time', desc: 'Swim in 4 different kinds of water. Rinse and repeat.', reward: 'wetJimothy' },
-  { id: 'marathon', category: 'raccoon', points: 1500, target: 2000, title: 'Tiny Legs, Big Journey', desc: 'Walk 2 km. Those little legs are doing their very best.', reward: 'zoomies' },
+  { id: 'marathon', category: 'raccoon', points: 1500, target: 2000, title: 'Legs For Days', desc: 'Walk 2 km. Round on top, all legs underneath.', reward: 'zoomies' },
   { id: 'catchOfTheDay', category: 'raccoon', points: 750, title: 'Catch of the Day', desc: "Catch a flying fish at Pike's Plaice Market." },
   { id: 'bobbleheadCollector', category: 'raccoon', points: 5000, target: 10, title: 'Bobblehead Collector', desc: 'Find all 10 golden Jimothy bobbleheads. Limited edition!', reward: 'bobblehead' },
   // THE BIG ROLL (src/gameplay/bigroll): a bowling-ball race from the Hilltop Lanes roof; one Instinct per medal

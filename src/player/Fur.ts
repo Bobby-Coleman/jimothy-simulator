@@ -284,3 +284,16 @@ export function setFurClip(mesh: THREE.Object3D, clip: THREE.Matrix4 | null) {
 
 /** True if this mesh has instanced shell fur. */
 export const hasFurShells = (mesh: THREE.Object3D) => mesh.children.some((c) => c.userData.furShell);
+
+/**
+ * Shorten the shell fur of `mesh` to `k` (0..1) of its length by drawing only its inner shells: a flatter, slicker,
+ * denser-looking coat (wet fur). 1 restores it. No-op for meshes without shells (low quality).
+ */
+export function setFurLength(mesh: THREE.Object3D, k: number) {
+  const inst = mesh.children.find((c) => c.userData.furShell) as THREE.Mesh | undefined;
+  if (!inst) return;
+  const n = inst.userData.furShells as number;
+  const keep = THREE.MathUtils.clamp(Math.round(n * k), 1, n);
+  if ((inst as THREE.InstancedMesh).isInstancedMesh) (inst as THREE.InstancedMesh).count = keep;
+  else (inst.geometry as THREE.InstancedBufferGeometry).instanceCount = keep;
+}

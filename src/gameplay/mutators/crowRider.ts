@@ -94,6 +94,7 @@ function buildCrow(): Crow {
 
 const _t = new THREE.Vector3();
 const _d = new THREE.Vector3();
+const _f = new THREE.Vector3();
 
 /**
  * Crow Rider: two crow pals circle overhead. Hold Jump while falling and they swoop in, grab Jimothy by the
@@ -170,7 +171,12 @@ export function crowRider(): MutatorImpl {
       blend = THREE.MathUtils.clamp(blend + (gliding ? dt * 4 : -dt * 1.5), 0, 1);
       orbit += dt * (0.9 + blend);
       const s = p.sizeMul;
-      const top = PLAYER_R * (2 * s - 1);
+      // the top of his back (the walker's arched back is lower than the ball's top), lifted like the size mutators lift him
+      const top = p.model.backTop() * s + PLAYER_R * (s - 1);
+      // the scruff: the walker's is over his shoulders, a little ahead of his middle (and narrower than the ball)
+      const scruff = (p.model.quad ? 0.09 : 0) * s;
+      const spread = (p.model.quad ? 0.11 : 0.2) * s;
+      const fwd = _f.set(Math.sin(p.facing), 0, Math.cos(p.facing));
       const right = _d.set(-Math.cos(p.facing), 0, Math.sin(p.facing));
       crows.forEach((c, i) => {
         const side = i ? 1 : -1;
@@ -178,7 +184,7 @@ export function crowRider(): MutatorImpl {
         const a = orbit + i * Math.PI;
         const orbitPos = _t.set(p.position.x + Math.cos(a) * 1.8, p.position.y + top + 2 + Math.sin(orbit * 1.3 + i) * 0.3, p.position.z + Math.sin(a) * 1.8);
         // carry target: gripping the scruff, one on each side
-        const carry = p.position.clone().addScaledVector(right, side * 0.2 * s);
+        const carry = p.position.clone().addScaledVector(right, side * spread).addScaledVector(fwd, scruff);
         carry.y += top + 0.22;
         const target = orbitPos.lerp(carry, blend);
         const follow = 1 - Math.exp(-dt * (blend > 0.5 ? 18 : 3.5));

@@ -12,7 +12,7 @@ export const SLOP_TIPS = [
   'Tip: Certainly! Here is a tip: tip.',
   'Tip: To wash an item faster, simply become water.',
   'Tip: Studies show 9 out of 10 raccoons. The tenth one is Jimothy.',
-  'Tip: Jimothy is perfectly spherical. Please do not attempt to measure him.',
+  'Tip: Jimothy is perfectly spherical. The legs are a rendering error. Do not measure him.',
   'Tip: If you are reading this, the tip is working as intended.',
   'Tip: The Space Noodle is 100% real noodle. Do not eat the Space Noodle.',
   'Tip: Trash cans contain trash. Sometimes they contain more trash.',

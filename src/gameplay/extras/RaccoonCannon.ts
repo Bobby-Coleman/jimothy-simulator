@@ -35,9 +35,10 @@ import {
  *  - "Jimothy Night Cannon" on the Tee-Hee Park outfield, aimed over the left-centre wall at the town.
  *  - "Bay Blaster" on the Space Noodle deck, aimed at Salmon Bay (splashdown guaranteed*).
  *
- * Walk into the breech (the low open end resting on the ground) → Jimothy slides up the barrel and peeks out of the
- * muzzle → aim wobble + drumroll → BOOM (confetti + a harmless explosion puff, FX only — no 'explosion' event, so
- * nothing gets hurt) → launched as a ragdoll on a big randomized arc with a chase camera that never loses him.
+ * Walk into the breech (the low open end resting on the ground) → Jimothy tucks into a ball, slides up the barrel and
+ * peeks out of the muzzle → aim wobble + drumroll → BOOM (confetti + a harmless explosion puff, FX only — no
+ * 'explosion' event, so nothing gets hurt) → launched as a ragdoll on a big randomized arc with a chase camera that
+ * never loses him.
  *
  * Events: 'cannonLaunch' { cannon, title, position, velocity, speed }
  *         'cannonLand'   { cannon, distance, height, water }
@@ -89,6 +90,8 @@ const AIM_YAW = 0.5;
 /** Dots in the trajectory preview. */
 const ARC_DOTS = 44;
 const _q = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
+const UP = new THREE.Vector3(0, 1, 0);
 
 export class Cannon {
   readonly spec: CannonSpec;
@@ -122,6 +125,10 @@ export class Cannon {
   private arcLook = new THREE.Vector3();
   private arcLookValid = false;
   private arcRange = 0;
+  /** Jimothy is tucked into his ball in the barrel (we set his model's form override). */
+  private tucked = false;
+  /** 0..1: how far his pose has turned to line up with the barrel. */
+  private align = 0;
 
   constructor(
     private host: ExtrasHost,
@@ -252,6 +259,22 @@ export class Cannon {
     return this.barrel.localToWorld(out.set(0, 0, along));
   }
 
+  /**
+   * Inside the barrel he's tucked into his ball (a raccoon cannonball: his long legs would poke out through the barrel
+   * walls), lined up with the barrel (postPhysics) so his round little face peeks out of the muzzle.
+   */
+  private tuck(player: any, on: boolean) {
+    const model = player?.model;
+    if (!model) return;
+    if (on) {
+      this.tucked = true;
+      model.formOverride = 'ball';
+    } else if (this.tucked) {
+      this.tucked = false;
+      model.formOverride = null;
+    }
+  }
+
   /** World direction of the barrel axis (current pose). */
   private axis(out: THREE.Vector3) {
     this.barrel.getWorldQuaternion(_q);
@@ -301,6 +324,7 @@ export class Cannon {
     this.t += dt;
     switch (this.state) {
       case 'idle': {
+        this.tuck(player, false);
         const d = this.distTo(player.position);
         const near = d < 4 && Math.abs(player.position.y - this.breech.y) < 2.5;
         if (near && !this.host.busy && !sceneBusy(game)) prompt(game, `${this.spec.title}: walk into the barrel!`);
@@ -308,8 +332,10 @@ export class Cannon {
         break;
       }
       case 'load': {
-        // slide in through the breech, up the barrel, until the round little face pokes out of the muzzle
+        // walk in through the breech, tuck into a ball and slide up the barrel, until the round little face pokes out
+        // of the muzzle
         const u = clamp(this.t / 0.75, 0, 1);
+        if (u >= 0.3) this.tuck(player, true);
         const target = _v;
         if (u < 0.35) target.copy(this.startPos).lerp(_v2.copy(this.breech).setY(this.breech.y + 0.2 * this.scale), smooth(u / 0.35));
         else this.insidePoint(target, lerp(BREECH - 0.3, MUZZLE - 0.12, smooth((u - 0.35) / 0.65)));
@@ -349,6 +375,7 @@ export class Cannon {
         break;
       }
       case 'cool':
+        this.tuck(player, false);
         if (this.t > 3.5) this.state = 'idle';
         break;
     }
@@ -376,6 +403,15 @@ export class Cannon {
 
   /** Visual recoil / jolt settle (after physics so it's smooth). */
   postPhysics(dt: number) {
+    // tucked in the barrel: tip his ball part way up the barrel (after the player's own visual sync), so his face
+    // peeks out of the muzzle, looking up where he's going, little paws over the rim
+    const player = this.tucked ? playerOf(this.game) : null;
+    if (player?.model) {
+      this.align = damp(this.align, 1, 7, dt);
+      this.barrel.getWorldQuaternion(_q);
+      _q2.setFromAxisAngle(UP, player.facing).slerp(_q, 0.55 * this.align);
+      player.model.pivot.quaternion.copy(_q2);
+    } else this.align = 0;
     if (this.recoil > 0.001 || this.jolt > 0.001) {
       this.recoil = damp(this.recoil, 0, 5, dt);
       this.jolt = damp(this.jolt, 0, 7, dt);
@@ -431,6 +467,8 @@ export class Cannon {
       return;
     }
     player.frozen = false;
+    // (he unfurls in flight: all four limbs flailing)
+    this.tuck(player, false);
     player.body.setTranslation({ x: from.x, y: from.y, z: from.z }, true);
     player.position.copy(from);
     player.ragdoll('cannon', 1.2);
@@ -580,6 +618,7 @@ export class Cannon {
   abort() {
     if (this.arc) this.arc.visible = false;
     this.arcLookValid = false;
+    this.tuck(playerOf(this.game), false);
     if (this.state === 'load' || this.state === 'aim') {
       const player = playerOf(this.game);
       if (player) player.frozen = false;

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Kit, CongaLine } from '../../../entities/animals';
+import { Kit, CongaLine, JIMOTHY_LOOKALIKE_KIT } from '../../../entities/animals';
 import type { HeartCtx, HeartQuest } from './ctx';
 import type { MamaQuest } from './MamaQuest';
 
@@ -84,10 +84,12 @@ export class KitsQuest implements HeartQuest {
     this.foundCount++;
     ctx.game.events.emit('kitFound', { count: this.foundCount, name: k.kitName, index: k.index, how });
     ctx.game.score(100, `Found ${k.kitName}`, k.pos.clone());
+    // the kit who takes after him gets a word of its own
+    const lookalike = k.index === JIMOTHY_LOOKALIKE_KIT ? ` ${k.kitName} takes after you: the round back, the long legs, the tiny tail.` : '';
     if (!this.hinted.found) {
       this.hinted.found = true;
-      ctx.hint(`A lost kit! ${k.kitName} follows you now. Lead the kits home to Mom at the den.`, 4.5);
-    } else ctx.hint(`${k.kitName} joins the conga line! (${this.following} following)`, 2.5);
+      ctx.hint(`A lost kit! ${k.kitName} follows you now. Lead the kits home to Mom at the den.${lookalike}`, lookalike ? 6 : 4.5);
+    } else ctx.hint(`${k.kitName} joins the conga line! (${this.following} following)${lookalike}`, lookalike ? 4.5 : 2.5);
     ctx.onProgress('kits', this.step());
   }
 

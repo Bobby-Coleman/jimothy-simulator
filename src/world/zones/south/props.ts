@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Game } from '../../../core/Game';
 import type { Entity } from '../../../core/Entities';
 import { spawnProp, destroyProp } from '../../../entities/Props';
-import { bake, GEO, type V3 } from './kit';
+import { bakeJimothy, type BakedPart, type JimothyPose } from '../../../player/JimothyBake';
+import { bake, GEO } from './kit';
 
 /**
  * Dynamic, grabbable props for the west/south zones. All procedural (vertex-coloured, one mesh each)
@@ -425,48 +426,238 @@ export function dinghy(game: Game, obj: THREE.Object3D, x: number, y: number, z:
   );
 }
 
-/** Small raccoon-shaped static bobblehead figure geometry (for statues, decor). */
-export function jimothyFigure(): { body: THREE.BufferGeometry; head: THREE.BufferGeometry } {
-  const body = cached('jimfig-body', () =>
-    bake([
-      { geo: GEO.sphere(18, 14), pos: [0, 0.5, 0], scale: [0.5, 0.48, 0.5], color: 0x8e8a86 },
-      { geo: GEO.sphere(12, 8), pos: [0.22, 0.08, 0.18], scale: [0.11, 0.1, 0.13], color: 0x3a3634 },
-      { geo: GEO.sphere(12, 8), pos: [-0.22, 0.08, 0.18], scale: [0.11, 0.1, 0.13], color: 0x3a3634 },
-      { geo: GEO.sphere(12, 8), pos: [0.22, 0.08, -0.2], scale: [0.11, 0.1, 0.13], color: 0x3a3634 },
-      { geo: GEO.sphere(12, 8), pos: [-0.22, 0.08, -0.2], scale: [0.11, 0.1, 0.13], color: 0x3a3634 },
-      // ringed tail
-      ...[0, 1, 2, 3, 4, 5].map((i) => ({
-        geo: GEO.sphere(10, 8),
-        pos: [0, 0.35 + i * 0.05, -0.5 - i * 0.1] as V3,
-        scale: [0.13 - i * 0.008, 0.13 - i * 0.008, 0.08] as V3,
-        color: i % 2 ? 0x2d2a28 : 0xa7a29c,
-      })),
-    ]),
-  );
-  const head = cached('jimfig-head', () =>
-    bake([
-      { geo: GEO.sphere(20, 16), pos: [0, 0, 0], scale: [0.62, 0.55, 0.58], color: 0x9a9591 },
-      // bandit mask
-      { geo: GEO.sphere(16, 10), pos: [0, 0.06, 0.4], scale: [0.5, 0.17, 0.25], color: 0x2a2624 },
-      { geo: GEO.sphere(12, 10), pos: [0, -0.14, 0.5], scale: [0.24, 0.17, 0.14], color: 0xf1ede6 },
-      { geo: GEO.sphere(10, 8), pos: [0, -0.08, 0.64], scale: [0.07, 0.05, 0.05], color: 0x151212 },
-      { geo: GEO.sphere(10, 8), pos: [0.19, 0.08, 0.6], scale: 0.07, color: 0xffffff },
-      { geo: GEO.sphere(10, 8), pos: [-0.19, 0.08, 0.6], scale: 0.07, color: 0xffffff },
-      { geo: GEO.sphere(8, 6), pos: [0.2, 0.08, 0.66], scale: 0.035, color: 0x111111 },
-      { geo: GEO.sphere(8, 6), pos: [-0.2, 0.08, 0.66], scale: 0.035, color: 0x111111 },
-      { geo: GEO.sphere(10, 8), pos: [0.2, 0.22, 0.44], scale: [0.14, 0.05, 0.08], color: 0xf4f1ea },
-      { geo: GEO.sphere(10, 8), pos: [-0.2, 0.22, 0.44], scale: [0.14, 0.05, 0.08], color: 0xf4f1ea },
-      { geo: GEO.sphere(12, 8), pos: [0.36, 0.44, 0], scale: [0.16, 0.16, 0.08], color: 0x3a3634 },
-      { geo: GEO.sphere(12, 8), pos: [-0.36, 0.44, 0], scale: [0.16, 0.16, 0.08], color: 0x3a3634 },
-      { geo: GEO.sphere(12, 8), pos: [0.36, 0.44, 0.02], scale: [0.11, 0.11, 0.07], color: 0xe9e4dc },
-      { geo: GEO.sphere(12, 8), pos: [-0.36, 0.44, 0.02], scale: [0.11, 0.11, 0.07], color: 0xe9e4dc },
-    ]),
-  );
-  return { body, head };
+// ------------------------------------------------------------------ Jimothy bobbleheads (the real model, baked)
+
+/**
+ * The Jimothy Night giveaway bobblehead (the golden collectibles and Tee-Hee Park's giant one): mid-stride with his
+ * right front paw up and curled (his walk), head twice size on its spring, tipped up a little to look at you (he
+ * carries it low, nose down).
+ */
+export const BOBBLEHEAD = { pose: 'walk' as const, phase: 0.27, headScale: 2, headPitch: 0.2 };
+
+/** The real Jimothy split for a bobblehead: his body, and his head on its own pivot (see `jimothyBobble`). */
+export interface BobbleParts {
+  /** The body (the coat texture's mesh), model frame: feet on y = 0, facing +Z, his left = +X. */
+  body: BakedPart[];
+  /** Everything that bobbles (skull, ears, jaw, eyes, glints, nose), in the neck frame: the pivot is the origin. */
+  head: BakedPart[];
+  /** The head's pivot (his head joint) in the model frame. */
+  neck: THREE.Vector3;
+  /** Bounds of the body (model frame) and of the unscaled head (neck frame). */
+  bodyBox: THREE.Box3;
+  headBox: THREE.Box3;
+  /** His coat texture (the body's `map`), for painted or carved finishes. */
+  coat: THREE.Texture | null;
+  /**
+   * Where a hat goes (neck frame, as posed): its bottom centre on the skull between the ears, pressing the fur down,
+   * and its orientation (+Y out of the crown, tipped ~30° forward with his down-turned head; +Z toward his nose).
+   * `width` = the cranium between the ears (fur included).
+   */
+  hat: { pos: THREE.Vector3; quat: THREE.Quaternion; width: number };
 }
 
-export function figureMaterial(gold = false) {
-  return gold ? vmat('gold', { roughness: 0.25, metalness: 0.85, color: 0xffd36a }) : vmat('figure', { roughness: 0.5 });
+/**
+ * His head at rest (model frame, as measured in JimothyQuad.headAnchors and the 'stand' bake): the head joint, the eye
+ * centres, the skin at the crown and the crown's forward tilt. The posed head's own eyes give its rotation from here.
+ */
+const REST_HEAD = {
+  neck: new THREE.Vector3(0, 0.529, 0.262),
+  eyeL: new THREE.Vector3(0.037, 0.464, 0.364),
+  eyeR: new THREE.Vector3(-0.037, 0.464, 0.364),
+  crown: new THREE.Vector3(0, 0.566, 0.34),
+  tilt: 0.56,
+  width: 0.18,
+};
+
+/** Rotation taking the rest head onto a posed head, from each one's eyes and neck. */
+function headRotation(eyeL: THREE.Vector3, eyeR: THREE.Vector3, neck: THREE.Vector3) {
+  const basis = (l: THREE.Vector3, r: THREE.Vector3, n: THREE.Vector3) => {
+    const x = l.clone().sub(r).normalize();
+    const f = l.clone().add(r).multiplyScalar(0.5).sub(n);
+    const y = f.addScaledVector(x, -f.dot(x)).normalize();
+    return new THREE.Matrix4().makeBasis(x, y, x.clone().cross(y));
+  };
+  const rest = basis(REST_HEAD.eyeL, REST_HEAD.eyeR, REST_HEAD.neck);
+  const posed = basis(eyeL, eyeR, neck);
+  return new THREE.Quaternion().setFromRotationMatrix(posed.multiply(rest.transpose()));
+}
+
+const bobbleCache = new Map<string, Promise<BobbleParts | null>>();
+
+/**
+ * Jimothy posed and baked (`bakeJimothy`, fur sculpted in) and split at the neck for a bobblehead: scale the head
+ * about its pivot and it still meets the body. The openings the split leaves are capped, so a big head is closed
+ * where it sits on his (virtually non-existent) neck. Geometry is compacted (the bake's head and body share one
+ * vertex array) and cached: shared by every caller, clone it before editing it.
+ */
+export function jimothyBobble(game: Game, opts: { pose?: JimothyPose; phase?: number; fur?: number } = {}): Promise<BobbleParts | null> {
+  const key = JSON.stringify([opts.pose ?? 'stand', opts.phase ?? null, opts.fur ?? null]);
+  let p = bobbleCache.get(key);
+  if (!p) {
+    p = bakeJimothy(game, { pose: opts.pose ?? 'stand', phase: opts.phase, fur: opts.fur, splitHead: true }).then((baked) => {
+      if (!baked) return null;
+      const neck = baked.neck.clone();
+      const toNeck = new THREE.Matrix4().makeTranslation(-neck.x, -neck.y, -neck.z);
+      const body: BakedPart[] = [];
+      const head: BakedPart[] = [];
+      for (const part of baked.parts) {
+        let g = compactGeometry(part.geometry);
+        // the neck openings: the body's is capped with a low dome (hidden inside the head), the head's flat
+        if (part.name === 'JimothyBody') g = capOpenings(g, neck, 0.2, 0.02);
+        else if (part.head && part.material.map) g = capOpenings(g, neck, 0.2, -0.01);
+        if (part.head) g.applyMatrix4(toNeck);
+        g.computeBoundingBox();
+        g.computeBoundingSphere();
+        (part.head ? head : body).push({ ...part, geometry: g });
+      }
+      const box = (list: BakedPart[]) => list.reduce((b, q) => b.union(q.geometry.boundingBox!), new THREE.Box3());
+      const coat = baked.parts.find((q) => q.name === 'JimothyBody')?.material.map ?? null;
+      // the hat: the rest crown carried by the posed head (its eyes give the rotation), lifted onto the sculpted fur
+      const eye = (n: string) => head.find((q) => q.name === n)?.geometry.boundingBox!.getCenter(new THREE.Vector3()).add(neck);
+      const eyeL = eye('EyeL') ?? REST_HEAD.eyeL.clone();
+      const eyeR = eye('EyeR') ?? REST_HEAD.eyeR.clone();
+      const rot = headRotation(eyeL, eyeR, neck);
+      const up = new THREE.Vector3(0, Math.cos(REST_HEAD.tilt), Math.sin(REST_HEAD.tilt));
+      const hatPos = REST_HEAD.crown.clone().addScaledVector(up, 0.02).sub(REST_HEAD.neck).applyQuaternion(rot);
+      const hatQuat = rot.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), REST_HEAD.tilt));
+      return { body, head, neck, bodyBox: box(body), headBox: box(head), coat, hat: { pos: hatPos, quat: hatQuat, width: REST_HEAD.width } };
+    });
+    bobbleCache.set(key, p);
+  }
+  return p;
+}
+
+/** Copy of an indexed geometry with only the vertices its triangles use (position / normal / uv). */
+function compactGeometry(src: THREE.BufferGeometry): THREE.BufferGeometry {
+  const out = new THREE.BufferGeometry();
+  const names = ['position', 'normal', 'uv'].filter((n) => src.getAttribute(n));
+  const idx = src.index;
+  if (!idx) {
+    for (const n of names) out.setAttribute(n, (src.getAttribute(n) as THREE.BufferAttribute).clone());
+    return out;
+  }
+  const count = src.getAttribute('position').count;
+  const remap = new Int32Array(count).fill(-1);
+  const index = new Uint32Array(idx.count);
+  let used = 0;
+  for (let i = 0; i < idx.count; i++) {
+    const v = idx.getX(i);
+    if (remap[v] < 0) remap[v] = used++;
+    index[i] = remap[v];
+  }
+  for (const n of names) {
+    const a = src.getAttribute(n) as THREE.BufferAttribute;
+    const k = a.itemSize;
+    const arr = new Float32Array(used * k);
+    for (let v = 0; v < count; v++) if (remap[v] >= 0) for (let c = 0; c < k; c++) arr[remap[v] * k + c] = a.getComponent(v, c);
+    out.setAttribute(n, new THREE.BufferAttribute(arr, k));
+  }
+  out.setIndex(new THREE.BufferAttribute(index, 1));
+  return out;
+}
+
+/**
+ * Close the holes in a mesh (loops of boundary edges, welded by position) whose centre is within `radius` of `near`:
+ * a fan from a new centre vertex, pushed `bulge` metres out of the mesh (negative = into it). The fan reuses the rim's
+ * vertices, so the cap shades like a rounded continuation of the skin.
+ */
+function capOpenings(g: THREE.BufferGeometry, near: THREE.Vector3, radius: number, bulge: number): THREE.BufferGeometry {
+  const pos = g.getAttribute('position') as THREE.BufferAttribute;
+  const nor = g.getAttribute('normal') as THREE.BufferAttribute | undefined;
+  const uv = g.getAttribute('uv') as THREE.BufferAttribute | undefined;
+  const idx = g.index;
+  if (!idx) return g;
+  const n = pos.count;
+  // weld: canonical vertex per position (UV seams split vertices)
+  const canon = new Int32Array(n);
+  const seen = new Map<string, number>();
+  for (let i = 0; i < n; i++) {
+    const k = `${Math.round(pos.getX(i) * 1e5)},${Math.round(pos.getY(i) * 1e5)},${Math.round(pos.getZ(i) * 1e5)}`;
+    const c = seen.get(k);
+    canon[i] = c ?? i;
+    if (c === undefined) seen.set(k, i);
+  }
+  const uses = new Map<string, number>();
+  const dir = new Map<string, [number, number]>();
+  for (let t = 0; t < idx.count; t += 3) {
+    for (let e = 0; e < 3; e++) {
+      const a = idx.getX(t + e);
+      const b = idx.getX(t + ((e + 1) % 3));
+      const ca = canon[a];
+      const cb = canon[b];
+      const k = ca < cb ? ca + '_' + cb : cb + '_' + ca;
+      uses.set(k, (uses.get(k) ?? 0) + 1);
+      dir.set(k, [a, b]);
+    }
+  }
+  // boundary edges (used once) keyed by their start (canonical), in the winding of their triangle
+  const next = new Map<number, [number, number]>();
+  for (const [k, u] of uses) {
+    if (u !== 1) continue;
+    const e = dir.get(k)!;
+    next.set(canon[e[0]], e);
+  }
+  const loops: number[][] = [];
+  const done = new Set<number>();
+  for (const start of next.keys()) {
+    if (done.has(start)) continue;
+    const loop: number[] = [];
+    let cur = start;
+    while (!done.has(cur)) {
+      done.add(cur);
+      const e = next.get(cur);
+      if (!e) break;
+      loop.push(e[0]);
+      cur = canon[e[1]];
+    }
+    if (cur === start && loop.length >= 3) loops.push(loop);
+  }
+  const P: number[] = Array.from(pos.array as Float32Array).slice(0, n * 3);
+  const N: number[] = nor ? Array.from(nor.array as Float32Array).slice(0, n * 3) : [];
+  const U: number[] = uv ? Array.from(uv.array as Float32Array).slice(0, n * 2) : [];
+  const I: number[] = Array.from(idx.array as ArrayLike<number>);
+  const c = new THREE.Vector3();
+  const nrm = new THREE.Vector3();
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  for (const loop of loops) {
+    c.set(0, 0, 0);
+    let u0 = 0;
+    let u1 = 0;
+    for (const v of loop) {
+      c.x += pos.getX(v);
+      c.y += pos.getY(v);
+      c.z += pos.getZ(v);
+      if (uv) {
+        u0 += uv.getX(v);
+        u1 += uv.getY(v);
+      }
+    }
+    c.divideScalar(loop.length);
+    if (c.distanceTo(near) > radius) continue;
+    // Newell normal of the loop in its edge order; the cap runs the other way round, so it faces -nrm (out of the mesh)
+    nrm.set(0, 0, 0);
+    for (let i = 0; i < loop.length; i++) {
+      a.fromBufferAttribute(pos, loop[i]);
+      b.fromBufferAttribute(pos, loop[(i + 1) % loop.length]);
+      nrm.x += (a.y - b.y) * (a.z + b.z);
+      nrm.y += (a.z - b.z) * (a.x + b.x);
+      nrm.z += (a.x - b.x) * (a.y + b.y);
+    }
+    nrm.normalize().negate();
+    const ci = P.length / 3;
+    P.push(c.x + nrm.x * bulge, c.y + nrm.y * bulge, c.z + nrm.z * bulge);
+    if (nor) N.push(nrm.x, nrm.y, nrm.z);
+    if (uv) U.push(u0 / loop.length, u1 / loop.length);
+    for (let i = 0; i < loop.length; i++) I.push(loop[(i + 1) % loop.length], loop[i], ci);
+  }
+  if (P.length === n * 3) return g;
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  if (nor) out.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  if (uv) out.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+  out.setIndex(I);
+  return out;
 }
 
 export type { Entity };

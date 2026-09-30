@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { drawJimothy, mixColor, type JimothyArtOpts } from '../../../../fx/jimothyArt';
 
 /** Chunky display font stack used for all canvas-drawn signs (no external font needed). */
 export const SIGN_FONT = '"Arial Black", "Segoe UI Black", Impact, system-ui, sans-serif';
@@ -90,52 +91,80 @@ export function bannerTexture(
   });
 }
 
-/** Draw a tiny round raccoon face (used on seals, cards and signs). */
-export function drawRaccoon(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
-  // ears
-  ctx.fillStyle = '#6d6259';
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.arc(cx + s * r * 0.62, cy - r * 0.72, r * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#e9e1d6';
-    ctx.beginPath();
-    ctx.arc(cx + s * r * 0.62, cy - r * 0.72, r * 0.16, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#6d6259';
-  }
-  // round body/head
-  const g = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.2, cx, cy, r * 1.05);
-  g.addColorStop(0, '#9b9087');
-  g.addColorStop(1, '#5d534b');
-  ctx.fillStyle = g;
+/**
+ * The real Jimothy for seals, cards and signs: the shared side-profile doodle (fx/jimothyArt: domed back, head
+ * carried low, long legs mid-stride), fitted in the circle (cx, cy, r). `cap` puts a ball cap of that colour on him.
+ */
+export function drawJimothyFigure(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, opts: JimothyArtOpts & { cap?: string } = {}) {
+  drawJimothy(ctx, cx, cy, r, opts);
+  if (opts.cap) ballCap(ctx, cx, cy, r, opts.cap, opts.facing ?? 1);
+}
+
+/**
+ * A ball cap on his head, in the doodle's figure units (nose at x = +1, y down): his head is carried low and tipped
+ * forward, so the cap sits on his crown tipped with it, the bill out over his face and his ear poking out behind.
+ */
+function ballCap(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string, facing: 1 | -1) {
+  const lw = Math.max(1.4, r * 0.045) / r;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(r * facing, r);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#161616';
+  ctx.lineWidth = lw;
+  ctx.save();
+  ctx.translate(0.72, -0.585);
+  ctx.rotate(0.45);
+  // the bill
+  ctx.fillStyle = mixColor(color, '#000000', 0.25);
   ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.ellipse(0.26, 0.02, 0.2, 0.048, 0.04, 0, Math.PI * 2);
   ctx.fill();
-  // white brows / muzzle
-  ctx.fillStyle = '#efe9e0';
+  ctx.stroke();
+  // the crown, with a seam and a button
+  ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.ellipse(cx, cy + r * 0.35, r * 0.42, r * 0.3, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, 0.22, 0.2, 0, Math.PI, Math.PI * 2);
+  ctx.closePath();
   ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = mixColor(color, '#ffffff', 0.3);
+  ctx.lineWidth = lw * 0.6;
   ctx.beginPath();
-  ctx.ellipse(cx, cy - r * 0.32, r * 0.62, r * 0.16, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // bandit mask
-  ctx.fillStyle = '#1d1a18';
+  ctx.moveTo(-0.015, -0.19);
+  ctx.quadraticCurveTo(-0.085, -0.1, -0.075, -0.012);
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = '#161616';
+  ctx.lineWidth = lw * 0.7;
   ctx.beginPath();
-  ctx.ellipse(cx - r * 0.33, cy - r * 0.05, r * 0.3, r * 0.19, -0.25, 0, Math.PI * 2);
-  ctx.ellipse(cx + r * 0.33, cy - r * 0.05, r * 0.3, r * 0.19, 0.25, 0, Math.PI * 2);
+  ctx.ellipse(0, -0.205, 0.04, 0.024, 0, 0, Math.PI * 2);
   ctx.fill();
-  // eyes
-  ctx.fillStyle = '#fff';
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.arc(cx + s * r * 0.3, cy - r * 0.07, r * 0.07, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // nose
-  ctx.fillStyle = '#1d1a18';
+  ctx.stroke();
+  const m = ctx.getTransform();
+  ctx.restore();
+  // his ear pokes out through the back of the cap (pale rim, dark inside)
+  ctx.lineWidth = lw;
+  ctx.fillStyle = '#f4efe6';
   ctx.beginPath();
-  ctx.ellipse(cx, cy + r * 0.2, r * 0.11, r * 0.08, 0, 0, Math.PI * 2);
+  ctx.ellipse(0.615, -0.765, 0.075, 0.105, -0.45, 0, Math.PI * 2);
   ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#45434a';
+  ctx.beginPath();
+  ctx.ellipse(0.624, -0.752, 0.045, 0.068, -0.45, 0, Math.PI * 2);
+  ctx.fill();
+  // the team letter on the front panel (drawn unscaled: tiny fonts under a big scale render badly)
+  const p = m.transformPoint(new DOMPoint(0.09, -0.09));
+  const mirrored = m.a * m.d - m.b * m.c < 0;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.translate(p.x, p.y);
+  ctx.rotate(mirrored ? Math.atan2(-m.b, -m.a) : Math.atan2(m.b, m.a));
+  ctx.font = `900 ${Math.max(6, r * 0.13)}px ${SIGN_FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('B', 0, 0);
+  ctx.restore();
 }

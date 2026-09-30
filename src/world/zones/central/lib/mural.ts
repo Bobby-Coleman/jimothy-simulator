@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import { drawRoundRaccoon, FONT_BODY, FONT_TITLE, sparkle, fitText } from './signs';
+import { drawJimothy, FONT_BODY, FONT_TITLE, sparkle, fitText } from './signs';
 import { canvas, canvasTexture, cached } from './textures';
 import { Rng } from './util';
 
 /**
- * The Jimothy mural: a round raccoon ball with a bandit mask, sparkles and "JIMOTHY SUMMER" lettering,
+ * The Jimothy mural: the real Jimothy mid-stride (drawJimothy), sparkles and "JIMOTHY SUMMER" lettering,
  * painted over a Seattle sunset (mountain, Space Noodle, bay). Drawn once on a 2048×1232 canvas.
  */
 export function muralTexture(): THREE.Texture {
@@ -97,7 +97,7 @@ export function muralTexture(): THREE.Texture {
     ctx.beginPath();
     ctx.ellipse(cx + 20, cy + R0 + 30, R0 * 0.9, 40, 0, 0, Math.PI * 2);
     ctx.fill();
-    drawRoundRaccoon(ctx, cx, cy, R0, { outline: '#1b1b22' });
+    drawJimothy(ctx, cx, cy, R0, { outline: '#1b1b22' });
     // sparkles
     for (let k = 0; k < 26; k++) {
       const a = r.range(0, Math.PI * 2),

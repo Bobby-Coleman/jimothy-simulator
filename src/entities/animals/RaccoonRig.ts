@@ -63,6 +63,20 @@ export const RIGS = {
     stride: 0.42,
     fur: { parts: ['Body', 'Head'], shells: 4, length: 0.0065, density: 1500 },
   },
+  /** The kit who takes after Jimothy: a domed little back, head carried low, long legs, a tiny tail puff. */
+  kitJimothy: {
+    name: 'Kit',
+    path: 'assets/models/kit_jimothy.glb',
+    kind: 'quad',
+    scale: 1.8,
+    originY: 0,
+    centerY: 0.1,
+    shoulder: [0, 0.084, 0.012],
+    hip: [0, 0.088, -0.06],
+    size: 0.2,
+    stride: 0.46,
+    fur: { parts: ['Body', 'Head'], shells: 4, length: 0.0065, density: 1500 },
+  },
   danny: {
     name: 'Danny',
     path: 'assets/models/danny.glb',

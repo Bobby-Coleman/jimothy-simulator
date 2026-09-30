@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { printMaterial } from '../../../../entities/npc/Face';
 
 /**
  * Stand-in chunky toy human used by the landmark events when the NPC system isn't available
@@ -20,7 +21,7 @@ export interface Outfit {
   apron?: number;
   /** Full-body salmon costume (Salmon Run racers). */
   salmon?: number;
-  /** Print a tiny raccoon on the shirt (fans). */
+  /** Wear the Jimothy fan-tee print (the same one the town's NPC fans wear). */
   jimothyTee?: boolean;
   scale?: number;
 }
@@ -68,28 +69,6 @@ function mesh(g: THREE.BufferGeometry, mat: THREE.Material, x = 0, y = 0, z = 0)
   me.castShadow = true;
   me.receiveShadow = true;
   return me;
-}
-
-let teeTex: THREE.CanvasTexture | null = null;
-function jimothyTeeTexture() {
-  if (teeTex) return teeTex;
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, 64, 64);
-  ctx.fillStyle = '#6d6259';
-  ctx.beginPath();
-  ctx.arc(32, 34, 20, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#1d1a18';
-  ctx.fillRect(16, 28, 32, 8);
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(22, 30, 4, 4);
-  ctx.fillRect(38, 30, 4, 4);
-  teeTex = new THREE.CanvasTexture(c);
-  teeTex.colorSpace = THREE.SRGBColorSpace;
-  return teeTex;
 }
 
 export class Figure {
@@ -141,11 +120,13 @@ export class Figure {
     const torsoMesh = mesh(torsoGeo, shirtM, 0, 0.33, 0);
     this.torso.add(torsoMesh);
     if (outfit.jimothyTee) {
+      // the real Jimothy over his name, cut out with a white border (a shared, cached decal material)
       const print = new THREE.Mesh(
         geo('teeprint', () => new THREE.PlaneGeometry(0.24, 0.24)),
-        new THREE.MeshStandardMaterial({ map: jimothyTeeTexture(), roughness: 0.9 }),
+        printMaterial('jimothy'),
       );
       print.position.set(0, 0.36, 0.172);
+      print.renderOrder = 1;
       this.torso.add(print);
     }
     if (outfit.gown != null) {

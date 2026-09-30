@@ -105,6 +105,8 @@ export class JimothyModel {
   form: FormName = 'ball';
   /** The walking form's animator (null until jimothy.glb has loaded). */
   quad: JimothyQuad | null = null;
+  /** Show this form whatever his mode (e.g. the cannon tucks him into a ball); null = the ball only while rolling. */
+  formOverride: FormName | null = null;
 
   constructor() {
     this.root.name = 'JimothyRoot';
@@ -280,7 +282,7 @@ export class JimothyModel {
     this.clock += dt;
     s.time = this.clock;
     // the ball while rolling, the real Jimothy otherwise
-    this.setForm(s.mode === 'roll' ? 'ball' : 'body');
+    this.setForm(this.formOverride ?? (s.mode === 'roll' ? 'ball' : 'body'));
     if (this.quad) {
       this.quad.animate(dt, s);
       this.animateShared(dt, s);
@@ -579,21 +581,20 @@ function buildPlaceholder(): THREE.Object3D {
   limb(body, 'LegL', null, 0.17, -0.22, -0.14, 0.09);
   limb(body, 'LegR', null, -0.17, -0.22, -0.14, 0.09);
 
-  let parent: THREE.Object3D = body;
-  let z = -0.3;
-  for (let i = 1; i <= 5; i++) {
-    const seg = add(parent, `Tail${i}`, new THREE.Group(), 0, i === 1 ? 0.02 : 0, i === 1 ? z : -0.1);
-    const r = 0.085 - i * 0.008;
-    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), i % 2 ? ringLight : ringDark);
-    m.scale.set(1, 1, 1.35);
-    m.position.z = -0.05;
-    seg.add(m);
-    if (i === 1) seg.rotation.x = 0.35;
-    parent = seg;
-    z = -0.1;
-  }
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 10), ringDark);
-  tip.position.z = -0.12;
-  parent.add(tip);
+  // his very short tail: one fluffy puff with a faint darker ring and tip
+  const tail = add(body, 'Tail1', new THREE.Group(), 0, -0.08, -0.33);
+  tail.rotation.x = 0.3;
+  const puff = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12), fur);
+  puff.scale.set(1, 0.95, 1.2);
+  puff.position.z = -0.075;
+  tail.add(puff);
+  const ring = new THREE.Mesh(new THREE.SphereGeometry(0.092, 14, 10), ringLight);
+  ring.scale.set(1, 0.95, 0.4);
+  ring.position.z = -0.15;
+  tail.add(ring);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.082, 12, 10), ringDark);
+  tip.scale.set(1, 0.95, 0.9);
+  tip.position.z = -0.2;
+  tail.add(tip);
   return root;
 }

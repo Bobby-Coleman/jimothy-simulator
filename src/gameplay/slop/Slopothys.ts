@@ -4,9 +4,12 @@ import type { Entity } from '../../core/Entities';
 import { RAPIER, G, groups } from '../../core/Physics';
 import type { Jimothy } from '../../player/Jimothy';
 import type { CameraRig } from '../../player/CameraRig';
+import { JimothyQuad } from '../../player/JimothyQuad';
+import type { AnimState } from '../../player/JimothyModel';
+import { applyFur, furSettings, furUniforms } from '../../player/Fur';
 import { makeSlopDepthMaterial, makeSlopMaterial, makeSlopUniforms, type SlopUniforms } from './SlopMaterial';
-import { SLOP_LEGS, SP, type SlopModelData } from './SlopGeometry';
-import { FAN_CHEERS, SLOP_BONKED, SLOP_GRABBED, SLOP_IDLE, SLOP_IMITATE, SLOP_SPAWN, SLOP_THROWN, SLOP_WASHED } from './lines';
+import { FEAT, MAX_FEAT, SF, type SlopModelData } from './SlopGeometry';
+import { FAN_CHEERS, SLOP_BONKED, SLOP_GRABBED, SLOP_IDLE, SLOP_IMITATE, SLOP_MISTAKE, SLOP_SPAWN, SLOP_THROWN, SLOP_WASHED } from './lines';
 import { clamp, findClearSpot, findNpcs, pick, rand, say, sayAt, terrainY, waterOf, worldOf, type Timeline } from './util';
 
 export type SlopRole = 'campus' | 'roamer' | 'tiny';
@@ -21,15 +24,60 @@ export interface SpawnOpts {
   home?: THREE.Vector3;
   /** Pop-in effect + spawn line. */
   announce?: boolean;
+  /** Which mistakes it has (SF bit flags); random if omitted. */
+  mistakes?: number;
 }
 
-const BASE_R = 0.36;
+/**
+ * What an image generator gets wrong about Jimothy. Every Slopothy has one of these, often with a side of another,
+ * on top of the glossy over-smoothed plastic, the shimmer and the glitches.
+ */
+export const SLOP_VARIANTS: { name: string; mistakes: number }[] = [
+  { name: 'Six-Legged', mistakes: SF.legs },
+  { name: 'Long Neck', mistakes: SF.neck },
+  { name: 'Ringtail', mistakes: SF.tail },
+  { name: 'Third Eye', mistakes: SF.eye3 },
+  { name: 'Melted', mistakes: SF.melt },
+  { name: 'Four Ears', mistakes: SF.ears },
+  { name: 'Wrong Ears', mistakes: SF.earMix },
+  { name: 'AI Hands', mistakes: SF.paws },
+];
+const MISTAKE_BITS = [SF.eye3, SF.legs, SF.ears, SF.tail, SF.neck, SF.melt, SF.earMix, SF.paws];
+
+function rollMistakes(role: SlopRole): number {
+  let m = pick(SLOP_VARIANTS).mistakes;
+  const extra = role === 'tiny' ? (Math.random() < 0.4 ? 1 : 0) : Math.random() < 0.8 ? (Math.random() < 0.3 ? 2 : 1) : 0;
+  for (let i = 0; i < extra; i++) m |= pick(MISTAKE_BITS);
+  return m;
+}
+
+/** Capsule collider (before the Slopothy's scale): radius and half the straight part. */
+const BODY_R = 0.24;
+const BODY_HH = 0.2;
+/** Collider centre above its bottom. */
+const HALF = BODY_R + BODY_HH;
 const BASE_MASS = 8;
-const HOVER = 0.12;
+/** His feet float this far off the ground (Slopothys hover). The Suspiciously Normal one only just. */
+const HOVER = 0.14;
+const HOVER_NORMAL = 0.03;
 const WALK = 1.7;
+/** Neck mistake: the Neck bone moves this far from the chest, the Head this far from the neck. */
+const NECK_D1 = new THREE.Vector3(0, 0.04, 0.06);
+const NECK_D2 = new THREE.Vector3(0, 0.055, 0.09);
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _e = new THREE.Euler();
+const _sphere = new THREE.Sphere();
 const _down = new THREE.Vector3(0, -1, 0);
+const Q_ID = new THREE.Quaternion();
+const Q_SPLAY_L = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.15, 0.35, -0.6));
+const Q_SPLAY_R = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.15, -0.35, 0.6));
+const Q_BACKWARDS = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+const Q_SNAP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+/** The middle legs stick out sideways a bit, like an insect's. */
+const Q_OUT_L = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), 0.38);
+const Q_OUT_R = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -0.38);
 const GROUND_FILTER = groups(G.ALL, G.WORLD | G.PROP | G.VEHICLE);
 const WALL_FILTER = groups(G.ALL, G.WORLD | G.VEHICLE);
 
@@ -50,6 +98,137 @@ const TOWN_SPOTS: [number, number][] = [
   [95, 110],
 ];
 
+// ------------------------------------------------------------------------------------------------ shading
+/*
+ * The slop material (SlopMaterial.ts: iridescence, macroblocks, glitch slices, pixel dissolve) extended for the real
+ * anatomy: fur sculpted into plastic (uSculpt), the mistakes switched per Slopothy (uFeat, grown from uFeatA), a
+ * dripping face (uMelt), untextured extras (uv.x < -0.5), glossy eyes (aSlopV.z) and, for the Suspiciously Normal
+ * one, the fur rim light the real Jimothy has.
+ */
+const JIM_VERT_PARS = /* glsl */ `
+attribute vec3 aSlopV;
+attribute float _furlen;
+attribute vec3 _furcomb;
+uniform float uFeat[${MAX_FEAT}];
+uniform vec3 uFeatA[${MAX_FEAT}];
+uniform float uSculpt;
+uniform float uMelt;
+#ifdef SLOP_JIM_LIT
+varying float vSlopGloss;
+#endif
+`;
+const JIM_VERT_MAIN = /* glsl */ `
+{
+  float sjFur = _furlen * 0.035 * uSculpt;
+  transformed += normal * sjFur + _furcomb * (sjFur * uSculpt);
+  int sjF = int(aSlopV.x + 0.5);
+  if (sjF > 0) transformed = mix(uFeatA[sjF], transformed, uFeat[sjF]);
+  float sjM = aSlopV.y * uMelt;
+  if (sjM > 0.0) {
+    // wax-like drips: ~2 cm wide streaks of different lengths
+    float sjX = position.x * 52.0;
+    float sjC = floor(sjX);
+    float sjD = mix(slopH1(sjC * 1.37 + uSeed * 0.113), slopH1((sjC + 1.0) * 1.37 + uSeed * 0.113), smoothstep(0.0, 1.0, fract(sjX)));
+    transformed.y -= sjM * (0.016 + 0.062 * sjD * sjD);
+    transformed.z += sjM * 0.01;
+  }
+  #ifdef SLOP_JIM_LIT
+  vSlopGloss = aSlopV.z;
+  #endif
+}
+`;
+const JIM_VERT_POST = /* glsl */ `
+{
+  int sjF2 = int(aSlopV.x + 0.5);
+  if (sjF2 > 0 && uFeat[sjF2] < 0.002) transformed = vec3(0.0);
+}
+`;
+const JIM_FRAG_PARS = /* glsl */ `
+varying float vSlopGloss;
+uniform float uRim;
+uniform vec3 uFurRim;
+`;
+const JIM_FRAG_MAP = /* glsl */ `
+#ifdef USE_MAP
+  vec4 sampledDiffuseColor = texture2D( map, vMapUv );
+  diffuseColor *= mix( vec4( 1.0 ), sampledDiffuseColor, step( -0.5, vMapUv.x ) );
+#endif
+`;
+/** Keep his bandit mask (the dark texels) dark under the oil-slick shimmer, so the fake still reads as Jimothy. */
+const JIM_FRAG_KEEP = /* glsl */ `
+#ifndef SLOP_GHOST
+{
+  float sjL = dot( sjBase, vec3( 0.2126, 0.7152, 0.0722 ) );
+  float sjDark = ( 1.0 - smoothstep( 0.015, 0.09, sjL ) ) * ( 1.0 - step( 0.001, uDissolve ) ) * ( 1.0 - clamp( uFlash, 0.0, 1.0 ) );
+  diffuseColor.rgb = mix( diffuseColor.rgb, sjBase, sjDark * 0.75 );
+  totalEmissiveRadiance = mix( totalEmissiveRadiance, sjEm0 + ( totalEmissiveRadiance - sjEm0 ) * 0.3, sjDark );
+}
+#endif
+`;
+const JIM_FRAG_RIM = /* glsl */ `
+if ( uRim > 0.0 ) {
+  float sjNdV = clamp( dot( normalize( normal ), normalize( vViewPosition ) ), 0.0, 1.0 );
+  outgoingLight += uFurRim * pow( 1.0 - sjNdV, 2.6 ) * diffuseColor.rgb * 1.6 * uRim;
+}
+`;
+
+function jimothyShader<T extends THREE.Material>(m: T, lit: boolean, key: string): T {
+  const base = m.onBeforeCompile;
+  if (lit) m.defines = { ...(m.defines ?? {}), SLOP_JIM_LIT: '' };
+  m.onBeforeCompile = (shader, renderer) => {
+    base.call(m, shader, renderer);
+    let vs = shader.vertexShader.replace('#include <common>', `#include <common>\n${JIM_VERT_PARS}`);
+    const pose = 'transformed = slopPose(transformed);';
+    vs = vs.includes(pose) ? vs.replace(pose, `${JIM_VERT_MAIN}\n${pose}`) : vs.replace('#include <begin_vertex>', `#include <begin_vertex>\n${JIM_VERT_MAIN}`);
+    shader.vertexShader = vs.replace('#include <skinning_vertex>', `#include <skinning_vertex>\n${JIM_VERT_POST}`);
+    if (lit) {
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\n${JIM_FRAG_PARS}`)
+        .replace('#include <map_fragment>', JIM_FRAG_MAP)
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix( roughnessFactor, 0.07, vSlopGloss );')
+        .replace('#include <emissivemap_fragment>', 'vec3 sjBase = diffuseColor.rgb;\nvec3 sjEm0 = totalEmissiveRadiance;\n#include <emissivemap_fragment>')
+        .replace('#include <lights_physical_fragment>', `${JIM_FRAG_KEEP}\n#include <lights_physical_fragment>`)
+        .replace('#include <opaque_fragment>', `${JIM_FRAG_RIM}\n#include <opaque_fragment>`);
+    }
+  };
+  m.customProgramCacheKey = () => key;
+  return m;
+}
+
+/** Which of the shared mesh's optional parts (FEAT bits) have to be drawn for these mistake strengths (by SF bit index). */
+function featMask(lv: ArrayLike<number>) {
+  let m = 0;
+  if (lv[0] > 0) m |= 1 << FEAT.eye3;
+  if (lv[1] > 0) m |= (1 << FEAT.legL) | (1 << FEAT.legR);
+  if (lv[2] > 0) m |= (1 << FEAT.earL) | (1 << FEAT.earR);
+  if (lv[3] > 0) m |= 1 << FEAT.tail;
+  return m;
+}
+
+/** A fresh skeleton (the real rig + the mistakes' bones) with the shared body mesh bound to it. */
+function buildRig(model: SlopModelData, geometry: THREE.BufferGeometry, mat: THREE.Material) {
+  const root = new THREE.Group();
+  root.name = 'Jimothy';
+  const list: THREE.Bone[] = [];
+  const bones: Record<string, THREE.Bone> = {};
+  for (const s of model.bones) {
+    const b = new THREE.Bone();
+    b.name = s.name;
+    b.position.copy(s.pos);
+    (s.parent ? bones[s.parent] : root).add(b);
+    bones[s.name] = b;
+    list.push(b);
+  }
+  const mesh = new THREE.SkinnedMesh(geometry, mat);
+  mesh.name = 'SlopothyBody';
+  // fixed generous bounds: never CPU-skin 13k vertices to cull or place a speech bubble
+  mesh.boundingBox = model.box.clone();
+  mesh.boundingSphere = model.bounds.clone();
+  root.add(mesh);
+  mesh.bind(new THREE.Skeleton(list, model.boneInverses.slice()), new THREE.Matrix4());
+  return { root, mesh, bones };
+}
+
 let ghostSerial = 0;
 
 export class Slopothy {
@@ -57,8 +236,16 @@ export class Slopothy {
   readonly body: RAPIER.RigidBody;
   readonly root = new THREE.Group();
   readonly pivot = new THREE.Group();
-  readonly mesh: THREE.Mesh;
+  /** The real Jimothy's rig (skinned mesh + bones), posed by his own animator. */
+  readonly model: THREE.Group;
+  readonly mesh: THREE.SkinnedMesh;
+  readonly quad: JimothyQuad;
   readonly u: SlopUniforms;
+  /** SF bit flags: what the generator got wrong. */
+  readonly mistakes: number;
+  private bones: Record<string, THREE.Bone>;
+  private tail: THREE.Bone[];
+  private rest: { neck: THREE.Vector3; head: THREE.Vector3 };
   private mat: THREE.MeshStandardMaterial;
   private depthMat: THREE.MeshDepthMaterial;
   private ghostMat: THREE.MeshStandardMaterial | null = null;
@@ -66,11 +253,17 @@ export class Slopothy {
   private ghostT = -1;
   private phaseFrames = 0;
   private phaseGhost = false;
+  private fur: THREE.Mesh | null = null;
+  private data: SlopModelData;
+  /** Which optional parts the mesh's current index buffer draws (FEAT bits). */
+  private geoMask = 0;
 
   role: SlopRole;
   scale: number;
   readonly correct: boolean;
+  /** Collider radius / centre height above its bottom (scaled). */
   readonly r: number;
+  readonly halfH: number;
   home: THREE.Vector3;
   homeR = 16;
   readonly bornAt: number;
@@ -93,9 +286,33 @@ export class Slopothy {
   /** Why it is dissolving (washed / water / unplug / timeout / cap). */
   reason: DissolveReason | null = null;
   // animation
-  private legFreq: number[] = [];
-  private legPhase: number[] = [];
+  private st: AnimState = {
+    mode: 'walk',
+    speed: 0,
+    vy: 0,
+    grounded: true,
+    carrying: false,
+    washing: false,
+    flop: false,
+    time: 0,
+    sinceChitter: 99,
+    sinceBonk: 99,
+    climbSpeed: 0,
+    idleTime: 0,
+    turn: 0,
+  };
   private animPhase = Math.random() * 100;
+  private animDt = 0;
+  private skelDt = 0;
+  private skelFrame = 0;
+  private lastYaw = this.facing;
+  private chitterAt = -99;
+  private bonkAt = -99;
+  /** Current strength of each mistake (index = bit), eased so they grow / flicker instead of popping. */
+  private lvl = new Float32Array(8);
+  private flicker = 0;
+  private flickerT = 0;
+  private eye3Blink = 1;
   private popT = 1;
   private tumble = 0;
   private tumbleV = 0;
@@ -126,64 +343,101 @@ export class Slopothy {
     this.role = opts.role;
     this.scale = opts.scale ?? (opts.role === 'tiny' ? 0.42 : rand(0.92, 1.1));
     this.correct = !!opts.correct;
-    this.r = BASE_R * this.scale;
+    this.mistakes = this.correct ? 0 : (opts.mistakes ?? rollMistakes(opts.role));
+    this.r = BODY_R * this.scale;
+    this.halfH = HALF * this.scale;
     this.home = (opts.home ?? ground).clone();
     this.homeR = opts.role === 'campus' ? 22 : 16;
     this.bornAt = game.time;
     const now = game.time;
-    this.nextGlitch = now + rand(1, 4);
+    this.nextGlitch = now + (this.correct ? rand(15, 35) : rand(1, 4));
     this.nextBlocky = now + rand(3, 9);
     this.nextPhase = now + rand(3, 10);
     this.nextHeadSnap = now + rand(6, 18);
     this.nextTalk = now + rand(4, 14);
     this.relocateAt = now + rand(25, 45);
-    for (let i = 0; i < 6; i++) {
-      // legs out of sync: every leg has its own tempo (the extra legs are especially confused)
-      this.legFreq.push(rand(7, 12) * (i >= 4 ? rand(0.6, 1.6) : 1));
-      this.legPhase.push(Math.random() * Math.PI * 2);
-    }
 
-    // ---- visual
-    this.u = makeSlopUniforms(model.rig);
-    if (this.correct) {
-      this.u.uIri.value = 0;
-      this.u.uExtra.value = 0;
-    }
-    this.mat = makeSlopMaterial(this.u);
-    this.depthMat = makeSlopDepthMaterial(this.u);
-    this.mesh = new THREE.Mesh(model.geometry, this.mat);
+    // ---- visual: the real Jimothy, re-rigged with this one's mistakes
+    const u = (this.u = makeSlopUniforms(model.rig));
+    u.uFeat = { value: new Array(MAX_FEAT).fill(0) };
+    u.uFeatA = { value: model.featAnchors };
+    u.uSculpt = { value: this.correct ? 0 : 1 };
+    u.uMelt = { value: 0 };
+    u.uRim = { value: this.correct ? 1 : 0 };
+    u.uFurRim = furUniforms.uFurRim;
+    u.uIri.value = this.correct ? 0 : 0.48;
+    // glossy, over-smoothed plastic with a faint lavender "AI grade" (the normal one: his own matte coat)
+    this.mat = jimothyShader(makeSlopMaterial(u, { roughness: this.correct ? 0.92 : 0.3, metalness: this.correct ? 0 : 0.08 }), true, 'slopothy-lit-v1');
+    this.mat.map = model.coat;
+    if (!this.correct) this.mat.color.set(0xeee4ff);
+    this.depthMat = jimothyShader(makeSlopDepthMaterial(u), false, 'slopothy-depth-v1');
+    for (let i = 0; i < 8; i++) this.lvl[i] = this.mistakes & (1 << i) ? 1 : 0;
+    this.data = model;
+    this.geoMask = featMask(this.lvl);
+    const rig = buildRig(model, model.geometryFor(this.geoMask), this.mat);
+    this.model = rig.root;
+    this.mesh = rig.mesh;
+    this.bones = rig.bones;
+    this.tail = model.tailBones.map((n) => this.bones[n]).filter(Boolean);
+    this.rest = { neck: this.bones.Neck.position.clone(), head: this.bones.Head.position.clone() };
     this.mesh.customDepthMaterial = this.depthMat;
-    this.mesh.castShadow = true;
+    this.mesh.castShadow = !this.correct;
     this.mesh.receiveShadow = true;
-    // model origin sits above the ball centre so the feet hover a little above the ground
-    this.mesh.position.y = -model.footY - BASE_R + HOVER;
-    this.mesh.frustumCulled = true;
-    this.pivot.add(this.mesh);
+    this.quad = new JimothyQuad(this.model);
+    this.model.position.set(0, -HALF + (this.correct ? HOVER_NORMAL : HOVER), -0.04);
+    if (this.correct) {
+      // exactly his look: shell fur like the player's (its material already has his rim light). It's small, so fewer
+      // shells do (the quality setting's 0 = no shells still applies).
+      this.mat.userData.furRim = true;
+      const shells = furSettings.shells;
+      furSettings.shells = Math.min(shells, this.scale < 0.6 ? 6 : shells);
+      try {
+        applyFur(this.model);
+      } finally {
+        furSettings.shells = shells;
+      }
+      this.fur = (this.mesh.children.find((c) => c.userData.furShell) as THREE.Mesh | undefined) ?? null;
+      const shell = this.fur as THREE.SkinnedMesh | null;
+      if (shell?.isSkinnedMesh) {
+        // (a speech bubble measures the model: never CPU-skin the shells for it)
+        shell.boundingBox = model.box.clone();
+        shell.boundingSphere = model.bounds.clone();
+      }
+    }
+    this.pivot.add(this.model);
     this.root.add(this.pivot);
     this.root.name = this.role === 'tiny' ? 'TinySlopothy' : 'Slopothy';
     this.root.scale.setScalar(this.scale);
     this.root.userData.slopOwned = true;
+    this.root.traverse((o) => (o.userData.slopOwned = true));
     game.scene.add(this.root);
 
-    // ---- physics
-    const p = ground.clone().add(new THREE.Vector3(0, this.r + 0.06, 0));
+    // ---- physics: an upright capsule around his body (rotation-free, slides over curbs)
+    const p = ground.clone().add(new THREE.Vector3(0, this.halfH + 0.06, 0));
     const desc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(p.x, p.y, p.z)
       .lockRotations()
       .setLinearDamping(0.35)
       .setCcdEnabled(true);
     const mass = BASE_MASS * this.scale * this.scale * this.scale;
-    const cd = RAPIER.ColliderDesc.ball(this.r)
+    // (next to no friction: they hover. The AI eases their velocity; stunned ones get a hover drag in update())
+    const cd = RAPIER.ColliderDesc.capsule(BODY_HH * this.scale, this.r)
       .setMass(mass)
-      .setFriction(0.5)
+      .setFriction(0.05)
+      .setFrictionCombineRule(RAPIER.CoefficientCombineRule.Min)
       .setRestitution(0.25)
       .setCollisionGroups(groups(G.ANIMAL, G.ALL & ~G.TRIGGER & ~G.WATER & ~G.DEBRIS));
     this.body = game.physics.createBody(desc, [cd]);
     this.pos.copy(p);
     this.root.position.copy(p);
     this.target.copy(p);
+    // settle into a pose (no bind-pose frame when it pops in)
+    this.st.time = now + this.animPhase;
+    for (let i = 0; i < 6; i++) this.quad.animate(1 / 20, this.st);
+    this.poseMistakes(now, 1);
 
-    const size = new THREE.Vector3(0.78, 0.84, 0.86).multiplyScalar(this.scale);
+    // (size.y: carried on Jimothy's back it hovers just clear of his fur)
+    const size = new THREE.Vector3(0.46, 0.7, 0.86).multiplyScalar(this.scale);
     const self = this;
     this.entity = game.entities.create({
       kind: 'slop',
@@ -192,7 +446,14 @@ export class Slopothy {
       object: this.root,
       mass,
       tags: new Set(['grabbable', 'washable', 'slop', 'slopothy']),
-      data: { size, floatRadius: this.r, buoyancy: 1.2, slopothy: true },
+      data: {
+        size,
+        floatRadius: 0.3 * this.scale,
+        buoyancy: 1.2,
+        slopothy: true,
+        mistakes: this.mistakes,
+        variant: this.correct ? 'Suspiciously Normal' : (SLOP_VARIANTS.find((v) => this.mistakes & v.mistakes)?.name ?? 'Plain'),
+      },
       onWash(g) {
         self.onWash(g);
       },
@@ -223,6 +484,13 @@ export class Slopothy {
 
   get alive() {
     return !this.dying && !this.dead;
+  }
+
+  /** A line about its own mistakes (or plain slop). */
+  mistakeLine(): string {
+    const own = MISTAKE_BITS.filter((b) => this.mistakes & b);
+    if (!own.length || Math.random() < 0.45) return pick(SLOP_IDLE);
+    return pick(SLOP_MISTAKE[pick(own)] ?? SLOP_IDLE);
   }
 
   // ---------------------------------------------------------------- reactions
@@ -266,8 +534,9 @@ export class Slopothy {
   /** Bonked: splits into flickering duplicates for a second (it's fine). */
   scatter() {
     const game = this.game;
-    if (!this.ghostMat) this.ghostMat = makeSlopMaterial(this.u, { ghost: true });
+    if (!this.ghostMat) this.ghostMat = jimothyShader(makeSlopMaterial(this.u, { ghost: true }), true, 'slopothy-ghost-v1');
     while (this.ghosts.length < 3) {
+      // (a still copy of the whole mesh: the duplicates freeze in the generator's default pose)
       const m = new THREE.Mesh(this.mesh.geometry, this.ghostMat);
       m.name = 'SlopGhost' + ghostSerial++;
       m.frustumCulled = false;
@@ -282,8 +551,8 @@ export class Slopothy {
       const sp = rand(2.5, 5);
       gh.vel.set(Math.cos(a) * sp, rand(1.5, 3.5), Math.sin(a) * sp);
       gh.spin = rand(-10, 10);
-      gh.mesh.position.copy(this.mesh.getWorldPosition(_v));
-      gh.mesh.quaternion.copy(this.mesh.getWorldQuaternion(new THREE.Quaternion()));
+      gh.mesh.position.copy(this.model.getWorldPosition(_v));
+      gh.mesh.quaternion.copy(this.model.getWorldQuaternion(_q));
       gh.mesh.scale.setScalar(this.scale * rand(0.85, 1.15));
     }
     this.ghostT = 0;
@@ -317,6 +586,7 @@ export class Slopothy {
         break;
       }
       case 'chitter':
+        this.chitterAt = this.game.time;
         this.game.sfx('slop_voice', this.pos, 0.6, rand(1.1, 1.4));
         break;
       case 'bonk':
@@ -346,6 +616,13 @@ export class Slopothy {
     game.physics.removeBody(this.body);
     for (const g of this.ghosts) g.mesh.visible = false;
     this.mesh.visible = true;
+    if (this.correct) {
+      // plot twist: the shimmer shows through as it goes
+      this.u.uIri.value = 1;
+      this.u.uRim.value = 0;
+      this.mat.roughness = 0.3;
+      if (this.fur) this.fur.visible = false;
+    }
     game.events.emit('slopDissolve', { position: pos, entity: this.entity, reason, scale: this.scale });
     game.sfx('dissolve', pos, this.role === 'tiny' ? 0.5 : 0.85, this.role === 'tiny' ? 1.4 : 1);
     this.mgr.onDissolved(this, reason, pos);
@@ -375,7 +652,7 @@ export class Slopothy {
     this.aiTimer -= dt;
     if (!held && (this.lod === 0 || this.aiTimer <= 0)) {
       const vol = waterOf(game)?.volumeAt(this.pos);
-      if (vol && this.pos.y < vol.surfaceY + this.r * 0.2) {
+      if (vol && this.pos.y - this.halfH < vol.surfaceY - 0.25 * this.scale) {
         const byPlayer = now - this.lastPlayerTouch < 8 || now - (this.entity.data.thrownAt ?? -100) < 8;
         this.mgr.talkAt(this, 'Water?! That was not in my training da—');
         this.dissolve(byPlayer ? 'washed' : 'water');
@@ -401,7 +678,7 @@ export class Slopothy {
     } else if (this.aiTimer <= 0) this.aiTimer = 0.25;
 
     // grounded probe
-    const hit = game.physics.raycast(this.pos, _down, this.r + 0.18, GROUND_FILTER, b);
+    const hit = game.physics.raycast(this.pos, _down, this.halfH + 0.15, GROUND_FILTER, b);
     this.grounded = !!hit;
 
     if (this.pendingImitate && now >= this.pendingImitate.at) {
@@ -416,6 +693,11 @@ export class Slopothy {
 
     switch (this.state) {
       case 'stunned':
+        // hover drag (they barely touch the ground, so friction doesn't stop them)
+        if (this.grounded) {
+          const k = Math.exp(-dt * 2.2);
+          b.setLinvel({ x: v.x * k, y: v.y, z: v.z * k }, true);
+        }
         if (now > this.stunUntil && this.grounded && Math.hypot(v.x, v.z) < 2) {
           this.state = this.role === 'tiny' ? 'follow' : 'wander';
           this.pickTarget();
@@ -478,7 +760,7 @@ export class Slopothy {
       if (this.wallT <= 0) {
         this.wallT = 0.2;
         const from = _v.copy(this.pos).add(_w.set(0, 0.05, 0));
-        const wall = game.physics.raycast(from, this.desired, this.r + 0.55, WALL_FILTER, b);
+        const wall = game.physics.raycast(from, this.desired, 0.43 * this.scale + 0.45, WALL_FILTER, b);
         if (wall && Math.abs(wall.normal.y) < 0.5) {
           if (this.state === 'wander') this.pickTarget(wall.normal);
           else this.desired.addScaledVector(wall.normal.setY(0).normalize(), 1.2).normalize();
@@ -522,6 +804,7 @@ export class Slopothy {
           b.setLinvel({ x: -im.dir.x * 4, y: 3.5, z: -im.dir.z * 4 }, true);
           this.glitch(0.3);
           this.tumbleV = rand(-10, 10);
+          if (this.game.time - this.bonkAt > 0.5) this.bonkAt = this.game.time;
           this.game.sfx('bonk', this.pos, 0.5, 1.4);
         }
         break;
@@ -565,7 +848,7 @@ export class Slopothy {
   }
 
   relocate(ground: THREE.Vector3) {
-    this.body.setTranslation({ x: ground.x, y: ground.y + this.r + 0.08, z: ground.z }, true);
+    this.body.setTranslation({ x: ground.x, y: ground.y + this.halfH + 0.08, z: ground.z }, true);
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.home.copy(ground);
     this.pos.copy(ground);
@@ -591,6 +874,13 @@ export class Slopothy {
       u.uGlitch.value = 0.6;
       this.root.position.y += dt * 0.35;
       this.pivot.rotation.y += dt * 2;
+      // it flails as it goes
+      if (this.root.visible) {
+        this.st.mode = 'ragdoll';
+        this.st.time = now + this.animPhase;
+        this.quad.animate(dt, this.st);
+        this.poseMistakes(now, dt);
+      }
       if (this.dieT > 1.05) this.dispose();
       return;
     }
@@ -600,11 +890,13 @@ export class Slopothy {
     const dP = player ? this.root.position.distanceTo(player.position) : 999;
     this.root.visible = dP < 150;
     if (!this.root.visible) return;
-    // shadows only up close (tiny ones only right next to Jimothy)
-    this.mesh.castShadow = dP < (this.role === 'tiny' ? 14 : 38);
+    // shadows only up close (tiny ones only right next to Jimothy); the normal one never casts one (a tell)
+    this.mesh.castShadow = !this.correct && dP < (this.role === 'tiny' ? 14 : 32);
     // far ones animate at a lower rate
+    this.animDt += dt;
     if (dP > 70 && (frame + this.followIndex) % 4 !== 0) return;
-    const adt = dP > 70 ? dt * 4 : dt;
+    const adt = this.animDt;
+    this.animDt = 0;
 
     const v = this.body.linvel();
     const hs = Math.hypot(v.x, v.z);
@@ -621,108 +913,110 @@ export class Slopothy {
     while (dy < -Math.PI) dy += Math.PI * 2;
     this.facing += dy * (1 - Math.exp(-adt * 7));
 
-    // body pose (waddle, tumble, bad imitations)
-    this.animPhase += adt * (2 + hs * 2.4);
+    // body pose: hover bob, tumbles, bad imitations (his own animator does the rest)
     const walkAmp = clamp(hs / 2, 0, 1.3);
     const airborne = !this.grounded && !held && Math.abs(v.y) > 1.5;
-    if (airborne || this.state === 'stunned') this.tumble += this.tumbleV * adt;
+    const tumbling = airborne || this.state === 'stunned';
+    if (tumbling) this.tumble += this.tumbleV * adt;
     else {
       this.tumble += (Math.round(this.tumble / (Math.PI * 2)) * Math.PI * 2 - this.tumble) * (1 - Math.exp(-adt * 8));
       this.tumbleV *= Math.exp(-adt * 3);
     }
-    let rx = Math.sin(this.animPhase * 0.5) * 0.05 * walkAmp + this.tumble;
+    const wob = this.correct ? 0 : 1;
+    let rx = Math.sin(now * 3.1 + this.animPhase) * 0.03 * walkAmp * wob + this.tumble;
     let ry = this.facing;
-    let rz = Math.sin(now * 7.3 + this.animPhase) * 0.13 * walkAmp;
-    let lift = Math.sin(now * 2.1 + this.animPhase) * 0.03;
-    const legs = SLOP_LEGS;
-    let legAmp = 0.12 + 0.7 * walkAmp;
-    let legRate = 1;
-    let armOverride: number | null = null;
+    let rz = Math.sin(now * 7.3 + this.animPhase) * 0.05 * walkAmp * wob;
+    let lift = Math.sin(now * 2.1 + this.animPhase) * (this.correct ? 0.004 : 0.03);
+    const st = this.st;
+    // flailing when carried, stunned or spinning through the air; a plain jump gets his own airborne pose
+    st.mode = held || this.state === 'stunned' || (airborne && Math.abs(this.tumbleV) > 2) ? 'ragdoll' : 'walk';
+    st.speed = held ? 0 : hs;
+    st.vy = v.y;
+    st.grounded = !airborne;
+    st.washing = false;
+    st.flop = false;
+    st.climbSpeed = 0;
     if (im) {
       switch (im.kind) {
         case 'roll':
           ry += im.t * 17; // rolls around the wrong axis
           rx = 0.9;
-          legAmp = 0.05;
+          st.mode = 'roll';
           break;
         case 'flop': {
           const k = Math.min(1, im.t * 4) * Math.min(1, (im.dur - im.t) * 4);
           rz = Math.PI * k;
           lift += 0.25 * k;
-          legRate = 2.4;
-          legAmp = 1.1;
+          st.mode = 'ragdoll';
+          st.flop = true;
           break;
         }
         case 'wash':
-          armOverride = -2.1 + Math.sin(now * 26) * 0.45;
+          st.washing = true;
           break;
         case 'climb':
-          rx = -1.2;
-          legRate = 1.8;
-          legAmp = 1.0;
-          break;
-        case 'jump':
-          legAmp = 1.2;
-          legRate = 0.4;
+          // climbing the air: belly to a wall that isn't there
+          rx = -1.35;
+          st.mode = 'climb';
+          st.climbSpeed = 1.1;
           break;
         default:
           break;
       }
     }
-    if (held) {
-      legAmp = 1.2;
-      legRate = 2.2;
-      rz = Math.sin(now * 13) * 0.25;
-    }
+    if (held) rz = Math.sin(now * 13) * 0.25;
     this.pivot.rotation.set(rx, ry, rz, 'YXZ');
     this.pivot.position.y = lift;
 
-    // legs: every leg keeps its own (wrong) tempo
-    for (let i = 0; i < legs.length; i++) {
-      const p = legs[i];
-      let a = Math.sin(now * this.legFreq[i] * legRate + this.legPhase[i]) * legAmp;
-      let roll = 0;
-      if (i >= 4) roll = Math.sin(now * 3.1 + i) * 0.45; // extra legs flail sideways
-      if (armOverride != null && (p === SP.armL || p === SP.armR)) a = armOverride + (p === SP.armL ? 0.2 : -0.2);
-      u.uRot.value[p].set(a, 0, roll);
+    // his animator: the real gait, walking on nothing. Further away it runs every other / third frame; off screen it
+    // only catches up now and then.
+    this.skelDt += adt;
+    this.skelFrame++;
+    const onScreen = dP < 5 || this.mgr.inView(this.root.position, 1.2 * this.scale);
+    const every = !onScreen ? 12 : dP < 22 ? 1 : dP < 45 ? 2 : 3;
+    if ((this.skelFrame + this.followIndex) % every === 0) {
+      let turn = this.facing - this.lastYaw;
+      while (turn > Math.PI) turn -= Math.PI * 2;
+      while (turn < -Math.PI) turn += Math.PI * 2;
+      this.lastYaw = this.facing;
+      st.turn = this.skelDt > 0 ? clamp(turn / this.skelDt, -8, 8) : 0;
+      st.time = now + this.animPhase;
+      st.sinceChitter = now - this.chitterAt;
+      st.sinceBonk = now - this.bonkAt;
+      st.idleTime = st.mode === 'walk' && hs < 0.25 ? (st.idleTime ?? 0) + this.skelDt : 0;
+      this.quad.animate(Math.min(this.skelDt, 0.25), st);
+      this.poseMistakes(now, this.skelDt);
+      this.skelDt = 0;
     }
-    // head: tilts, stares, occasionally snaps 90°
-    let headTilt = Math.sin(now * 0.9 + this.animPhase) * 0.22;
-    let headYaw = Math.sin(now * 0.6 + this.facing) * 0.3;
-    if (now > this.nextHeadSnap) {
-      this.nextHeadSnap = now + rand(7, 18);
-      this.headSnapT = rand(0.25, 0.6);
-    }
-    if (this.headSnapT > 0) {
-      this.headSnapT -= adt;
-      headTilt += Math.PI / 2;
-    }
-    if (im?.kind === 'chitter') headTilt += Math.sin(now * 40) * 0.25;
-    u.uRot.value[SP.head].set(im?.kind === 'wash' ? 0.35 : 0, headYaw, headTilt);
-    u.uRot.value[SP.tail].set(0.2 + Math.sin(now * 2.3) * 0.15, Math.sin(now * 5.2 + this.animPhase) * 0.55, 0);
-    u.uRot.value[SP.extraTail].set(Math.sin(now * 4.1) * 0.3, Math.sin(now * 9.3) * 0.7, 0);
 
     // spawn pop
     if (this.popT < 1) {
       this.popT = Math.min(1, this.popT + adt * 2.2);
-      const s = this.popT < 0.7 ? this.popT / 0.7 * 1.25 : 1.25 - (this.popT - 0.7) / 0.3 * 0.25;
+      const s = this.popT < 0.7 ? (this.popT / 0.7) * 1.25 : 1.25 - ((this.popT - 0.7) / 0.3) * 0.25;
       this.root.scale.setScalar(this.scale * Math.max(0.01, s));
     } else this.root.scale.setScalar(this.scale);
 
-    // glitch pulses (not for the "correct" one... mostly)
-    if (!this.correct || Math.random() < 0.002) {
-      if (now > this.nextGlitch) {
-        this.nextGlitch = now + rand(1.5, 5.5);
-        this.glitchT = Math.max(this.glitchT, rand(0.08, 0.3));
+    // glitch pulses (the "correct" one only very rarely: that, the no-shadow and the hover are its tells)
+    if (now > this.nextGlitch) {
+      this.nextGlitch = now + (this.correct ? rand(20, 45) : rand(1.5, 5.5));
+      this.glitchT = Math.max(this.glitchT, this.correct ? rand(0.12, 0.2) : rand(0.08, 0.3));
+      // a mistake it doesn't have flickers in for a moment
+      if (this.correct || Math.random() < 0.35) {
+        const spare = MISTAKE_BITS.filter((b) => !(this.mistakes & b) && b !== SF.melt);
+        if (spare.length) {
+          this.flicker = this.correct ? SF.eye3 : pick(spare);
+          this.flickerT = this.glitchT + 0.12;
+        }
       }
-      if (now > this.nextBlocky) {
-        this.nextBlocky = now + rand(4, 11);
-        this.blockyT = rand(0.15, 0.4);
-      }
+    }
+    if (!this.correct && now > this.nextBlocky) {
+      this.nextBlocky = now + rand(4, 11);
+      this.blockyT = rand(0.15, 0.4);
     }
     this.glitchT -= adt;
     this.blockyT -= adt;
-    u.uGlitch.value = this.glitchT > 0 ? 1 : 0;
+    this.flickerT -= adt;
+    u.uGlitch.value = this.glitchT > 0 ? (this.correct ? 0.3 : 1) : 0;
     u.uBlocky.value = this.blockyT > 0 ? 0.75 : 0;
     u.uFlash.value = Math.max(0, u.uFlash.value - adt * 1.6);
 
@@ -735,10 +1029,10 @@ export class Slopothy {
         if (!this.ghostMat) this.scatterPrepare();
         const g = this.ghosts[0];
         if (g) {
-          this.mesh.getWorldPosition(g.mesh.position);
+          this.model.getWorldPosition(g.mesh.position);
           const side = _v.set(Math.cos(this.facing), 0, -Math.sin(this.facing)).multiplyScalar(rand(-0.5, 0.5) * this.scale * 1.5);
           g.mesh.position.add(side);
-          this.mesh.getWorldQuaternion(g.mesh.quaternion);
+          this.model.getWorldQuaternion(g.mesh.quaternion);
           g.mesh.scale.setScalar(this.scale);
         }
       }
@@ -753,7 +1047,7 @@ export class Slopothy {
     // bonk duplicates
     if (this.ghostT >= 0) {
       this.ghostT += adt;
-      const home = this.mesh.getWorldPosition(_v);
+      const home = this.model.getWorldPosition(_v);
       for (const g of this.ghosts) {
         if (this.ghostT < 0.5) {
           g.mesh.position.addScaledVector(g.vel, adt);
@@ -774,6 +1068,105 @@ export class Slopothy {
     }
   }
 
+  /**
+   * After his animator: drive the mistakes' bones (middle legs, spare ears, the long tail, the neck, wrong ears, AI
+   * hands, the third eye's blink) and the shader toggles.
+   */
+  private poseMistakes(now: number, dt: number) {
+    const b = this.bones;
+    let shown = this.mistakes;
+    if (this.flickerT > 0) shown |= this.flicker;
+    const lv = this.lvl;
+    for (let i = 0; i < 8; i++) {
+      const bit = 1 << i;
+      const want = shown & bit ? 1 : 0;
+      const k = this.flicker & bit ? 28 : 5;
+      lv[i] += (want - lv[i]) * (1 - Math.exp(-dt * k));
+      if (want === 0 && lv[i] < 0.004) lv[i] = 0;
+      else if (want === 1 && lv[i] > 0.996) lv[i] = 1;
+    }
+    const [eye3, legs, ears, tail, neck, melt, earMix, paws] = lv;
+    const f = this.u.uFeat.value as number[];
+    f[FEAT.eye3] = eye3;
+    f[FEAT.legL] = f[FEAT.legR] = legs;
+    f[FEAT.earL] = f[FEAT.earR] = ears;
+    f[FEAT.tail] = tail;
+
+    // six legs: the middle pair steps like an insect's, each copying the OTHER side's front leg (mirrored)
+    if (legs > 0) {
+      const mirror = (dst: THREE.Bone | undefined, src: THREE.Bone | undefined) => {
+        if (!dst || !src) return;
+        const s = src.quaternion;
+        dst.quaternion.set(s.x, -s.y, -s.z, s.w);
+      };
+      mirror(b.MidArmL, b.ArmR);
+      mirror(b.MidForearmL, b.ForearmR);
+      mirror(b.MidHandL, b.HandR);
+      mirror(b.MidArmR, b.ArmL);
+      mirror(b.MidForearmR, b.ForearmL);
+      mirror(b.MidHandR, b.HandL);
+      b.MidArmL?.quaternion.premultiply(Q_OUT_L);
+      b.MidArmR?.quaternion.premultiply(Q_OUT_R);
+    }
+    // the spare ears twitch with the real ones, splayed out
+    if (ears > 0) {
+      b.Ear2L?.quaternion.copy(b.EarL.quaternion).multiply(Q_SPLAY_L);
+      b.Ear2R?.quaternion.copy(b.EarR.quaternion).multiply(Q_SPLAY_R);
+    }
+    // the long tail: a lazy wave down its length (livelier while it's carried or rushing about)
+    if (tail > 0 && this.tail.length) {
+      const held = !!this.entity?.data?.heldByPlayer;
+      const amp = held || this.st.mode === 'ragdoll' ? 0.4 : 0.14 + Math.min(0.2, this.st.speed * 0.06);
+      for (let i = 0; i < this.tail.length; i++) {
+        const wag = Math.sin(now * 2.9 - i * 0.75 + this.animPhase) * amp * (0.5 + i * 0.12);
+        const up = Math.sin(now * 1.7 - i * 0.6 + this.animPhase) * 0.05 + (i === 0 ? 0.04 : 0);
+        _e.set(up, wag, 0, 'YXZ');
+        this.tail[i].quaternion.setFromEuler(_e);
+      }
+    }
+    // a neck: the head (and what little neck he has) pulled up and out of his chest
+    b.Neck.position.copy(this.rest.neck).addScaledVector(NECK_D1, neck);
+    b.Head.position.copy(this.rest.head).addScaledVector(NECK_D2, neck);
+    // wrong ears: one huge, one small and on backwards
+    b.EarL.scale.setScalar(1 + 0.8 * earMix);
+    b.EarR.scale.setScalar(1 - 0.25 * earMix);
+    if (earMix > 0) b.EarR.quaternion.multiply(_q.copy(Q_ID).slerp(Q_BACKWARDS, earMix));
+    // AI hands: the paws are the hardest part
+    const hand = 1 + 0.95 * paws;
+    const foot = 1 + 0.55 * paws;
+    for (const n of ['HandL', 'HandR', 'MidHandL', 'MidHandR']) b[n]?.scale.setScalar(hand);
+    for (const n of ['FootL', 'FootR']) b[n]?.scale.setScalar(foot);
+    // the face slides down and drips, then pulls itself back together a bit
+    this.u.uMelt.value = melt * (0.72 + 0.28 * Math.sin(now * 0.8 + this.animPhase)) + (this.glitchT > 0 ? 0.25 * melt : 0);
+    // the third eye blinks when it likes
+    if (b.Eye3) {
+      this.eye3Blink -= dt;
+      let ey = 1;
+      if (this.eye3Blink < 0) {
+        ey = 0.1;
+        if (this.eye3Blink < -0.14) this.eye3Blink = 0.8 + Math.random() * 3.5;
+      }
+      b.Eye3.scale.set(1, ey, 1);
+    }
+    // now and then the head snaps 90° sideways for a moment
+    if (!this.correct) {
+      if (now > this.nextHeadSnap) {
+        this.nextHeadSnap = now + rand(7, 18);
+        this.headSnapT = rand(0.25, 0.6);
+      }
+      if (this.headSnapT > 0) {
+        this.headSnapT -= dt;
+        b.Head.quaternion.multiply(Q_SNAP);
+      }
+    }
+    // draw only the parts that are showing (a flickering one joins the index buffer while it's there)
+    const mask = featMask(lv);
+    if (mask !== this.geoMask) {
+      this.geoMask = mask;
+      this.mesh.geometry = this.data.geometryFor(mask);
+    }
+  }
+
   private scatterPrepare() {
     this.scatter();
     this.ghostT = -1;
@@ -790,6 +1183,8 @@ export class Slopothy {
     this.mat.dispose();
     this.depthMat.dispose();
     this.ghostMat?.dispose();
+    (this.fur?.userData.furMat as THREE.Material | undefined)?.dispose();
+    this.mesh.skeleton.dispose();
     if (this.entity.alive) {
       this.game.entities.remove(this.entity);
       this.game.physics.removeBody(this.body);
@@ -814,6 +1209,8 @@ export class SlopothyManager {
   private cheerTimer = 2;
   private relocateTimer = 15;
   private frame = 0;
+  private frustum = new THREE.Frustum();
+  private projView = new THREE.Matrix4();
   /** Where portal waves come out (set by the system). */
   portal: THREE.Vector3 | null = null;
   campusCenter = new THREE.Vector3(-120, 0, -120);
@@ -858,6 +1255,11 @@ export class SlopothyManager {
   }
   alive(): Slopothy[] {
     return this.list.filter((s) => s.alive);
+  }
+
+  /** Is a sphere in the camera's view (last frame's camera)? */
+  inView(p: THREE.Vector3, r: number) {
+    return this.frustum.intersectsSphere(_sphere.set(p, r));
   }
 
   /** Spawn one Slopothy standing at `ground`. Returns null if capped or the model isn't ready. */
@@ -942,11 +1344,11 @@ export class SlopothyManager {
     if (!player) return;
     const now = game.time;
 
-    // idle chatter
+    // idle chatter (often about their own mistakes)
     for (const s of this.list) {
       if (!s.alive || now < s.nextTalk) continue;
       s.nextTalk = now + rand(9, 22);
-      if (s.pos.distanceTo(player.position) < 22) this.talk(s, pick(SLOP_IDLE));
+      if (s.pos.distanceTo(player.position) < 22) this.talk(s, s.mistakeLine());
     }
 
     // fans cheer the fakes (they think it's Jimothy)
@@ -1013,6 +1415,9 @@ export class SlopothyManager {
 
   animate(dt: number) {
     const player = this.game.get<Jimothy>('player');
+    const cam = this.game.camera;
+    this.projView.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.projView);
     this.frame++;
     for (const s of this.list) s.animate(dt, player, this.frame);
   }

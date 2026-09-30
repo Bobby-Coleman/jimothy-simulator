@@ -53,7 +53,7 @@ const ON: Record<string, { lines: Headline[]; weight?: number; cooldown?: number
 };
 
 const FILLER = [
-  "Scientists confirm Jimothy is 'basically a sphere.' More at 11.",
+  "Scientists confirm Jimothy's neck is 'more of a concept.' More at 11.",
   "Jimothy video passes 20 million views. Jimothy still unaware what a view is.",
   'SlopCorp unveils new AI model that generates raccoons with only seven fingers. "Huge improvement."',
   'Opinion: is it ethical to be this round? (Yes.)',
