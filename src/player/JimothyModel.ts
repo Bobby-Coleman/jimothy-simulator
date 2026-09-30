@@ -20,6 +20,8 @@ export interface AnimState {
   idleTime?: number;
   /** 0..1 night factor (eyeshine). */
   night?: number;
+  /** Turn rate (rad/s, + = turning to his left). */
+  turn?: number;
 }
 
 export type FormName = 'body' | 'ball';

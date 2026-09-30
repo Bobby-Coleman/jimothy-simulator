@@ -9,21 +9,44 @@ import type { AnimState } from './JimothyModel';
  * model. Legs are placed with planar two-bone IK (knees bend forward, elbows backward); feet and hands are kept flat
  * on the ground in stance.
  *
- * Gaits here are a first pass (walk → trot → bound with speed); the walk cycle measured from the footage replaces them.
+ * His walk is measured frame by frame from the footage (see JIM_WALK); sprinting is a half-bound with the same
+ * exaggerated reach and kick.
  */
 
 type LegKey = 'HL' | 'HR' | 'FL' | 'FR';
 
+const clamp = THREE.MathUtils.clamp;
+
+/** Footfall timing: a leg's phase is (cycle phase + off) mod 1; it is on the ground while that is below the duty factor. */
 interface Gait {
-  duty: number;
   off: Record<LegKey, number>;
-  lift: number;
 }
 
-const GAITS: Record<'walk' | 'trot' | 'bound', Gait> = {
-  walk: { duty: 0.66, off: { HL: 0, FL: 0.25, HR: 0.5, FR: 0.75 }, lift: 0.06 },
-  trot: { duty: 0.48, off: { HL: 0, FR: 0.02, HR: 0.5, FL: 0.52 }, lift: 0.08 },
-  bound: { duty: 0.36, off: { HL: 0, HR: 0.07, FL: 0.5, FR: 0.57 }, lift: 0.1 },
+/**
+ * Jimothy's walk, timed frame by frame from the footage (a 0.8 s cycle at his ~0.55 m/s stroll): a PACE-LIKE lateral
+ * walk. The two legs on one side swing almost together: the front lifts first (~0.08 cycle before the hind) and lands
+ * just after it (~0.05); the other side follows half a cycle later, so he rocks from one side pair to the other (a
+ * short back on long legs: pacing keeps a hind foot from striking the front foot on its own side). The hind feet stay
+ * down ~70 % of the cycle, the fronts ~58 %: the front swing is the long, slow part. What makes it his are the swings:
+ * a front paw rises to chest height and reaches out well past his nose before dropping to plant; a hind foot leaves
+ * the ground stretched far back, kicks up high behind (sole up), then swings forward under his belly.
+ * (A leg's footfall is at cycle phase -off: LH 0, LF 0.05, RH 0.5, RF 0.55.)
+ */
+const JIM_WALK: Gait = { off: { HL: 0, FL: 0.95, HR: 0.5, FR: 0.45 } };
+/** Front duty = hind duty - this (the fronts lift earlier and land later than their hind). */
+const FRONT_DUTY_LESS = 0.12;
+/** Sprinting: a half-bound (hind feet nearly together, then the fronts), with the same reach and kick. */
+const GALLOP: Gait = { off: { HL: 0, HR: 0.08, FL: 0.5, FR: 0.58 } };
+/** Swing shape (metres, model frame): front paw rise and reach past its landing spot; hind foot kick-up height. */
+const FRONT_LIFT = 0.2;
+const FRONT_REACH = 0.12;
+const HIND_KICK = 0.2;
+const HIND_KICK_BACK = 0.08;
+
+/** 0 at x = 0 and 1, 1 at x = peak, smooth (sine halves). */
+const bump = (x: number, peak: number) => {
+  const t = clamp(x, 0, 1);
+  return t < peak ? Math.sin((Math.PI / 2) * (t / peak)) : Math.cos((Math.PI / 2) * ((t - peak) / (1 - peak)));
 };
 
 interface Leg {
@@ -47,7 +70,6 @@ interface Leg {
   abduct: number;
 }
 
-const clamp = THREE.MathUtils.clamp;
 const damp = (a: number, b: number, k: number, dt: number) => a + (b - a) * (1 - Math.exp(-k * dt));
 const wrap = (a: number) => {
   while (a > Math.PI) a -= Math.PI * 2;
@@ -233,20 +255,29 @@ export class JimothyQuad {
 
     // ---------------------------------------------------------------- gait timing
     const gspeed = mode === 'climb' ? s.climbSpeed * 1.6 : s.speed;
-    const stride = clamp(0.28 + 0.13 * gspeed, 0.3, 1.45);
-    const freq = mode === 'swim' ? 1.9 : mode === 'climb' ? clamp(gspeed / 0.5, 1.2, 4) : clamp(gspeed / stride, 0, 6.2);
+    // walk → gallop with speed; cadence rises with speed, the feet stay planted as long as his reach allows
+    const wGal = s01((gspeed - 5.4) / 1.6);
+    // hind duty 0.7 at his stroll, less as he hurries; the fronts are down a bit less
+    const dutyH = lerp(lerp(0.7, 0.55, s01((gspeed - 0.7) / 3.6)), 0.36, wGal);
+    const dutyF = lerp(dutyH - FRONT_DUTY_LESS, 0.36, wGal);
+    // 1.25 Hz at his ~0.55 m/s stroll (the footage), quicker steps as he goes faster
+    const fWalk = 0.95 + 0.5 * gspeed;
+    const fGal = 2.2 + 0.25 * gspeed;
+    const freq = mode === 'swim' ? 1.9 : mode === 'climb' ? clamp(gspeed / 0.5, 1.2, 4) : lerp(fWalk, fGal, wGal);
     if ((moving && (mode === 'walk' || mode === 'climb')) || mode === 'swim') this.phase = (this.phase + dt * freq) % 1;
     this.swayPhase += dt;
     const ph = this.phase;
-    // gait weights by speed
-    const wBound = s01((gspeed - 5.6) / 1.4);
-    const wTrot = s01((gspeed - 1.6) / 1.2) * (1 - wBound);
-    const wWalk = 1 - wTrot - wBound;
+    const stride = gspeed / Math.max(freq, 0.1);
+    // each foot sweeps (speed x its stance time) while planted, as far as his reach allows (then it skates a bit)
+    const halfStanceH = Math.min((stride * dutyH) / 2, lerp(0.25, 0.3, wGal));
+    const halfStanceF = Math.min((stride * dutyF) / 2, lerp(0.22, 0.3, wGal));
     const amt = moving ? 1 : 0;
 
     // ---------------------------------------------------------------- body pose (targets)
     let hipsY = 0;
+    let hipsX = 0;
     let hipsZ = 0;
+    let chestRoll = 0;
     let hipsPitch = 0;
     let hipsRoll = 0;
     let hipsYaw = 0;
@@ -268,7 +299,11 @@ export class JimothyQuad {
       this.lookYaw = (Math.random() - 0.5) * 1.1;
     }
     const idle = mode === 'walk' && !moving && s.grounded && !s.carrying && !s.washing;
-    if (idle) {
+    // idle grooming (like the ball's face wash): after a few seconds of standing still, every so often he sits up and
+    // washes his face with both front paws
+    const idleT = s.idleTime ?? 0;
+    const groom = this.sm('groom', idle && idleT > 6 && (idleT - 6) % 13 < 4 ? 1 : 0, 5, dt);
+    if (idle && groom < 0.05) {
       headYaw = this.lookYaw;
       headPitch = Math.sin(t * 0.5) * 0.05;
       this.sniffT -= dt;
@@ -288,43 +323,76 @@ export class JimothyQuad {
       leg.toePitch = 0;
       leg.abduct = 0;
     }
-    const step = (leg: Leg, g: Gait, lift: number, strideLen: number) => {
-      const p = (ph + g.off[leg.key]) % 1;
-      const A = strideLen * g.duty * 0.5;
+    /** One leg of Jimothy's walk / gallop at leg phase p: offsets from the rest pose + foot / hand pitch. */
+    const jimStep = (leg: Leg, p: number, A: number, d: number) => {
       let dz: number;
       let dy = 0;
       let pitch = 0;
-      if (p < g.duty) {
-        const u = p / g.duty;
+      if (p < d) {
+        // stance: from planted ahead to far back; the heel / wrist peels off the ground before lift-off (a hind heel
+        // early and high: pivoting on its toes, the ankle rises, which lets the leg stretch out straight far behind)
+        const u = p / d;
         dz = A * (1 - 2 * u);
-        pitch = s01((u - 0.7) / 0.3) * (leg.hind ? 0.55 : 0.45); // heel / wrist lifts before toe-off
-        dy = pitch * 0.03;
+        if (leg.hind) {
+          pitch = s01((u - 0.5) / 0.5) * 0.95;
+          dy = Math.sin(pitch) * 0.085;
+        } else {
+          pitch = s01((u - 0.72) / 0.28) * 0.5;
+          dy = pitch * 0.035;
+        }
       } else {
-        const w = (p - g.duty) / (1 - g.duty);
-        dz = -A + 2 * A * s01(w);
-        dy = lift * Math.sin(Math.PI * w);
-        pitch = Math.sin(Math.PI * Math.min(1, w * 1.3)) * (leg.hind ? 0.7 : 1.3);
+        const w = (p - d) / (1 - d);
+        if (leg.hind) {
+          // kick the foot up high behind (sole up), then swing it forward under the belly
+          dy = HIND_KICK * bump(w, 0.3);
+          dz = lerp(-A, A, s01((w - 0.22) / 0.78)) - HIND_KICK_BACK * bump(w, 0.18);
+          pitch = 2.5 * bump(w, 0.28);
+        } else if (w < 0.72) {
+          // reach: rise to chest height while stretching forward past the landing spot
+          const k = s01(w / 0.72);
+          dz = lerp(-A, A + FRONT_REACH, k);
+          dy = FRONT_LIFT * Math.sin((Math.PI / 2) * Math.min(1, w / 0.45));
+          pitch = w < 0.25 ? 0.9 * Math.sin((Math.PI * w) / 0.25) : -0.35 * s01((w - 0.25) / 0.3); // curl, then paw forward
+        } else {
+          // ...then drop onto it
+          const k = s01((w - 0.72) / 0.28);
+          dz = lerp(A + FRONT_REACH, A, k);
+          dy = FRONT_LIFT * (1 - k);
+          pitch = lerp(-0.35, 0, k);
+        }
       }
       return { dz, dy, pitch };
     };
-    const walkLegs = (strideLen: number, liftK: number, zBias: number, only?: (l: Leg) => boolean) => {
+    /** Plain stepping (climbing): lift, swing, plant. */
+    const plainStep = (leg: Leg, p: number, A: number, d: number, lift: number) => {
+      if (p < d) {
+        const u = p / d;
+        return { dz: A * (1 - 2 * u), dy: 0, pitch: s01((u - 0.7) / 0.3) * 0.5 };
+      }
+      const w = (p - d) / (1 - d);
+      return { dz: -A + 2 * A * s01(w), dy: lift * Math.sin(Math.PI * w), pitch: Math.sin(Math.PI * Math.min(1, w * 1.3)) * (leg.hind ? 0.7 : 1.2) };
+    };
+    const walkLegs = (plain = false) => {
       for (const leg of L) {
-        if (only && !only(leg)) continue;
         let dz = 0;
         let dy = 0;
         let pitch = 0;
         for (const [g, w] of [
-          [GAITS.walk, wWalk],
-          [GAITS.trot, wTrot],
-          [GAITS.bound, wBound],
+          [JIM_WALK, 1 - wGal],
+          [GALLOP, wGal],
         ] as [Gait, number][]) {
           if (w <= 0.001) continue;
-          const r = step(leg, g, g.lift * liftK, strideLen);
+          const p = (ph + g.off[leg.key]) % 1;
+          const r = plain
+            ? plainStep(leg, p, 0.16, 0.6, 0.07)
+            : jimStep(leg, p, leg.hind ? halfStanceH : halfStanceF, leg.hind ? dutyH : dutyF);
           dz += r.dz * w;
           dy += r.dy * w;
           pitch += r.pitch * w;
         }
-        leg.want.z += (dz + zBias) * amt;
+        // his hind feet land under the hip and push far back; his front paws land far ahead and end under the chest
+        const bias = plain ? 0 : (leg.hind ? -0.06 - 0.3 * halfStanceH : 0.03 + 0.2 * halfStanceF) * (1 - wGal);
+        leg.want.z += (dz + bias) * amt;
         leg.want.y += dy * amt;
         leg.endPitch = pitch * amt;
       }
@@ -352,16 +420,26 @@ export class JimothyQuad {
           earBack = 0.35;
         } else {
           if (moving) {
-            const bob = wWalk * 0.008 + wTrot * 0.014 + wBound * 0.03;
-            hipsY = -Math.abs(Math.sin(ph * Math.PI * 2 * (wBound > 0.5 ? 1 : 2))) * bob;
-            hipsRoll = Math.sin(ph * Math.PI * 2) * 0.03 * wWalk;
-            flex = wBound * Math.sin(ph * Math.PI * 2 + 0.6) * 0.16;
-            hipsPitch = wBound * Math.sin(ph * Math.PI * 2 + 2.2) * 0.07 + 0.02 * wTrot;
-            headPitch = -0.08 * wBound + Math.sin(ph * Math.PI * 4) * 0.025;
-            tailLift = 0.1 + 0.2 * wBound;
-            tailWag = Math.sin(ph * Math.PI * 2) * 0.18;
+            const c = ph * Math.PI * 2;
+            const wWalk = 1 - wGal;
+            // the pacing waddle: he rocks onto the side pair that's on the ground (the right pair carries him around
+            // phase 0.83 while the left pair swings, the left pair around 0.33), shifting over it and rolling toward
+            // it, lowest as each pair lands and highest halfway through its stance
+            const side = Math.cos(c - 0.83 * Math.PI * 2); // +1 = on his right pair, -1 = on his left
+            const wobble = lerp(1, 0.55, s01((gspeed - 1.5) / 3)) * wWalk;
+            hipsX = -0.016 * side * wobble;
+            hipsRoll = 0.075 * side * wobble;
+            hipsY = Math.cos(c * 2 - 0.33 * Math.PI * 4) * 0.01 * wWalk - Math.abs(Math.sin(c)) * 0.03 * wGal;
+            hipsYaw = Math.sin(c - 0.83 * Math.PI * 2) * 0.04 * wobble;
+            chestRoll = 0.05 * side * wobble;
+            flex = Math.sin(c * 2 + 1.2) * 0.02 * wWalk + wGal * Math.sin(c + 0.6) * 0.18;
+            hipsPitch = wGal * Math.sin(c + 2.2) * 0.08;
+            headPitch = Math.sin(c * 2 + 2.0) * 0.035 * wWalk - 0.08 * wGal;
+            headYaw = -Math.sin(c + 0.4) * 0.05 * wWalk;
+            tailLift = 0.05 + Math.abs(Math.sin(c * 2)) * 0.1 + 0.2 * wGal;
+            tailWag = Math.sin(c + Math.PI) * 0.2;
           }
-          walkLegs(stride, 1, 0.02 * wTrot + 0.05 * wBound);
+          walkLegs();
         }
         break;
       case 'swim': {
@@ -388,7 +466,7 @@ export class JimothyQuad {
       case 'climb':
         // belly to the wall (model +Z = up the wall): legs splayed, climbing steps
         hipsY = -0.04;
-        walkLegs(0.42, 0.9, 0.0);
+        walkLegs(true);
         for (const leg of L) leg.abduct = leg.sx * 0.32;
         headPitch = -0.12;
         tailLift = -0.2;
@@ -461,15 +539,17 @@ export class JimothyQuad {
       hipsZ += 0.03;
     }
     const stare = this.sm('stare', this.stareW, 8, dt);
-    if (stare > 0.001) {
-      // sit up on his haunches, head bowed over the (empty) paws
-      hipsPitch = lerp(hipsPitch, -0.95, stare);
-      hipsZ += 0.04 * stare;
-      hipsY -= 0.11 * stare;
-      flex = lerp(flex, -0.1, stare);
-      headPitch = lerp(headPitch, 0.4, stare);
-      headYaw = lerp(headYaw, this.stareShake, stare);
-      for (const leg of L) if (leg.hind) leg.want.z += 0.06 * stare;
+    const sit = Math.max(stare, groom);
+    if (sit > 0.001) {
+      // sit up on his haunches, head bowed over his paws (staring at them, or washing his face)
+      hipsPitch = lerp(hipsPitch, -0.95, sit);
+      hipsZ += 0.04 * sit;
+      hipsY -= 0.11 * sit;
+      flex = lerp(flex, -0.1, sit);
+      headPitch = lerp(headPitch, 0.4 + groom * (0.12 + Math.sin(t * 8) * 0.08), sit);
+      headYaw = lerp(headYaw, stare > groom ? this.stareShake : Math.sin(t * 2.1) * 0.12, sit);
+      headTilt += groom * Math.sin(t * 4) * 0.15;
+      for (const leg of L) if (leg.hind) leg.want.z += 0.06 * sit;
     }
     this.stareW = 0;
     if (s.sinceChitter < 0.8) {
@@ -479,10 +559,18 @@ export class JimothyQuad {
       headPitch -= 0.08 * u;
     }
 
+    // turning: the spine curves into the turn, the head leads it, and he leans in at speed
+    const turn = this.sm('turn', clamp(s.turn ?? 0, -8, 8), 8, dt);
+    const bend = mode === 'walk' || mode === 'swim' ? clamp(turn * 0.05, -0.28, 0.28) : 0;
+    headYaw += bend * 1.2;
+    if (mode === 'walk' && s.grounded) hipsRoll -= clamp(turn * gspeed * 0.01, -0.22, 0.22);
+
     // ---------------------------------------------------------------- apply the body
     const k = 9;
     hipsY = this.sm('hipsY', hipsY, 14, dt);
+    hipsX = this.sm('hipsX', hipsX, 14, dt);
     hipsZ = this.sm('hipsZ', hipsZ, 8, dt);
+    chestRoll = this.sm('chestRoll', chestRoll, 12, dt);
     hipsPitch = this.sm('hipsPitch', hipsPitch, 10, dt);
     hipsRoll = this.sm('hipsRoll', hipsRoll, k, dt);
     hipsYaw = this.sm('hipsYaw', hipsYaw, k, dt);
@@ -498,12 +586,12 @@ export class JimothyQuad {
     earBack = this.sm('earBack', earBack, 10, dt);
 
     const hp = this.restPos.get(b.Hips)!;
-    b.Hips.position.set(hp.x, hp.y + hipsY, hp.z + hipsZ);
+    b.Hips.position.set(hp.x + hipsX, hp.y + hipsY, hp.z + hipsZ);
     _e.set(hipsPitch, hipsYaw, hipsRoll, 'ZYX');
     b.Hips.quaternion.setFromEuler(_e);
-    this.rot(b.Spine1, flex * 0.5 + breathe);
-    this.rot(b.Spine2, flex * 0.35 - breathe);
-    this.rot(b.Chest, chestPitch - flex * 0.2);
+    this.rot(b.Spine1, flex * 0.5 + breathe, bend * 0.3);
+    this.rot(b.Spine2, flex * 0.35 - breathe, bend * 0.4);
+    this.rot(b.Chest, chestPitch - flex * 0.2, bend * 0.3, chestRoll);
     this.rot(b.Neck, headPitch * 0.3, headYaw * 0.35, 0);
     this.rot(b.Head, headPitch * 0.7, headYaw * 0.65, headTilt);
     this.rot(b.Jaw, jaw);
@@ -537,13 +625,15 @@ export class JimothyQuad {
     // ---------------------------------------------------------------- apply the legs (IK)
     this.arm.updateWorldMatrix(true, true);
     this.armInv.copy(this.arm.matrixWorld).invert();
-    if (stare > 0.001) {
-      // paws held up in front of his face, palms up (chest frame: -Y faces forward once he sits up)
+    if (sit > 0.001) {
+      // paws held up in front of his face, palms up (chest frame: -Y faces forward once he sits up); washing, they
+      // take turns rubbing up and down over his face
       _m.copy(this.armInv).multiply(b.Chest.matrixWorld);
       for (const leg of L) {
         if (leg.hind) continue;
-        leg.want.lerp(_v.set(leg.sx * 0.05, -0.2, 0.02).applyMatrix4(_m), stare);
-        leg.endPitch = lerp(leg.endPitch, -1.6, stare);
+        const rub = groom * Math.sin(t * 8 + (leg.sx > 0 ? 0 : Math.PI));
+        leg.want.lerp(_v.set(leg.sx * lerp(0.05, 0.035, groom), -0.2 + 0.035 * rub, 0.02 + 0.03 * groom).applyMatrix4(_m), sit);
+        leg.endPitch = lerp(leg.endPitch, -1.6 - 0.3 * rub, sit);
       }
     }
     const kLeg = mode === 'ragdoll' ? 14 : 40;

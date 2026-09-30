@@ -21,6 +21,7 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _q = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 
 const GROUND_FILTER = groups(G.ALL, G.WORLD | G.PROP | G.VEHICLE | G.NPC | G.RAGDOLL | G.ANIMAL);
@@ -126,6 +127,9 @@ export class Jimothy implements System {
   idleTime = 0;
   /** 0..1, set to 1 in water and dries over time. */
   wetness = 0;
+  /** Smoothed ground normal the walking model is tilted to; facing last frame (turn rate). */
+  private tiltN = new THREE.Vector3(0, 1, 0);
+  private lastFacing = Math.PI;
 
   async init(game: Game) {
     this.game = game;
@@ -943,6 +947,12 @@ export class Jimothy implements System {
     const game = this.game;
     if (!e.alive || !e.body || !game.physics.world.getRigidBody(e.body.handle)) return;
     if (h.kind === 'carry') {
+      // The walking Jimothy's back is lower than his round collider's top, so a carried thing rides partly inside
+      // it: lift it clear before it turns solid again (else the physics shoves it away instead of dropping it)
+      const half = ((e.data.size as THREE.Vector3 | undefined)?.y ?? 0.3) * 0.5;
+      const et = e.body.translation();
+      const clearY = this.position.y + this.collider.radius() + half + 0.02;
+      if (et.y < clearY) e.body.setTranslation({ x: et.x, y: clearY, z: et.z }, true);
       e.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
       this.setGroupsHeld(e, false, h.prevGroups);
       const v = this.body.linvel();
@@ -1289,6 +1299,13 @@ export class Jimothy implements System {
         const tilt = new THREE.Quaternion().setFromAxisAngle(_a.set(1, 0, 0), -0.9);
         _q.multiply(tilt);
       }
+      // the walking Jimothy stands ON slopes: tilt him with the ground (up to ~35°) so all four feet touch it
+      const onSlope = this.mode === 'walk' && this.grounded && this.model.form === 'body';
+      _a.copy(onSlope ? this.groundNormal : UP);
+      const ang = Math.acos(THREE.MathUtils.clamp(_a.y, -1, 1));
+      if (ang > 0.61) _a.lerp(UP, 1 - 0.61 / ang).normalize();
+      this.tiltN.lerp(_a, 1 - Math.exp(-dt * 9)).normalize();
+      _q.premultiply(_q2.setFromUnitVectors(UP, this.tiltN));
       pivot.quaternion.slerp(_q, 1 - Math.exp(-dt * 20));
       pivot.position.set(0, this.mode === 'swim' ? -0.05 : 0.02, 0);
     }
@@ -1299,7 +1316,13 @@ export class Jimothy implements System {
     if (this.mode === 'swim') this.wetness = 1;
     else this.wetness = Math.max(0, this.wetness - dt / 14);
     this.model.setWetness(this.wetness);
+    // turn rate for the animation (the model bends and leans into turns)
+    let dYaw = this.facing - this.lastFacing;
+    while (dYaw > Math.PI) dYaw -= Math.PI * 2;
+    while (dYaw < -Math.PI) dYaw += Math.PI * 2;
+    this.lastFacing = this.facing;
     const anim: AnimState = {
+      turn: dt > 0 ? dYaw / dt : 0,
       mode: this.mode,
       speed: this.mode === 'climb' ? this.climbSpeed : this.speed,
       vy: v.y,

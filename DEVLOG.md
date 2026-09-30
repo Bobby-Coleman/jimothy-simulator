@@ -227,3 +227,22 @@ Session start: 2026-09-28 22:57 PT. Budget: 8 hours.
 * **Carrying**: everything rides on his back, as before (a paw / mouth / standing-hug version was tried and reverted
   at the human's request). The ride height follows the body: his arched back is lower than the ball's top.
 * **Hats and glasses** refit to the new head (tilted with it; the fur under hats is clipped on the skinned mesh).
+
+## Jimothy's walk, from the footage
+* **Gait timed frame by frame** from the news clip (the side-on lawn run, 5.0–6.6 s, plus the overhead deck camera
+  for left vs right): a 0.8 s cycle at his ~0.55 m/s stroll. It is a **pace-like lateral walk**: the two legs on one
+  side swing almost together (the front lifts ~0.07 s before its hind and lands just after it), then the other side,
+  so he rocks from one side pair to the other. A short back on long legs is exactly the build that paces (it keeps a
+  hind foot from striking the front foot on its own side), and it matches the still where one side's legs are planted
+  and the other side's are both in the air. Hind feet stay down ~70 % of the cycle, fronts ~58 %: each front paw rises
+  to chest height and reaches well past his nose before planting; each hind foot pushes far back on its toes (heel
+  up), kicks up high behind, then swings under his belly. The body sways and rolls onto the supporting pair.
+  (From 3 to 4.9 s in the clip he isn't walking: the camera and he both stay put while he shifts his feet and does
+  one long, slow forward reach before setting off.)
+* Faster: the same gait with quicker steps and less time on the ground; sprinting blends into a gallop.
+* **Turning**: the spine curves into the turn, the head leads it, and he leans in at speed.
+* **Slopes**: the walking body tilts with the ground (up to ~35°) so all four feet stand on hills and roofs.
+* **Idle**: besides looking around and sniffing, after a few seconds he sits up and washes his face with both paws
+  (the ball model's face wash, now as the real raccoon move).
+* Carried things ride low on his back; when dropped or thrown they're lifted clear of his round collider first (else
+  the physics shoved them away: a regression from the lower ride height that broke feeding Mom and crow trades).
