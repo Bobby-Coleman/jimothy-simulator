@@ -970,10 +970,12 @@ function furryPark(game: Game, world: World, mats: MatSet, b: Batch, zCres: numb
   });
   // on the block's south face (toward the viewpoint)
   signPanel(world, plaque, sx, g + 0.62, sz + 0.8, 0.56, 0.28, 0, { back: 0x7a5a26, depth: 0.02, collide: false, batch: b });
-  // picnic tables, trees around the lawn
+  // picnic tables on the lawns either side of the viewpoint, and trees around the park. (The lawn behind the viewpoint
+  // is Hilltop Lanes now (bigroll/course.ts LANES, x -8..8, z -179..-169, its roof stairs at x -10.7..-8.1): keep
+  // everything here clear of it; a maple's crown reaches ~4 m from its trunk.)
   for (const [px, pz] of [
-    [-7, zs - 14],
-    [6, zs - 15.5],
+    [-16.5, zs - 7.1],
+    [15.5, zs - 7.1],
   ]) {
     const py = world.heightAt(px, pz);
     b.box('wood', px, py + 0.75, pz, 2.0, 0.08, 0.9, 0x9b6b43);
@@ -984,8 +986,8 @@ function furryPark(game: Game, world: World, mats: MatSet, b: Batch, zCres: numb
   plantTrees(game, world, mats, 'maple', [
     [-12.8, zs - 4],
     [12.8, zs - 3.5],
-    [-11.5, zs - 18],
-    [11, zs - 19],
+    [-15.5, zs - 13.6],
+    [14.5, zs - 15.1],
   ], { seed: 41, scale: [1.05, 1.25] });
   plantTrees(game, world, mats, 'rhodo', [
     [-3.5, zs - 1.1],

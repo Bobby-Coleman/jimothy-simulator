@@ -311,3 +311,8 @@ with a long ringed tail. Now it all shows the real one (the rolling form, and si
 * **Text:** only lines his real body contradicts changed ("Tiny Legs, Big Journey" → "Legs For Days", "tiny arms",
   "basically a sphere"…). He's still famously round, so the round jokes stay. DESIGN.md's character sheet and
   AGENTS.md's player-model notes describe the real Jimothy. README screenshots retaken.
+
+## Furry Park tidy-up
+* The two picnic tables had been inside Hilltop Lanes since the Big Roll's bowling alley was built on their lawn.
+  They now stand on the lawns either side of the viewpoint, in the shade. The two maples behind the viewpoint moved
+  too: one's crown poked through the alley's roof staircase and the other brushed its east wall.
