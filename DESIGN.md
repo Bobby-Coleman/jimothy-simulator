@@ -153,7 +153,8 @@ Make the Wildlife Officer scold 10 fans.
 Honorary Grad (cap & gown, diploma launcher) · Jimothy Summer (sunglasses, eternal sunshine, flowers bloom in your
 path) · Rookie (cap & bat: bonk = home-run swing) · AI Enhanced (extra legs, glitch shader — "Enhanced by AI™") ·
 Chonk (giant) · Crow Rider (glide with crows) · Wet Jimothy (shrinks when wet… still round) · Space Jimothy
-(low gravity, bubble helmet — NASA noticed him) · Grandma's Hat (knitted hat, NPCs extra friendly) · Bobblehead.
+(low gravity, bubble helmet — NASA noticed him) · Grandma's Hat (knitted hat, NPCs extra friendly) · Bobblehead ·
+Perfectly Spherical (be the round raccoon of the fan art, waddling on stubby legs; unlocked by The Big Roll).
 
 ## 9. Art direction
 

@@ -107,7 +107,9 @@ A 0.73 m ball (body ellipsoid radii x 0.365 / y 0.35 / z 0.378) with the face on
 stubby socked legs, 5-fingered hands and a short, fat 0.26 m ringed tail stub (2 rings + dark tip; the real Jimothy's
 tail is a very short puff). (Built by `build_raccoons.py --only jimothy`; the pivot table below predates the short
 tail, whose segment pivots are now closer together.)
-Origin = centre of the body sphere; feet/hand bottoms at y = −0.42.
+Origin = centre of the body sphere; feet/hand bottoms at y = −0.42. The game shows it at half this volume
+(`BALL_SCALE` = ∛0.5 in src/player/JimothyModel.ts, lowered by `BALL_DROP` so it still meets the ground): his size
+tucked up, not twice it. It is also the whole of him with the Perfectly Spherical mutator.
 
 | node | parent | pivot (Jimothy space) | notes |
 |---|---|---|---|

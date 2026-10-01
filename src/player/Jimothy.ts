@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Game, System } from '../core/Game';
 import type { Entity } from '../core/Entities';
 import { RAPIER, G, groups } from '../core/Physics';
-import { JimothyModel, type AnimState } from './JimothyModel';
+import { JimothyModel, BALL_DROP, BALL_ROLL_R, type AnimState } from './JimothyModel';
 import type { CameraRig } from './CameraRig';
 
 export type PlayerMode = 'walk' | 'climb' | 'roll' | 'ragdoll' | 'swim' | 'hang';
@@ -131,6 +131,9 @@ export class Jimothy implements System {
   wetness = 0;
   /** Smoothed ground normal the walking model is tilted to; facing last frame (turn rate). */
   private tiltN = new THREE.Vector3(0, 1, 0);
+  /** The round raccoon's own spin while rolling / tumbling (it's smaller than the physics ball, so it turns faster). */
+  private ballSpin = new THREE.Quaternion();
+  private ballSpinLive = false;
   private lastFacing = Math.PI;
 
   async init(game: Game) {
@@ -1285,7 +1288,22 @@ export class Jimothy implements System {
     root.position.set(t.x, t.y, t.z);
     root.scale.setScalar(this.sizeMul);
     const pivot = this.model.pivot;
-    if (this.mode === 'roll' || this.mode === 'ragdoll') {
+    // the round raccoon is smaller than his physics ball: its centre sits lower (it still meets the ground or wall).
+    // (The form switches in model.animate() below: place the one about to show.)
+    const form = this.model.formFor(this.mode);
+    const drop = this.model.formDrop(form);
+    if ((this.mode === 'roll' || this.mode === 'ragdoll') && form === 'ball') {
+      // ...and it spins about its own centre, faster, to roll along the ground without slipping
+      if (!this.ballSpinLive) this.ballSpin.copy(pivot.quaternion);
+      this.ballSpinLive = true;
+      const w = this.body.angvel();
+      _a.set(w.x, w.y, w.z);
+      const ang = _a.length() * (R / BALL_ROLL_R) * dt;
+      if (ang > 1e-7) this.ballSpin.premultiply(_q2.setFromAxisAngle(_a.normalize(), ang)).normalize();
+      pivot.quaternion.copy(this.ballSpin);
+      pivot.position.set(0, -BALL_DROP, 0);
+    } else if (this.mode === 'roll' || this.mode === 'ragdoll') {
+      this.ballSpinLive = false;
       const r = this.body.rotation();
       pivot.quaternion.set(r.x, r.y, r.z, r.w);
       pivot.position.set(0, 0, 0);
@@ -1298,7 +1316,9 @@ export class Jimothy implements System {
       _m.makeBasis(xAxis, yAxis, zAxis);
       _q.setFromRotationMatrix(_m);
       pivot.quaternion.slerp(_q, 1 - Math.exp(-dt * 14));
-      pivot.position.set(0, 0, 0);
+      // (the smaller round raccoon hugs the wall)
+      pivot.position.copy(n).multiplyScalar(-drop);
+      this.ballSpinLive = false;
     } else {
       _q.setFromAxisAngle(UP, this.facing);
       if (this.mode === 'hang') {
@@ -1313,7 +1333,8 @@ export class Jimothy implements System {
       this.tiltN.lerp(_a, 1 - Math.exp(-dt * 9)).normalize();
       _q.premultiply(_q2.setFromUnitVectors(UP, this.tiltN));
       pivot.quaternion.slerp(_q, 1 - Math.exp(-dt * 20));
-      pivot.position.set(0, this.mode === 'swim' ? -0.05 : 0.02, 0);
+      pivot.position.set(0, (this.mode === 'swim' ? -0.05 : 0.02) - drop, 0);
+      this.ballSpinLive = false;
     }
 
     const inp = game.input;

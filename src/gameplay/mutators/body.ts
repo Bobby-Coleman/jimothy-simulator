@@ -413,3 +413,31 @@ export function zoomies(): MutatorImpl {
   };
 }
 
+// ------------------------------------------------------------------ Perfectly Spherical
+
+/**
+ * Jimothy as the fan art (and every AI) draws him: the round raccoon, a fuzzy ball with a face and stubby legs, all the
+ * time instead of only while he rolls. The ball form's own animation does the rest (waddling, climbing, swimming, face
+ * washing). Unlocked by finishing The Big Roll.
+ */
+export function perfectlySpherical(): MutatorImpl {
+  const set = (game: Game, on: boolean) => {
+    const p = getPlayer(game);
+    if (p) p.model.alwaysBall = on;
+  };
+  return {
+    def: {
+      id: 'perfectlySpherical',
+      name: 'Perfectly Spherical',
+      desc: 'Be Jimothy as the internet draws him: a fuzzy ball with a face and four stubby legs. Waddles. Rolls. Bowls.',
+      unlockHint: "Finish 'The Big Roll'.",
+    },
+    enable(game) {
+      set(game, true);
+      game.hint('Perfectly Spherical: just like the fan art. Scientists remain unconvinced.', 3.5);
+    },
+    disable(game) {
+      set(game, false);
+    },
+  };
+}

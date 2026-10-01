@@ -316,3 +316,12 @@ with a long ringed tail. Now it all shows the real one (the rolling form, and si
 * The two picnic tables had been inside Hilltop Lanes since the Big Roll's bowling alley was built on their lawn.
   They now stand on the lawns either side of the viewpoint, in the shade. The two maples behind the viewpoint moved
   too: one's crown poked through the alley's roof staircase and the other brushed its east wall.
+
+## Perfectly Spherical (from the human)
+* **The round raccoon at half the volume**: his rolling ball (`jimothy_ball.glb`) was about twice the real Jimothy's
+  size; the game now shows it at half the volume (79 % in each direction). It sits lower so it still meets the
+  ground (and hugs walls when climbing), and it spins about its own centre a little faster than the physics ball,
+  so it rolls without slipping. Carried things ride lower on it to match. The physics ball is unchanged.
+* **New mutator, Perfectly Spherical**, unlocked by finishing The Big Roll: be the round raccoon all the time, the
+  way the fan art draws him, waddling, climbing, swimming and washing your face on stubby legs. Saves that had
+  already finished The Big Roll get it on their next load.

@@ -75,7 +75,7 @@ Bronze. Records: `localStorage['jimothy.bigroll.v1']` (best clean time + best me
 
 | # | Instinct | Status | How to do it | Time | Notes |
 |---|---|---|---|---|---|
-| BR1 | **The Big Roll** — finish (Bronze Pin) | ✅ | See above. Any finish inside 2:30. | 1–2 min | `obj_bigRoll`: walks up the stairs, then the scripted line. |
+| BR1 | **The Big Roll** — finish (Bronze Pin) | ✅ | See above. Any finish inside 2:30. | 1–2 min | `obj_bigRoll`: walks up the stairs, then the scripted line. Unlocks **Perfectly Spherical**. |
 | BR2 | **The Big Roll: Silver Pin** — under 0:52 | ✅ | Hold Sprint while rolling; don't stop. | 1 min | Comfortable with sprint held. |
 | BR3 | **The Big Roll: Gold Pin** — under 0:40 | ✅ | Sprint the whole way, hit the kicker straight, hug the insides, dodge the avenue traffic. | a few tries | ~20 % slower than the scripted line. |
 | BR4 | **The Big Roll: Platinum Pin** — under 0:34 | ✅ | A near-perfect run: dead-centre kicker, cut from the bottom of Tumble St diagonally to the market, tight past the tent poles and round City Hall, no car/pole/tourist hits. | many tries | Tuned by script: best scripted run **32.9 s**, typical 33–36 s (cars and pedestrians vary); the best splits of several runs add up to ~31.5 s. Platinum is ~3 % above the best scripted run. |
@@ -143,6 +143,7 @@ Bronze. Records: `localStorage['jimothy.bigroll.v1']` (best clean time + best me
 | Zoomies | Legs For Days | Jimothy Summer | Jimothy Summer |
 | Bobblehead | Bobblehead Collector | Rookie | Rookie Card (and, currently, winning the Salmon Run) |
 | AI Enhanced | Touch Grass | Tiny | Kit Collector |
+| Perfectly Spherical | The Big Roll | | |
 
 All 12 were unlocked by playing during the QA runs (the "Mutator unlocked!" toast + `mutator_unlock` sound were checked
 on AI Enhanced; every reward goes through the same path).

@@ -42,6 +42,20 @@ interface Form {
 /** The walking model's ground (y = 0) sits this far below the collider centre (the pivot adds +0.02 while walking). */
 const BODY_OFFSET = new THREE.Vector3(0, -0.4, -0.03);
 
+/** Jimothy's physics ball radius (src/player/Jimothy.ts `R`). */
+const COLLIDER_R = 0.38;
+/**
+ * The round raccoon (his rolling ball, and the whole of him with the "Perfectly Spherical" mutator) is shown at half
+ * the volume it was built at, so it's the size of the real Jimothy tucked up rather than twice it.
+ */
+export const BALL_SCALE = Math.cbrt(0.5);
+/** The ball model's lowest point (its belly; the paws reach 0.421) below its centre, at build size. */
+const BALL_BOTTOM = 0.399;
+/** How far the smaller ball's centre sits below the collider's so it still meets the ground (with ~1 cm of fur). */
+export const BALL_DROP = COLLIDER_R - BALL_BOTTOM * BALL_SCALE + 0.012;
+/** The smaller ball's rolling radius (it spins COLLIDER_R / BALL_ROLL_R times as fast as the physics ball). */
+export const BALL_ROLL_R = BALL_BOTTOM * BALL_SCALE;
+
 type PartName =
   | 'Body'
   | 'Head'
@@ -107,6 +121,8 @@ export class JimothyModel {
   quad: JimothyQuad | null = null;
   /** Show this form whatever his mode (e.g. the cannon tucks him into a ball); null = the ball only while rolling. */
   formOverride: FormName | null = null;
+  /** The round raccoon all the time, not just while rolling (the "Perfectly Spherical" mutator). */
+  alwaysBall = false;
 
   constructor() {
     this.root.name = 'JimothyRoot';
@@ -159,6 +175,7 @@ export class JimothyModel {
       model.position.copy(BODY_OFFSET);
       f.parts = f.quad.parts() as Form['parts'];
     } else {
+      model.scale.setScalar(BALL_SCALE);
       model.traverse((o) => {
         const n = o.name as PartName;
         if (PART_NAMES.includes(n) && !f.parts[n]) f.parts[n] = o;
@@ -217,7 +234,20 @@ export class JimothyModel {
 
   /** Height above the collider centre where carried things rest on him: the ball's top, or the walker's arched back. */
   backTop() {
-    return this.quad ? 0.33 : 0.42;
+    return this.quad ? 0.33 : 0.387 * BALL_SCALE - BALL_DROP + 0.033;
+  }
+
+  /** The form he shows in this mode (as `animate` will pick it, falling back to whichever form exists). */
+  formFor(mode: string): FormName {
+    const want: FormName = this.formOverride ?? (this.alwaysBall || mode === 'roll' ? 'ball' : 'body');
+    if (this.forms[want]) return want;
+    const other: FormName = want === 'body' ? 'ball' : 'body';
+    return this.forms[other] ? other : this.form;
+  }
+
+  /** How far below the collider centre the pivot sits for that form (the smaller ball is lowered). */
+  formDrop(form: FormName = this.form) {
+    return form === 'ball' ? BALL_DROP : 0;
   }
 
   private furMats: { mat: THREE.MeshStandardMaterial; base: THREE.Color }[] = [];
@@ -282,7 +312,7 @@ export class JimothyModel {
     this.clock += dt;
     s.time = this.clock;
     // the ball while rolling, the real Jimothy otherwise
-    this.setForm(this.formOverride ?? (s.mode === 'roll' ? 'ball' : 'body'));
+    this.setForm(this.formFor(s.mode));
     if (this.quad) {
       this.quad.animate(dt, s);
       this.animateShared(dt, s);

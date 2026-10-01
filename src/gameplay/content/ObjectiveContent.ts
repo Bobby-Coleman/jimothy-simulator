@@ -446,6 +446,9 @@ export class ObjectiveContent implements System {
       // (ObjectivesSystem.set() never lowers progress, so it would otherwise be stuck at e.g. 20/15 forever).
       this.migrated = true;
       for (const o of this.obj.list) if (!o.done && o.progress >= (o.target ?? 1)) this.obj.complete(o.id);
+      // ...and rewards added after a save completed their objective (The Big Roll's Perfectly Spherical) are granted now
+      const muts = game.get<any>('mutators');
+      for (const o of this.obj.list) if (o.done && o.reward) muts?.unlock(o.reward);
     }
 
     // cumulative distances (stats reset every session; objective progress is the persistent total)

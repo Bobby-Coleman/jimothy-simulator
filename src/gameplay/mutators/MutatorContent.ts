@@ -7,7 +7,7 @@ import { jimothySummer } from './summer';
 import { aiEnhanced } from './ai';
 import { chonk, tiny } from './size';
 import { crowRider } from './crowRider';
-import { spaceJimothy, wetJimothy, bobblehead, zoomies } from './body';
+import { spaceJimothy, wetJimothy, bobblehead, zoomies, perfectlySpherical } from './body';
 import { updateSharedFx } from './shared';
 import { getPlayer, type ModelMods, type MutatorImpl } from './types';
 
@@ -48,6 +48,7 @@ export class MutatorContent implements System {
       bobblehead(),
       tiny(),
       zoomies(),
+      perfectlySpherical(),
     );
     const reg = game.get<MutatorSystem>('mutators');
     if (!reg) return;
