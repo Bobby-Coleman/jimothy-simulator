@@ -12,6 +12,7 @@ import type { Settings } from './settings';
 import type { UiCtx } from './types';
 import { bindFullscreenButton, isFullscreen, toggleFullscreen } from './fullscreen';
 import { MusicPlayer } from './MusicPlayer';
+import { desktop, QUIT_ICON } from '../platform/desktop';
 
 /** What menu pages need from the UI system. */
 export interface MenuApi extends UiCtx {
@@ -150,6 +151,8 @@ function buildPauseMain(api: MenuApi, host: MenuHost) {
         bigButton('Back to the den', ICONS.home, () => api.respawnHome(), 'btn-small'),
         bigButton('Photo mode', ICONS.camera, () => api.photoFromMenu(), 'btn-small'),
         fullscreenButton(api),
+        // Desktop (Steam) build only; progress is saved continuously.
+        desktop ? bigButton('Quit game', QUIT_ICON, () => desktop?.quit(), 'btn-small') : null,
         bigButton('Reset progress', ICONS.close, () => host.push('reset'), 'btn-small btn-danger'),
       ),
     ),

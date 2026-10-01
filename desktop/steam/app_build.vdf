@@ -1,0 +1,26 @@
+// SteamPipe app build script for Jimothy Simulator (Windows x64).
+// Template: replace APP_ID and DEPOT_ID with the numbers from Steamworks (App Admin > SteamPipe > Depots), and use
+// the same DEPOT_ID in depot_build.vdf. Paths are relative to this file. See desktop/README.md ("Uploading").
+//
+//   steamcmd +login <your_steam_username> +run_app_build "<repo>\desktop\steam\app_build.vdf" +quit
+"AppBuild"
+{
+	"AppID" "APP_ID"
+	"Desc" "Jimothy Simulator Windows build"
+
+	// What gets uploaded: the packaged game (npm run build:steam).
+	"ContentRoot" "../dist/win-unpacked/"
+	// steamcmd's logs and chunk cache (inside desktop/dist, which git ignores).
+	"BuildOutput" "../dist/steampipe-output/"
+
+	// Empty: never set a branch live automatically. Pick the build and branch in Steamworks
+	// (SteamPipe > Builds), then publish. ("default" can't be set live from steamcmd anyway.)
+	"SetLive" ""
+	// "1" = dry run: builds the manifest and logs without uploading.
+	"Preview" "0"
+
+	"Depots"
+	{
+		"DEPOT_ID" "depot_build.vdf"
+	}
+}

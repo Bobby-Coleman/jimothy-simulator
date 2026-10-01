@@ -43,7 +43,7 @@ No install, no login. Keyboard + mouse, gamepad, or touch (phones/tablets).
   and a data center with a very large plug.
 * **Goat-Sim chaos**: ~60 ragdolling pedestrians, traffic, trampolines, propane BBQs, raccoon cannons, a Ferris wheel,
   rideable hydrant geysers, car alarms, Espresso Mode, bowling a tour group with a round boy, dumpster diving, the KRCN
-  breaking-news ticker reacting to everything you do, 59 Instincts (objectives), 12 mutators, 10 golden bobbleheads,
+  breaking-news ticker reacting to everything you do, 59 Instincts (objectives), 13 mutators, 10 golden bobbleheads,
   photo mode, slow-mo, day/night and Seattle weather.
 
 ## Controls

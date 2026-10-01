@@ -1,0 +1,20 @@
+// SteamPipe depot build script: the Windows x64 depot of Jimothy Simulator.
+// Template: replace DEPOT_ID (same number as in app_build.vdf). The content root comes from app_build.vdf
+// (desktop/dist/win-unpacked: "Jimothy Simulator.exe", resources/app.asar, LICENSES/, Chromium runtime files).
+"DepotBuildConfig"
+{
+	"DepotID" "DEPOT_ID"
+
+	// Everything in the content root, installed into the root of the game folder.
+	"FileMapping"
+	{
+		"LocalPath" "*"
+		"DepotPath" "."
+		"Recursive" "1"
+	}
+
+	// Never ship debug symbols or a dev steam_appid.txt next to the exe (the shell gets its App ID from inside
+	// app.asar; a loose steam_appid.txt would also disable SteamAPI_RestartAppIfNecessary).
+	"FileExclusion" "*.pdb"
+	"FileExclusion" "steam_appid.txt"
+}

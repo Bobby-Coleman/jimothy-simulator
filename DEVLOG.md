@@ -325,3 +325,18 @@ with a long ringed tail. Now it all shows the real one (the rolling form, and si
 * **New mutator, Perfectly Spherical**, unlocked by finishing The Big Roll: be the round raccoon all the time, the
   way the fan art draws him, waddling, climbing, swimming and washing your face on stubby legs. Saves that had
   already finished The Big Roll get it on their next load.
+
+## Getting ready for Steam (from the human)
+* **`steam/LAUNCH.md`**: Valve's timeline (the $100 fee starts a 30-day wait; the store page must be "Coming Soon" for
+  two weeks; reviews take 1–5 days), the steps only the human can do (Steamworks paperwork, tax, bank, the fee), the
+  store page text, tags and system requirements, content-survey answers including the AI disclosure, and a rights check.
+* **`steam/store/`**: every store and library image Steam asks for (capsules, hero, logo, icons) made from the game's
+  own logo and in-game renders of the real Jimothy, plus ten 1920×1080 gameplay screenshots.
+* **`desktop/`**: the Windows build for Steam. Electron serves the game from `app://`, Steam is wired in through
+  steamworks.js, the 59 Instincts map to Steam achievements (`achievements.json`), saves are mirrored into one file for
+  Steam Cloud, and SteamPipe upload scripts are included. In the desktop build only, the title screen and pause menu
+  get Quit buttons and fullscreen drives the game window. `npm run build:steam` in `desktop/`; see `desktop/README.md`.
+* **Fix**: a translucent white blob hung over Old Ballard Ave near the spawn: the University's fountain bubbles and
+  SlopCorp's cooling-tower steam started at the world origin and only moved once you came near them. They now start
+  hidden.
+* The dev server only scans `index.html` for dependencies (test pages under `tools/` broke its pre-scan).

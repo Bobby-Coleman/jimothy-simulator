@@ -7,6 +7,7 @@ import { fillTokens } from './glyphs';
 import { DISCLAIMER, TAGLINE, tipSequence } from './content';
 import { MusicPlayer, type MusicApi } from './MusicPlayer';
 import { bindFullscreenButton, toggleFullscreen } from './fullscreen';
+import { desktop, QUIT_ICON } from '../platform/desktop';
 
 export { toggleFullscreen } from './fullscreen';
 
@@ -72,6 +73,10 @@ export class TitleScreen {
       fsBtn.title = label;
       fsBtn.innerHTML = `<span class="btn-icon">${on ? ICONS.fullscreenExit : ICONS.fullscreen}</span>`;
     });
+    // Desktop (Steam) build only: close the game.
+    const quitBtn = desktop
+      ? h('button', { class: 'btn btn-small', html: `<span class="btn-icon">${QUIT_ICON}</span><span>Quit</span>`, onclick: () => desktop?.quit() })
+      : null;
     this.music = new MusicPlayer(api);
     this.tipEl = h('div', { class: 'title-tip-text' });
     this.el = h(
@@ -87,7 +92,7 @@ export class TitleScreen {
           'div',
           { class: 'title-menu' },
           this.playBtn,
-          h('div', { class: 'title-row' }, this.replayBtn, small('Settings', ICONS.gear, 'settings'), small('Controls', ICONS.keyboard, 'controls'), small('Credits', ICONS.star, 'credits'), fsBtn),
+          h('div', { class: 'title-row' }, this.replayBtn, small('Settings', ICONS.gear, 'settings'), small('Controls', ICONS.keyboard, 'controls'), small('Credits', ICONS.star, 'credits'), fsBtn, quitBtn),
         ),
       ),
       this.music.el,

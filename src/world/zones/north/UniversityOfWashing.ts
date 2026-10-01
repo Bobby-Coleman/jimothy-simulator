@@ -387,6 +387,10 @@ function buildFountain(game: Game, world: World, mats: MatSet, b: Batch, water: 
   bubbles.frustumCulled = false;
   bubbles.castShadow = false;
   bubbles.userData.noMerge = true;
+  // the animator below only runs within 110 m: until then every instance would sit at the world origin (a translucent
+  // blob over Old Ballard Ave, near the spawn), so they start invisible
+  const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
+  for (let i = 0; i < nb; i++) bubbles.setMatrixAt(i, hidden);
   world.staticRoot.add(bubbles);
   const seeds = Array.from({ length: nb }, (_, i) => ({ a: Math.random() * Math.PI * 2, r: 1.5 + Math.random() * (R - 2), t: Math.random() * 6, s: 0.15 + Math.random() * 0.35 }));
   const m4 = new THREE.Matrix4();

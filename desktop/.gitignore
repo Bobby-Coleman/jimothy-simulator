@@ -1,0 +1,5 @@
+# build outputs (npm run build:steam): the Vite build, generated icons, the packaged game and SteamPipe logs
+node_modules/
+app/
+build/
+dist/

@@ -39,6 +39,7 @@ import { HeartQuestSystem } from './gameplay/quests/heart';
 import { ExtrasSystem } from './gameplay/extras';
 import { ChaosSystem } from './gameplay/chaos';
 import { BigRollSystem } from './gameplay/bigroll';
+import { DesktopSystem } from './platform/desktop';
 
 /**
  * Registration order = init order = update order.
@@ -94,4 +95,6 @@ export function registerSystems(game: Game) {
   game.add(new StaticBatcher());
   game.add(new DetailCuller());
   game.add(new AutoQuality());
+  // Desktop (Electron/Steam) shell only: achievements, quit, autoplay. Inert in browsers.
+  game.add(new DesktopSystem());
 }

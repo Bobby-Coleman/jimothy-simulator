@@ -2,7 +2,9 @@
  * Fullscreen helpers (standard API with the webkit-prefixed fallback for older Safari / iPadOS).
  * iPhone Safari has no element fullscreen at all: `fullscreenSupported()` is false there and the
  * buttons hide themselves.
+ * Desktop build (Electron): every helper drives the borderless game window through the shell's bridge instead.
  */
+import { desktop } from '../platform/desktop';
 
 type FsDoc = Document & {
   webkitFullscreenEnabled?: boolean;
@@ -14,6 +16,7 @@ type FsEl = HTMLElement & { webkitRequestFullscreen?: (opts?: unknown) => Promis
 const doc = () => (typeof document !== 'undefined' ? (document as FsDoc) : null);
 
 export function fullscreenSupported(): boolean {
+  if (desktop) return true;
   const d = doc();
   if (!d) return false;
   const el = d.documentElement as FsEl;
@@ -22,12 +25,17 @@ export function fullscreenSupported(): boolean {
 }
 
 export function isFullscreen(): boolean {
+  if (desktop) return desktop.isFullscreen();
   const d = doc();
   return !!(d && (d.fullscreenElement || d.webkitFullscreenElement));
 }
 
 /** Enter fullscreen (must run inside a user gesture). Resolves true on success, false if refused. */
 export async function enterFullscreen(): Promise<boolean> {
+  if (desktop) {
+    desktop.setFullscreen(true);
+    return true;
+  }
   const d = doc();
   if (!d || isFullscreen()) return isFullscreen();
   const el = d.documentElement as FsEl;
@@ -42,6 +50,10 @@ export async function enterFullscreen(): Promise<boolean> {
 }
 
 export async function exitFullscreen(): Promise<boolean> {
+  if (desktop) {
+    desktop.setFullscreen(false);
+    return true;
+  }
   const d = doc();
   if (!d || !isFullscreen()) return true;
   try {
@@ -81,6 +93,7 @@ export function bindFullscreenButton(btn: HTMLElement, render: (on: boolean) => 
 
 /** Subscribe to fullscreen changes (both event names). Returns an unsubscribe function. */
 export function onFullscreenChange(fn: (on: boolean) => void): () => void {
+  if (desktop) return desktop.onFullscreenChange(fn);
   const d = doc();
   if (!d) return () => {};
   const cb = () => fn(isFullscreen());

@@ -917,6 +917,10 @@ function coolingTowers(game: Game, world: World, b: Batch, x: number, zc: number
       const m = new THREE.Mesh(GEO.ico, steam);
       m.castShadow = false;
       m.userData.noMerge = true;
+      // (hidden at the tower until the animator, which only runs within 140 m, first moves it; at the default position
+      // it hung over Old Ballard Ave at the world origin)
+      m.position.set(x, g + 9.4, z);
+      m.visible = false;
       world.staticRoot.add(m);
       puffs.push({ m, base: new THREE.Vector3(x, g + 9.4, z), ph: k / 3 + i * 0.17 });
     }
