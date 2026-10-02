@@ -55,8 +55,48 @@ def fbm3(P, freq, seed):
 SPINE = catmull([P3(0, p) for p in (ph(320, 275), ph(420, 185), ph(521, 141), ph(620, 150), ph(708, 189))], 40)
 SACRUM = SPINE[0]
 OCC = P3(0, ph(708, 189))
-NOSE = P3(0, ph(806, 340))
-HEAD_D = nrm(NOSE - OCC)
+NOSE0 = P3(0, ph(806, 340))
+
+# Cute pass: the whole head (skull, face, ears, eyes, markings) is the traced head above, scaled up by HEAD_S about the
+# back of the skull and moved up / back by HEAD_T: a bigger, rounder head tucked into the front of the body (no neck),
+# its crown continuing the curve of the back. hx maps the traced head's space into the model, hinv back.
+HEAD_C0 = np.array([0.0, 0.53, 0.262])
+HEAD_S = 1.28
+HEAD_T = np.array([0.0, 0.065, -0.045])    # (pass 2: up and back, so the face sits in the body and the skull continues the back)
+HEAD_PITCH = math.radians(12.0)          # ... and tipped up a little, so he looks ahead rather than at his paws
+_HC, _HSN = math.cos(HEAD_PITCH), math.sin(HEAD_PITCH)
+HEAD_R = np.array([[1.0, 0.0, 0.0], [0.0, _HC, _HSN], [0.0, -_HSN, _HC]])     # rows: model x, y, z of a traced vector
+
+
+# ... and the snout (below the eyes, in front of them) is drawn forward by up to SNOUT_PULL, so the little muzzle pokes
+# out past the round of the head. A shear along z that grows toward the nose; its slope stays < 1 so it inverts.
+SNOUT_PULL = 0.03
+SNOUT_Z = (0.35, 0.41)
+SNOUT_Y = (0.462, 0.432)
+
+
+def _snout_dz(p):
+    return SNOUT_PULL * smoothstep(*SNOUT_Z, p[..., 2]) * smoothstep(*SNOUT_Y, p[..., 1])
+
+
+def hx(p):
+    p = np.array(p, dtype=float)
+    p[..., 2] += _snout_dz(p)
+    q = p - HEAD_C0
+    return HEAD_C0 + HEAD_T + HEAD_S * (q @ HEAD_R.T)
+
+
+def hinv(P):
+    q = (np.asarray(P, dtype=float) - HEAD_C0 - HEAD_T) / HEAD_S
+    p = HEAD_C0 + q @ HEAD_R
+    z = p[..., 2].copy()
+    for _ in range(24):                      # undo the snout shear (fixed point: z0 = z - dz(z0))
+        p[..., 2] = z - _snout_dz(p)
+    return p
+
+
+NOSE = hx(NOSE0)
+HEAD_D = nrm(NOSE0 - OCC)
 HEAD_U = np.array([0.0, HEAD_D[2], -HEAD_D[1]])
 HIP = np.array([0.096, *ph(395, 300)[::-1]])
 SHO = np.array([0.09, *ph(655, 305)[::-1]])
@@ -114,7 +154,7 @@ def limb_cones(pose):
     out = []
     for side in (+1, -1):
         j = J[('H', side)]
-        cones = [(j[0], j[1], 0.088, 0.046), (j[1], j[2], 0.04, 0.025), (j[2], j[3], 0.026, 0.023), (j[3], j[4], 0.023, 0.018)]
+        cones = [(j[0], j[1], 0.095, 0.052), (j[1], j[2], 0.045, 0.029), (j[2], j[3], 0.028, 0.025), (j[3], j[4], 0.025, 0.019)]
         hip_zy, knee = np.array([j[0][2], j[0][1]]), np.array([j[1][2], j[1][1]])
         f = knee - hip_zy
         back = nrm(np.array([f[1], -f[0]]))
@@ -125,21 +165,23 @@ def limb_cones(pose):
         cones.append((P3(j[0][0] * 0.95, a), P3(j[0][0], b), 0.078, 0.042))
         out.append((('H', side), cones))
         j = J[('F', side)]
-        out.append((('F', side), [(j[1], j[2], 0.062, 0.04), (j[2], j[3], 0.034, 0.024), (j[3], j[4], 0.024, 0.02)]))
+        out.append((('F', side), [(j[1], j[2], 0.072, 0.047), (j[2], j[3], 0.039, 0.027), (j[3], j[4], 0.026, 0.021)]))
     return out
 
 
 # ============================================================================================ head (rest pose)
 EYE_Y = 0.471                 # eye height
 E = 0.04                      # half the inter-eye distance (IED = 0.08 m at game scale)
-EYE_R = 0.011                 # eyeball radius (a touch oversized: cute game)
+EYE_R0 = 0.0138               # eyeball radius in the traced head (oversized: cute game; the original was 0.011)
+EYE_R = EYE_R0 * HEAD_S        # ... in the model
 # Ears: fitted to the side photo (tip at z .342, y .647; visible centre z .317, y .615) and the front footage (tilted
 # ~25 degrees outward, opening forward-outward). They sit on the top corners of the skull (see head_skin_sdf's
 # temporal fills and ear roots), a touch oversized for the cute game.
-EAR_BASES = [np.array([0.08 * s, 0.568, 0.322]) for s in (1, -1)]
+EAR_BASES0 = [np.array([0.08 * s, 0.568, 0.322]) for s in (1, -1)]
 EAR_DIRS = [nrm(np.array([0.46 * s, 1.0, 0.14])) for s in (1, -1)]
 EAR_C = 0.043                                 # ear centre, along its axis from the base
-EAR_R = (0.034, 0.047, 0.012)                 # half-width, half-height, half-thickness
+EAR_R = (0.036, 0.044, 0.012)                 # half-width, half-height, half-thickness (rounder: cute)
+EAR_BASES = [hx(b) for b in EAR_BASES0]       # in the model
 
 
 def sd_rc_sx(P, a, b, r1, r2, sx):
@@ -149,19 +191,19 @@ def sd_rc_sx(P, a, b, r1, r2, sx):
     return sd_round_cone(Q, a, b, r1, r2) * sx
 
 
-def head_skin_sdf(P):
-    d = sd_ellipsoid(P, np.array([0.0, 0.515, 0.306]), (0.075, 0.06, 0.066))                       # cranium
+def _head_skin_sdf0(P):
+    d = sd_ellipsoid(P, np.array([0.0, 0.515, 0.306]), (0.082, 0.06, 0.066))                       # cranium (broad: cute)
     for sx in (1, -1):                                                         # temporal muscle under the ears
-        d = smin(d, sd_ellipsoid(P, np.array([0.056 * sx, 0.545, 0.313]), (0.036, 0.03, 0.042)), 0.025)
+        d = smin(d, sd_ellipsoid(P, np.array([0.062 * sx, 0.535, 0.313]), (0.044, 0.038, 0.046)), 0.03)   # (full temples)
     for i in range(2):                                                         # ear roots: the ears grow out of the head
         base, up, fwd, across = ear_frame(i)
         side = np.array([np.sign(base[0]), 0.0, 0.0])
         R = np.stack([across, up, fwd], axis=1)
         d = smin(d, sd_ellipsoid(P, base - up * 0.004 - side * 0.01, (0.026, 0.022, 0.02), R), 0.018)
     d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.466, 0.352]), (0.044, 0.042, 0.034)), 0.025)      # brow + bridge
-    d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.446, 0.336]), (0.056, 0.034, 0.032)), 0.03)       # face under the eyes
+    d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.446, 0.336]), (0.066, 0.036, 0.032)), 0.03)       # face under the eyes (full: cute)
     for sx in (1, -1):                                                                             # cheeks
-        d = smin(d, sd_ellipsoid(P, np.array([0.05 * sx, 0.44, 0.3]), (0.032, 0.042, 0.042)), 0.035)
+        d = smin(d, sd_ellipsoid(P, np.array([0.064 * sx, 0.44, 0.305]), (0.046, 0.05, 0.048)), 0.035)   # (chubby)
     d = smin(d, sd_rc_sx(P, np.array([0.0, 0.442, 0.356]), np.array([0.0, 0.392, 0.398]), 0.03, 0.016, 0.85), 0.02)  # muzzle
     for sx in (1, -1):                                                                             # mandible
         d = smin(d, sd_round_cone(P, np.array([0.036 * sx, 0.405, 0.305]), np.array([0.007 * sx, 0.379, 0.389]), 0.016, 0.01), 0.02)
@@ -173,9 +215,14 @@ def head_skin_sdf(P):
     return d
 
 
+def head_skin_sdf(P):
+    return HEAD_S * _head_skin_sdf0(hinv(P))
+
+
 def ear_frame(i):
-    """(base, up, fwd, across) of ear i (0 = left, 1 = right); the opening faces forward-outward."""
-    base, up = EAR_BASES[i], EAR_DIRS[i]
+    """(base, up, fwd, across) of ear i (0 = left, 1 = right) in the traced head's space; the opening faces
+    forward-outward."""
+    base, up = EAR_BASES0[i], EAR_DIRS[i]
     side = np.array([1.0, 0, 0]) if base[0] > 0 else np.array([-1.0, 0, 0])
     fwd0 = nrm(np.cross(side, up)) * (1 if base[0] > 0 else -1)
     fwd = nrm(fwd0 + side * 0.95)
@@ -183,6 +230,10 @@ def ear_frame(i):
 
 
 def ears_sdf(P):
+    return HEAD_S * _ears_sdf0(hinv(P))
+
+
+def _ears_sdf0(P):
     d = None
     for i in range(2):
         base, up, fwd, across = ear_frame(i)
@@ -193,8 +244,12 @@ def ears_sdf(P):
 
 
 # ============================================================================================ body
-TAIL_TIP = SACRUM + np.array([0.0, 0.03, -0.045])
-PUFF_C = SACRUM + np.array([0.0, 0.05, -0.05])
+# Cute pass: a short ringed raccoon tail, a nub sticking up off the back of the rump. TAIL_D is its axis, PUFF_C the
+# middle of the nub.
+TAIL_D = nrm(np.array([0.0, 1.0, -0.6]))
+TAIL_TIP = SACRUM + TAIL_D * 0.035
+PUFF_C = SACRUM + TAIL_D * 0.06
+_TAIL_R = np.stack([np.array([1.0, 0, 0]), nrm(np.cross(TAIL_D, np.array([1.0, 0, 0]))), TAIL_D], axis=1)
 
 
 # The top of the back (the approved side profile): the drawn spine line, raised 1.6 cm at the sacrum to 3.6 cm over
@@ -207,7 +262,7 @@ _TOP = SPINE[:, 1] + 0.016 + 0.02 * smoothstep(0.1, 0.4, _SPT)
 # (rounded top on the dorsal line, widest low down where it meets the ribs and belly), so the back is round from
 # behind with no ridge along the spine. The half-width and widest level vary along z:
 BACK_Z = (-0.232, 0.214)
-BACK_W = ([-0.24, -0.2, -0.12, -0.04, 0.04, 0.12, 0.17, 0.214], [0.085, 0.11, 0.13, 0.14, 0.143, 0.137, 0.12, 0.09])
+BACK_W = ([-0.24, -0.2, -0.12, -0.04, 0.04, 0.12, 0.17, 0.214], [0.095, 0.124, 0.145, 0.155, 0.158, 0.15, 0.132, 0.1])
 BACK_MID = ([-0.24, -0.12, 0.0, 0.12, 0.214], [0.445, 0.46, 0.47, 0.47, 0.5])
 
 
@@ -217,7 +272,7 @@ def back_sdf(P):
     mid = np.interp(z, *BACK_MID)
     w = np.interp(z, *BACK_W)
     up = P[:, 1] >= mid
-    ry = np.where(up, np.maximum(top - mid, 0.03), np.maximum(mid - 0.405, 0.02))
+    ry = np.where(up, np.maximum(top - mid, 0.03), np.maximum(mid - 0.31, 0.02))   # (cute pass: a deeper, rounder body)
     qx, qy = P[:, 0], P[:, 1] - mid
     k0 = np.hypot(qx / w, qy / ry)
     k1 = np.hypot(qx / (w * w), qy / (ry * ry))
@@ -229,15 +284,16 @@ def back_sdf(P):
 # The (almost absent) neck: from the withers down into the back of the skull, so the skull is the top of his head
 # (between the ears there is only fur, no body).
 NECK_A = np.array([0.0, float(np.interp(0.17, _SPZ, _TOP)) - 0.078, 0.17])
-NECK_B = np.array([0.0, 0.522, 0.262])
+NECK_B = hx(np.array([0.0, 0.522, 0.262]))
 
 
 def torso_sdf(P):
     d = back_sdf(P)
-    d = smin(d, sd_ellipsoid(P, P3(0, ph(545, 262)), (0.16, 0.112, 0.175)), 0.05)     # rib cage
-    d = smin(d, sd_ellipsoid(P, P3(0, ph(432, 258)), (0.145, 0.108, 0.13)), 0.05)     # abdomen (tucked up)
+    # (cute pass: rib cage and belly fuller and lower, so the round body hangs low between the legs like the photos)
+    d = smin(d, sd_ellipsoid(P, P3(0, ph(545, 262)) - np.array([0, 0.025, 0]), (0.168, 0.148, 0.18)), 0.05)  # rib cage
+    d = smin(d, sd_ellipsoid(P, P3(0, ph(432, 258)) - np.array([0, 0.025, 0]), (0.152, 0.14, 0.14)), 0.05)  # abdomen
     d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.45, -0.185]), (0.1, 0.075, 0.05)), 0.04)  # pelvis: between the thighs only
-    d = smin(d, sd_ellipsoid(P, P3(0, ph(640, 262)), (0.105, 0.106, 0.08)), 0.05)     # chest
+    d = smin(d, sd_ellipsoid(P, P3(0, ph(640, 262)) - np.array([0, 0.015, 0]), (0.115, 0.128, 0.09)), 0.05)  # chest
     for sx in (1, -1):
         d = smin(d, sd_ellipsoid(P, np.array([0.092 * sx, *P3(0, ph(640, 250))[1:]]), (0.062, 0.1, 0.075)), 0.04)  # shoulders
     # neck: wider than tall (it spans the shoulders), so there's no dip between it and the shoulders
@@ -252,11 +308,10 @@ def tail_skin_sdf(P):
 
 
 def puff_sdf(P):
-    """The cottontail puff: a lumpy, slightly lopsided ball of fur on the tail stub."""
-    d = sd_ellipsoid(P, PUFF_C, (0.046, 0.056, 0.045))
-    d = smin(d, sd_ellipsoid(P, PUFF_C + np.array([0.014, 0.032, -0.014]), (0.03, 0.034, 0.03)), 0.022)
-    d = smin(d, sd_ellipsoid(P, PUFF_C + np.array([-0.016, -0.026, -0.018]), (0.028, 0.03, 0.028)), 0.022)
-    return d - 0.007 * fbm3(P, 30.0, 17)
+    """The tail nub: a short, slightly lumpy stub of fur, rounded at the tip."""
+    d = sd_ellipsoid(P, PUFF_C, (0.036, 0.036, 0.05), _TAIL_R)
+    d = smin(d, sd_ellipsoid(P, PUFF_C + TAIL_D * 0.03, (0.028, 0.028, 0.03), _TAIL_R), 0.02)
+    return d - 0.006 * fbm3(P, 30.0, 17)
 
 
 def limb_sdf(cones):
@@ -299,11 +354,16 @@ def body_sdf(pose, eyes):
 
 
 def find_eyes():
+    """Eye centres in the model (found on the traced head, then moved with it)."""
+    return [hx(e) for e in _find_eyes0()]
+
+
+def _find_eyes0():
     eyes = []
     for sx in (1, -1):
         o = np.array([E * sx, EYE_Y, 0.6])
-        p, n = rlib.sdf_raycast(head_skin_sdf, o, (0, 0, -1), 0, 0.5, 900)
-        eyes.append(p - n * EYE_R * 0.4)
+        p, n = rlib.sdf_raycast(_head_skin_sdf0, o, (0, 0, -1), 0, 0.5, 900)
+        eyes.append(p - n * EYE_R0 * 0.4)
     return eyes
 
 
@@ -382,35 +442,37 @@ class FaceCoords:
 def paint(V, eyes, N):
     x, y, z = V[:, 0], V[:, 1], V[:, 2]
     ax = np.abs(x)
-    back, side, belly, chest = hexc('#4f5055'), hexc('#6c6d72'), hexc('#9a9792'), hexc('#bdb4a3')
+    back, side, belly, chest = hexc('#55565b'), hexc('#727377'), hexc('#9b9893'), hexc('#bcb4a4')   # (cute pass: lighter)
     c = mix(side, back, smoothstep(0.5, 0.64, y)[:, None])
-    c = mix(c, hexc('#3d3e43'), (smoothstep(0.58, 0.68, y) * smoothstep(0.08, 0.0, ax))[:, None])       # dark saddle
+    c = mix(c, hexc('#47484d'), (smoothstep(0.58, 0.68, y) * smoothstep(0.08, 0.0, ax))[:, None])       # dark saddle
     c = mix(c, belly, (smoothstep(0.47, 0.37, y) * (0.75 + 0.25 * rlib.fbm(V * 25.0, 2, seed=9)))[:, None])      # belly
     c = mix(c, chest, (smoothstep(0.45, 0.36, y) * smoothstep(0.12, 0.2, z) * smoothstep(0.09, 0.03, ax))[:, None])
     c = c * (0.9 + 0.2 * rlib.fbm(V * 60.0, 3, seed=3))[:, None]                                           # grizzle
     # legs: grey upper, dark lower, near-black hands and feet
-    c = mix(c, hexc('#393735'), smoothstep(0.24, 0.1, y)[:, None])
+    c = mix(c, hexc('#3f3d3b'), smoothstep(0.2, 0.09, y)[:, None])
     c = mix(c, hexc('#1c1b1a'), smoothstep(0.075, 0.035, y)[:, None])
     # tail puff: grey-fawn, soft dark rings across it, dark tip
-    tax = nrm(PUFF_C - SACRUM + np.array([0, 0.02, -0.02]))
+    tax = TAIL_D
     ts = (V - SACRUM) @ tax
     inp = smoothstep(0.01, -0.02, puff_sdf(V) - 0.02) * smoothstep(0.02, 0.05, ts)
-    rings = 0.5 + 0.5 * np.cos(ts / 0.055 * 2 * math.pi)
-    tcol = mix(hexc('#77706a'), hexc('#3a3531'), (0.3 * rings + 0.6 * smoothstep(0.1, 0.17, ts))[:, None])
+    rings = smoothstep(0.35, 0.65, 0.5 + 0.5 * np.cos((ts - 0.045) / 0.032 * 2 * math.pi))
+    tcol = mix(hexc('#8a8580'), hexc('#2a2725'), (0.85 * rings * smoothstep(0.03, 0.05, ts) + smoothstep(0.085, 0.105, ts))
+               .clip(0, 1)[:, None])
     c = mix(c, tcol, inp[:, None])
     # dark stripe from behind each ear down the side of the neck toward the shoulder
     for s in (1, -1):
-        dn = sd_capsule(V, np.array([0.082 * s, 0.556, 0.272]), np.array([0.118 * s, 0.44, 0.215]), 0.022)
+        dn = sd_capsule(V, hx(np.array([0.082 * s, 0.556, 0.272])), np.array([0.118 * s, 0.44, 0.215]), 0.022)
         c = mix(c, hexc('#26262a'), smoothstep(0.008, -0.004, dn)[:, None])
     # ---------------------------------------------------------------- face (traced markings; only near the head)
-    inhead = smoothstep(0.03, 0.0, head_skin_sdf(V) - 0.035)
+    Vh, eyes0 = hinv(V), [hinv(e) for e in eyes]                # the traced head's space
+    inhead = smoothstep(0.03, 0.0, _head_skin_sdf0(Vh) - 0.035)
     hi = np.where(inhead > 1e-4)[0]
     if len(hi):
-        c[hi] = mix(c[hi], face_paint(V[hi], eyes, N[hi], c[hi]), inhead[hi, None])
+        c[hi] = mix(c[hi], face_paint(Vh[hi], eyes0, N[hi], c[hi]), inhead[hi, None])
     # ears: pale rims, grey inside, dark backs; a black patch on the head behind each ear
-    near_ears = np.where(ears_sdf(V) < 0.08)[0]
+    near_ears = np.where(_ears_sdf0(Vh) < 0.08)[0]
     if len(near_ears):
-        c[near_ears] = ear_paint(V[near_ears], c[near_ears])
+        c[near_ears] = ear_paint(Vh[near_ears], c[near_ears])
     return np.clip(c, 0, 1)
 
 
@@ -444,7 +506,7 @@ def face_paint(V, eyes, N, c):
 
 
 def ear_paint(V, c):
-    e = ears_sdf(V)
+    e = _ears_sdf0(V)
     ear_in = smoothstep(0.004, -0.002, e - 0.004)
     for i in range(2):
         base, up, fwd, across = ear_frame(i)
@@ -495,7 +557,7 @@ def fur_regions(V, N, eyes, pose='stand'):
     s, _ = limb_param(V, pose)
     limbs = [limb_sdf(c) for _, c in limb_cones(pose)]
     dl = np.min(np.stack([l(V) for l in limbs], axis=1), axis=1)
-    fc = FaceCoords(V, eyes, N)
+    fc = FaceCoords(hinv(V), [hinv(e) for e in eyes], N)
     return dict(
         torso=torso,
         # the under-side and the lower flanks: the hanging under-fluff
@@ -526,16 +588,17 @@ def fur_length(V, N, eyes, pose='stand', R=None):
     chest = smoothstep(0.12, 0.22, z) * smoothstep(0.52, 0.4, y) * smoothstep(0.1, 0.0, ax - 0.04)
     L = np.maximum(L, 1.0 + 0.35 * chest)
     # legs: body-length fur at the top, short below the knees / elbows, shortest on the paws, none on the soles
-    leg_len = _lerp(0.8, 0.22, smoothstep(0.22, 0.6, s))
+    leg_len = _lerp(1.05, 0.3, smoothstep(0.3, 0.68, s))          # (cute pass: fluffy to below the knees / elbows)
     leg_len = _lerp(leg_len, 0.12, smoothstep(0.8, 0.95, s))
     L = _lerp(L, leg_len, legw)
     L = np.where((s > 0.78) & (ny < -0.5) & (legw > 0.5), 0.0, L)
     # tail puff: fluffy
-    L = _lerp(L, 1.75, R['tail'])
+    L = _lerp(L, 1.4, R['tail'])
     # head: cheek ruffs, very short face fur (shortest on the snout), a full coat on the crown and nape
     face_len = _lerp(0.3, 0.14, smoothstep(0.0, -1.2, fc.v))                     # forehead 0.3 -> snout 0.14
     face_len = _lerp(face_len, 0.1, smoothstep(-1.4, -1.9, fc.v) * smoothstep(0.9, 0.4, fc.au))   # nose / lips
-    cheek = smoothstep(0.55, 0.85, fc.nx) * smoothstep(0.47, 0.42, y) * smoothstep(0.35, 0.27, z)
+    Vh = hinv(V)
+    cheek = smoothstep(0.55, 0.85, fc.nx) * smoothstep(0.47, 0.42, Vh[:, 1]) * smoothstep(0.35, 0.27, Vh[:, 2])
     head_len = _lerp(1.0, face_len, fc.front)
     head_len = np.maximum(head_len, 1.4 * cheek)
     L = _lerp(L, head_len, head)

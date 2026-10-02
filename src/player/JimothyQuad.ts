@@ -197,15 +197,29 @@ export class JimothyQuad {
     const b = this.bones;
     const head = new THREE.Vector3();
     for (let o: THREE.Object3D | null = b.Head; o && o !== this.arm; o = o.parent) head.add(this.restPos.get(o) ?? o.position);
-    const local = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z).sub(head);
+    // The points below were measured on the traced head; the model's head is that head scaled, moved and tipped up
+    // (jimothy_anatomy.py: HEAD_S, HEAD_T, HEAD_PITCH), so they are mapped the same way.
+    const HS = 1.28;
+    const HP = (12 * Math.PI) / 180;
+    const traced = (x: number, y: number, z: number) => {
+      const qy = y - 0.53;
+      const qz = z - 0.262;
+      return new THREE.Vector3(
+        x * HS,
+        0.53 + 0.065 + HS * (Math.cos(HP) * qy + Math.sin(HP) * qz),
+        0.262 - 0.045 + HS * (-Math.sin(HP) * qy + Math.cos(HP) * qz),
+      );
+    };
+    const local = (x: number, y: number, z: number) => traced(x, y, z).sub(head);
     const eyeL = b.EyeL?.position.clone() ?? local(0.037, 0.47, 0.367);
     const eyeR = b.EyeR?.position.clone() ?? local(-0.037, 0.47, 0.367);
     // The top of his head between the ears is his skull (the neck rises steeply behind it): skin at (0, 0.566, 0.34)
-    // in the model, facing ~30° forward of straight up (measured on the anatomy's SDF). Hats sit tilted that way; the
-    // back of a brim just meets the neck.
-    const tilt = 0.56;
+    // on the traced head, facing ~30° forward of straight up (measured on the anatomy's SDF). Hats sit tilted that
+    // way; the back of a brim just meets the neck.
+    const tilt = 0.56 - HP;
     const dir = new THREE.Vector3(0, Math.cos(tilt), Math.sin(tilt));
-    const top = local(0, 0.566, 0.34);
+    // (a touch higher and further back on the bigger skull, so brims clear the brow)
+    const top = local(0, 0.574, 0.33);
     return {
       /** On top of the fur there. */
       crown: top.clone().addScaledVector(dir, 0.03),
@@ -213,16 +227,16 @@ export class JimothyQuad {
       hatBase: top.clone().addScaledVector(dir, 0.004),
       eyeMid: eyeL.clone().add(eyeR).multiplyScalar(0.5),
       eyeSep: eyeL.distanceTo(eyeR),
-      eyeR: 0.011,
+      eyeR: 0.013 * HS,
       earMid: b.EarL.position.clone().add(b.EarR.position).multiplyScalar(0.5),
       center: local(0, 0.5, 0.33),
-      radius: 0.205,
+      radius: 0.205 * HS,
       /** Size of the round head's accessories that fits this head (cap / beanie radii are 0.13 / 0.155 × scale). */
-      scale: 0.6,
+      scale: 0.6 * HS,
       /** Hat width (cranium between the ears, plus fur). */
-      hatWidth: 0.18,
+      hatWidth: 0.18 * HS,
       tilt,
-      faceTilt: (15 * Math.PI) / 180,
+      faceTilt: (15 * Math.PI) / 180 - HP,
     };
   }
 

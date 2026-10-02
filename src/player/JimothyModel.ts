@@ -193,7 +193,7 @@ export class JimothyModel {
       f.rest.set(p, p.quaternion.clone());
       f.restPos.set(p, p.position.clone());
     }
-    applyFur(model);
+    applyFur(model, true, { tufts: true });
     // Perf: shadows come from one cheap caster per form: the ball's shadow-only sphere (+ a tail blob); the walking
     // body's own skinned mesh (its long legs need a real silhouette). Everything else (fur shells, eyes, …) doesn't.
     model.traverse((o) => {

@@ -70,6 +70,53 @@ function getTufts(): THREE.DataTexture {
   return tuftTex;
 }
 
+let clumpTex: THREE.DataTexture | null = null;
+/**
+ * Tileable clumps (jittered-grid cellular noise, 16 × 16 cells): 1 at a clump's centre falling to 0 at its edge, so
+ * an alpha test that rises with shell height leaves soft, tapering tufts instead of single-pixel strands.
+ */
+function getClumps(): THREE.DataTexture {
+  if (clumpTex) return clumpTex;
+  const n = 128;
+  const cells = 16;
+  const cs = n / cells;
+  const pts: number[][] = [];
+  for (let i = 0; i < cells * cells; i++) pts.push([0.15 + Math.random() * 0.7, 0.15 + Math.random() * 0.7]);
+  const data = new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      const cx = Math.floor(x / cs);
+      const cy = Math.floor(y / cs);
+      let best = 1e9;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const gx = cx + dx;
+          const gy = cy + dy;
+          const p = pts[(((gy % cells) + cells) % cells) * cells + (((gx % cells) + cells) % cells)];
+          const px = (gx + p[0]) * cs;
+          const py = (gy + p[1]) * cs;
+          best = Math.min(best, Math.hypot(x + 0.5 - px, y + 0.5 - py));
+        }
+      const v = Math.max(0, 1 - best / (cs * 0.85));
+      data.set([Math.round(v * 255), 0, 0, 255], (y * n + x) * 4);
+    }
+  clumpTex = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
+  clumpTex.wrapS = clumpTex.wrapT = THREE.RepeatWrapping;
+  clumpTex.magFilter = THREE.LinearFilter;
+  clumpTex.minFilter = THREE.LinearFilter;
+  clumpTex.needsUpdate = true;
+  return clumpTex;
+}
+
+/** Options for applyFur. */
+export interface FurStyle {
+  /**
+   * Jimothy's coat: soft tapering clumps (instead of single-pixel strands) blended by the surface direction, and
+   * silvery guard-hair tips, for a plush, cartoon-fluffy look that reads well at a distance.
+   */
+  tufts?: boolean;
+}
+
 export const furUniforms = {
   uFurWind: { value: new THREE.Vector3() },
   uFurTime: { value: 0 },
@@ -112,6 +159,7 @@ function makeShellMaterial(
   clip?: { value: THREE.Matrix4 },
   lenAttr = false,
   combAttr = false,
+  tufts = false,
 ): THREE.MeshStandardMaterial {
   const m = base.clone();
   m.name = base.name + '_shell';
@@ -123,6 +171,7 @@ function makeShellMaterial(
     shader.uniforms.uFurLen = { value: FUR_LENGTH };
     shader.uniforms.uNoise = { value: getNoise() };
     shader.uniforms.uTufts = { value: getTufts() };
+    if (tufts) shader.uniforms.uClumps = { value: getClumps() };
     shader.uniforms.uFurWind = furUniforms.uFurWind;
     shader.uniforms.uFurTime = furUniforms.uFurTime;
     shader.uniforms.uFurScale = furUniforms.uFurScale;
@@ -134,6 +183,7 @@ function makeShellMaterial(
         `#include <common>
          uniform float uShells; uniform float uFurLen; uniform vec3 uFurWind; uniform float uFurTime; uniform float uFurScale;
          varying vec3 vFurObjPos; varying float vShellH; varying float vFurLen;
+         ${tufts ? 'varying vec3 vFurObjN;' : ''}
          ${lenAttr ? 'attribute float _furlen;' : ''}
          ${combAttr ? 'attribute vec3 _furcomb;' : ''}
          ${clip ? 'uniform mat4 uFurClip; varying vec3 vFurClip;' : ''}`,
@@ -143,6 +193,7 @@ function makeShellMaterial(
         `#include <begin_vertex>
          float shellH = (float(gl_InstanceID) + 1.0) / uShells;
          vFurObjPos = position;
+         ${tufts ? 'vFurObjN = normal;' : ''}
          ${clip ? 'vFurClip = (uFurClip * vec4(position, 1.0)).xyz;' : ''}
          vShellH = shellH;
          vFurLen = ${lenAttr ? '_furlen' : '1.0'};
@@ -157,25 +208,21 @@ function makeShellMaterial(
         '#include <common>',
         `#include <common>
          uniform sampler2D uNoise; uniform sampler2D uTufts; uniform vec3 uFurRim; varying vec3 vFurObjPos; varying float vShellH; varying float vFurLen;
+         ${tufts ? 'uniform sampler2D uClumps; varying vec3 vFurObjN;' : ''}
          ${clip ? 'varying vec3 vFurClip;' : ''}`,
       )
       .replace(
         '#include <alphatest_fragment>',
         `${clip ? 'if (vFurClip.y > 0.0 && dot(vFurClip.xz, vFurClip.xz) < 1.0) discard;' : ''}
          if (vFurLen < 0.04) discard;
-         vec3 fp = vFurObjPos * 260.0;
-         float n1 = texture2D(uNoise, fp.xy / 128.0).r;
-         float n2 = texture2D(uNoise, fp.yz / 128.0 + 0.37).r;
-         float n3 = texture2D(uNoise, fp.zx / 128.0 + 0.71).r;
-         float strand = max(n1, max(n2, n3) * 0.92);
-         // (long fur, like the belly fringe, stays denser toward its ends so it reads as a hanging mass)
-         if (strand < vShellH * mix(0.9, 0.62, smoothstep(1.3, 2.6, vFurLen)) + 0.12) discard;
+         ${tufts ? TUFT_GLSL : STRAND_GLSL}
          // an uneven coat: ~4 cm tufts, some ending a little shorter than others
          vec3 tp = vFurObjPos * (60.0 / 64.0);
          float tuft = (texture2D(uTufts, tp.xy).r + texture2D(uTufts, tp.yz + 0.31).r + texture2D(uTufts, tp.zx + 0.67).r) / 3.0;
          if (vShellH > mix(0.78, 1.05, smoothstep(0.3, 0.7, tuft))) discard;
          // art pass: darker roots (self-shadowing), lighter slightly warm tips that catch the light = fluffier
          diffuseColor.rgb *= mix(0.68, 1.16, vShellH) * mix(vec3(1.0), vec3(1.05, 1.02, 0.96), vShellH);
+         ${tufts ? TUFT_TIPS_GLSL : ''}
          #include <alphatest_fragment>`,
       )
       .replace(
@@ -185,9 +232,44 @@ function makeShellMaterial(
          #include <opaque_fragment>`,
       );
   };
-  m.customProgramCacheKey = () => 'fur_instanced_' + shells + (clip ? '_clip' : '') + (lenAttr ? '_len' : '') + (combAttr ? '_comb' : '');
+  m.customProgramCacheKey = () =>
+    'fur_instanced_' + shells + (clip ? '_clip' : '') + (lenAttr ? '_len' : '') + (combAttr ? '_comb' : '') + (tufts ? '_tufts' : '');
   return m;
 }
+
+/** The default coat: single-pixel strands from hashed noise on three planes. */
+const STRAND_GLSL = /* glsl */ `
+         vec3 fp = vFurObjPos * 260.0;
+         float n1 = texture2D(uNoise, fp.xy / 128.0).r;
+         float n2 = texture2D(uNoise, fp.yz / 128.0 + 0.37).r;
+         float n3 = texture2D(uNoise, fp.zx / 128.0 + 0.71).r;
+         float strand = max(n1, max(n2, n3) * 0.92);
+         // (long fur, like the belly fringe, stays denser toward its ends so it reads as a hanging mass)
+         if (strand < vShellH * mix(0.9, 0.62, smoothstep(1.3, 2.6, vFurLen)) + 0.12) discard;`;
+
+/**
+ * FurStyle.tufts: tapering clumps (~6 mm, larger on long fur) on the plane facing the surface (triplanar, sharply
+ * weighted so clumps don't smear), roughened by the fine strand noise so their edges stay hairy, not blobby.
+ */
+const TUFT_GLSL = /* glsl */ `
+         vec3 tw = pow(abs(normalize(vFurObjN)), vec3(6.0));
+         tw /= (tw.x + tw.y + tw.z);
+         float cell = mix(0.0055, 0.008, smoothstep(1.0, 2.5, vFurLen));
+         vec3 cp = vFurObjPos / (cell * 16.0);
+         float clump = texture2D(uClumps, cp.yz).r * tw.x + texture2D(uClumps, cp.zx + 0.37).r * tw.y
+                     + texture2D(uClumps, cp.xy + 0.71).r * tw.z;
+         vec3 fp = vFurObjPos * 420.0;
+         float fine = (texture2D(uNoise, fp.yz / 128.0).r * tw.x + texture2D(uNoise, fp.zx / 128.0 + 0.37).r * tw.y
+                     + texture2D(uNoise, fp.xy / 128.0 + 0.71).r * tw.z);
+         float strand = clump * (0.82 + 0.36 * fine);
+         // tufts taper toward their tips; long fur (the belly fringe) stays fuller so it hangs as a mass
+         if (strand < pow(vShellH, 0.85) * mix(0.95, 0.75, smoothstep(1.3, 2.6, vFurLen)) + 0.06) discard;`;
+
+/** FurStyle.tufts: silvery guard-hair tips (a grizzled raccoon coat), strongest on the longer fur. */
+const TUFT_TIPS_GLSL = /* glsl */ `
+         float tipK = smoothstep(0.55, 1.0, vShellH) * (0.2 + 0.1 * smoothstep(0.6, 1.4, vFurLen)) * (0.6 + 0.8 * fine);
+         float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(min(lum * 1.35 + 0.05, 0.75)), clamp(tipK, 0.0, 0.4));`;
 
 const _ident = new THREE.Matrix4();
 const noRaycast = () => {};
@@ -208,7 +290,8 @@ function skinnedShell(mesh: THREE.SkinnedMesh, mat: THREE.Material, shells: numb
   return s;
 }
 
-export function applyFur(root: THREE.Object3D, enabled = true) {
+export function applyFur(root: THREE.Object3D, enabled = true, style: FurStyle = {}) {
+  const tufts = !!style.tufts;
   const shells = furSettings.shells;
   if (!enabled) return;
   const targets: THREE.Mesh[] = [];
@@ -232,10 +315,10 @@ export function applyFur(root: THREE.Object3D, enabled = true) {
     let maxLen = 1;
     if (lenA) for (let i = 0; i < lenA.count; i++) maxLen = Math.max(maxLen, lenA.getX(i));
     const n = maxLen > 1.6 ? Math.min(16, Math.round(shells * 1.4)) : shells;
-    const key = base.uuid + (lenAttr ? '_len' : '') + (combAttr ? '_comb' : '') + '_' + n;
+    const key = base.uuid + (lenAttr ? '_len' : '') + (combAttr ? '_comb' : '') + (tufts ? '_tufts' : '') + '_' + n;
     let sm = matCache.get(key);
     if (!sm) {
-      sm = makeShellMaterial(base, n, undefined, lenAttr, combAttr);
+      sm = makeShellMaterial(base, n, undefined, lenAttr, combAttr, tufts);
       matCache.set(key, sm);
     }
     let inst: THREE.Mesh;
@@ -253,6 +336,7 @@ export function applyFur(root: THREE.Object3D, enabled = true) {
     inst.userData.furMat = sm;
     inst.userData.furLenAttr = lenAttr;
     inst.userData.furCombAttr = combAttr;
+    inst.userData.furTufts = tufts;
     inst.castShadow = false;
     inst.receiveShadow = true;
     inst.frustumCulled = false; // bounding sphere of instanced mesh isn't updated for skinned-ish parts
@@ -276,7 +360,7 @@ export function setFurClip(mesh: THREE.Object3D, clip: THREE.Matrix4 | null) {
   }
   if (!u.clipMat) {
     u.clipU = { value: new THREE.Matrix4() };
-    u.clipMat = makeShellMaterial(u.furBase, u.furShells, u.clipU, !!u.furLenAttr, !!u.furCombAttr);
+    u.clipMat = makeShellMaterial(u.furBase, u.furShells, u.clipU, !!u.furLenAttr, !!u.furCombAttr, !!u.furTufts);
   }
   u.clipU.value.copy(clip);
   inst.material = u.clipMat;

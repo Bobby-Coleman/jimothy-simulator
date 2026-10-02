@@ -89,10 +89,11 @@ def spine_at(t):
 
 
 HIP_MID = np.array([0.0, A.HIP[1], A.HIP[2]])
-HEAD_PIV = np.array([0.0, 0.53, 0.262])       # atlanto-occipital joint (back of the skull)
-JAW_PIV = np.array([0.0, 0.44, 0.318])        # jaw hinge
-CHIN = np.array([0.0, 0.372, 0.392])
-LIP = np.array([0.0, 0.372, 0.405])           # where the lips meet under the nose
+# (head points are on the traced head, moved with it: see jimothy_anatomy.hx)
+HEAD_PIV = A.hx(np.array([0.0, 0.53, 0.262]))       # atlanto-occipital joint (back of the skull)
+JAW_PIV = A.hx(np.array([0.0, 0.44, 0.318]))        # jaw hinge
+CHIN = A.hx(np.array([0.0, 0.372, 0.392]))
+LIP = A.hx(np.array([0.0, 0.372, 0.405]))           # where the lips meet under the nose
 BONES = {}                                     # name -> (joint position, parent)
 
 
@@ -168,8 +169,8 @@ def build_mesh(eyes):
     sdf = A.body_sdf(POSE, eyes)
     h = OPT['h']
     nx = int(math.ceil(0.235 / h))
-    bmin = np.array([-nx * h, -0.03, -0.4])
-    bmax = np.array([nx * h, 0.735, 0.47])
+    bmin = np.array([-nx * h, -0.03, -0.46])
+    bmax = np.array([nx * h, 0.76, 0.54])
     log('surface nets h=%.4f' % h)
     m = rlib.surface_nets(sdf, bmin, bmax, h, relax_iters=1)
     log('raw mesh: %d verts, %d tris' % (len(m.V), m.tri_count()))
@@ -219,7 +220,8 @@ def skin_weights(V, F, eyes):
     # jaw: head vertices below the line from the lips to the hinge, in front of the throat
     n = np.cross(np.array([1.0, 0, 0]), JAW_PIV - LIP)
     n /= np.linalg.norm(n)
-    jaw = smoothstep(0.003, -0.004, (V - LIP) @ n) * smoothstep(0.3, 0.325, V[:, 2]) * smoothstep(0.43, 0.41, V[:, 1])
+    Vh = A.hinv(V)                                    # (the thresholds are on the traced head)
+    jaw = smoothstep(0.003, -0.004, (V - LIP) @ n) * smoothstep(0.3, 0.325, Vh[:, 2]) * smoothstep(0.43, 0.41, Vh[:, 1])
     moved = W[:, bi['Head']] * jaw
     W[:, bi['Head']] -= moved
     W[:, bi['Jaw']] += moved
@@ -573,13 +575,17 @@ def main():
         eo = rigid_part(nm, rlib.ellipsoid_mesh(e, np.array([A.EYE_R] * 3), 18, 12), eye_mat, e, arm)
         g = A.nrm(np.array([np.sign(e[0]) * 0.35, 0.0, 1.0]))
         hl = e + A.nrm(g + np.array([np.sign(e[0]) * 0.25, 0.45, 0.0])) * (A.EYE_R * 0.97)
-        parts += [eo, rigid_part(nm + 'Glint', rlib.ellipsoid_mesh(hl, np.array([0.0021] * 3), 8, 6), hl_mat, hl, arm,
+        parts += [eo, rigid_part(nm + 'Glint', rlib.ellipsoid_mesh(hl, np.array([0.0021 * 2.2] * 3), 8, 6), hl_mat, hl, arm,
                                  parent_ob=eo)]
+        # (cute pass) a second, smaller catchlight low on the other side: glossy eyes that read inside the mask
+        hl2 = e + A.nrm(g + np.array([-np.sign(e[0]) * 0.3, -0.35, 0.0])) * (A.EYE_R * 0.97)
+        parts.append(rigid_part(nm + 'Glint2', rlib.ellipsoid_mesh(hl2, np.array([0.0021 * 1.1] * 3), 8, 6), hl_mat, hl2, arm,
+                                parent_ob=eo))
     tip = A.NOSE + np.array([0.0, 0.0, 0.004])
     dirn = A.nrm(np.array([0, -0.25, 1.0]))
     p, n = rlib.sdf_raycast(sdf, tip + dirn * 0.2, -dirn, 0, 0.4, 900)
-    nc = p - n * 0.009
-    parts.append(rigid_part('Nose', rlib.ellipsoid_mesh(nc, np.array([0.02, 0.0155, 0.016]), 16, 10), nose_mat, nc, arm))
+    nc = p - n * 0.009 * A.HEAD_S
+    parts.append(rigid_part('Nose', rlib.ellipsoid_mesh(nc, np.array([0.02, 0.0155, 0.016]) * A.HEAD_S, 16, 10), nose_mat, nc, arm))
     tri = len(F) + sum(len(o.data.polygons) for o in parts)
     log('triangles: body %d + parts %d = %d' % (len(F), tri - len(F), tri))
     path = os.path.join(MODELS_DIR, OPT['out'] + '.glb')
