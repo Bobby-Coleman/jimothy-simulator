@@ -461,12 +461,12 @@ export interface BobbleParts {
  * centres, the skin at the crown and the crown's forward tilt. The posed head's own eyes give its rotation from here.
  */
 const REST_HEAD = {
-  neck: new THREE.Vector3(0, 0.529, 0.262),
-  eyeL: new THREE.Vector3(0.037, 0.464, 0.364),
-  eyeR: new THREE.Vector3(-0.037, 0.464, 0.364),
-  crown: new THREE.Vector3(0, 0.566, 0.34),
-  tilt: 0.56,
-  width: 0.18,
+  neck: new THREE.Vector3(0, 0.56, 0.282),
+  eyeL: new THREE.Vector3(0.0462, 0.5127, 0.4282),
+  eyeR: new THREE.Vector3(-0.0462, 0.5127, 0.4282),
+  crown: new THREE.Vector3(0, 0.633, 0.355),
+  tilt: 0.35,
+  width: 0.23,
 };
 
 /** Rotation taking the rest head onto a posed head, from each one's eyes and neck. */
