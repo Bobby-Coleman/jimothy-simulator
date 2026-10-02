@@ -47,6 +47,13 @@ const POIS: PoiDef[] = [
   { re: /^dragonPad$/, icon: '🐉', label: 'Slop Dragon', obj: 'dragonRider' },
   { re: /^espressoStand$/, icon: '☕', label: 'Espresso', obj: 'tripleShot' },
   { re: /^tourGroup$/, icon: '🎳', label: 'Tour group', obj: 'tourStrike' },
+  { re: /^trashThrone$/, icon: '👑', label: 'Trash Throne', obj: 'trashKing' },
+  { re: /^midnightBuffet$/, icon: '🌙', label: 'Midnight Buffet', obj: 'midnightBuffet' },
+  { re: /^treasureX$/, icon: '❌', label: 'X marks the spot', obj: 'xMarksTheTrash' },
+  { re: /^raccoonBoard$/, icon: '📌', label: 'Bulletin board' },
+  { re: /^goldenStash$/, icon: '🏆', label: 'Golden stash' },
+  { re: /^museumHeist$/, icon: '💎', label: 'Museum heist', obj: 'heistShiny' },
+  { re: /^ufo$/, icon: '🛸', label: 'Flying saucer', obj: 'trashDiplomacy' },
 ];
 
 interface DrawnPoi {
