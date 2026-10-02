@@ -206,8 +206,8 @@ export class JimothyQuad {
       const qz = z - 0.262;
       return new THREE.Vector3(
         x * HS,
-        0.53 + 0.03 + HS * (Math.cos(HP) * qy + Math.sin(HP) * qz),
-        0.262 + 0.02 + HS * (-Math.sin(HP) * qy + Math.cos(HP) * qz),
+        0.53 + 0.065 + HS * (Math.cos(HP) * qy + Math.sin(HP) * qz),
+        0.262 - 0.045 + HS * (-Math.sin(HP) * qy + Math.cos(HP) * qz),
       );
     };
     const local = (x: number, y: number, z: number) => traced(x, y, z).sub(head);

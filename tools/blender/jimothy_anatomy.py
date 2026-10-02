@@ -58,24 +58,41 @@ OCC = P3(0, ph(708, 189))
 NOSE0 = P3(0, ph(806, 340))
 
 # Cute pass: the whole head (skull, face, ears, eyes, markings) is the traced head above, scaled up by HEAD_S about the
-# back of the skull and nudged forward / up by HEAD_T: a bigger, rounder head that sits in front of the dome instead
-# of hanging under it. hx maps the traced head's space into the model, hinv back.
+# back of the skull and moved up / back by HEAD_T: a bigger, rounder head tucked into the front of the body (no neck),
+# its crown continuing the curve of the back. hx maps the traced head's space into the model, hinv back.
 HEAD_C0 = np.array([0.0, 0.53, 0.262])
 HEAD_S = 1.28
-HEAD_T = np.array([0.0, 0.03, 0.02])
+HEAD_T = np.array([0.0, 0.065, -0.045])    # (pass 2: up and back, so the face sits in the body and the skull continues the back)
 HEAD_PITCH = math.radians(12.0)          # ... and tipped up a little, so he looks ahead rather than at his paws
 _HC, _HSN = math.cos(HEAD_PITCH), math.sin(HEAD_PITCH)
 HEAD_R = np.array([[1.0, 0.0, 0.0], [0.0, _HC, _HSN], [0.0, -_HSN, _HC]])     # rows: model x, y, z of a traced vector
 
 
+# ... and the snout (below the eyes, in front of them) is drawn forward by up to SNOUT_PULL, so the little muzzle pokes
+# out past the round of the head. A shear along z that grows toward the nose; its slope stays < 1 so it inverts.
+SNOUT_PULL = 0.03
+SNOUT_Z = (0.35, 0.41)
+SNOUT_Y = (0.462, 0.432)
+
+
+def _snout_dz(p):
+    return SNOUT_PULL * smoothstep(*SNOUT_Z, p[..., 2]) * smoothstep(*SNOUT_Y, p[..., 1])
+
+
 def hx(p):
-    q = np.asarray(p, dtype=float) - HEAD_C0
+    p = np.array(p, dtype=float)
+    p[..., 2] += _snout_dz(p)
+    q = p - HEAD_C0
     return HEAD_C0 + HEAD_T + HEAD_S * (q @ HEAD_R.T)
 
 
 def hinv(P):
     q = (np.asarray(P, dtype=float) - HEAD_C0 - HEAD_T) / HEAD_S
-    return HEAD_C0 + q @ HEAD_R
+    p = HEAD_C0 + q @ HEAD_R
+    z = p[..., 2].copy()
+    for _ in range(24):                      # undo the snout shear (fixed point: z0 = z - dz(z0))
+        p[..., 2] = z - _snout_dz(p)
+    return p
 
 
 NOSE = hx(NOSE0)
@@ -175,18 +192,18 @@ def sd_rc_sx(P, a, b, r1, r2, sx):
 
 
 def _head_skin_sdf0(P):
-    d = sd_ellipsoid(P, np.array([0.0, 0.515, 0.306]), (0.075, 0.06, 0.066))                       # cranium
+    d = sd_ellipsoid(P, np.array([0.0, 0.515, 0.306]), (0.082, 0.06, 0.066))                       # cranium (broad: cute)
     for sx in (1, -1):                                                         # temporal muscle under the ears
-        d = smin(d, sd_ellipsoid(P, np.array([0.056 * sx, 0.545, 0.313]), (0.036, 0.03, 0.042)), 0.025)
+        d = smin(d, sd_ellipsoid(P, np.array([0.062 * sx, 0.535, 0.313]), (0.044, 0.038, 0.046)), 0.03)   # (full temples)
     for i in range(2):                                                         # ear roots: the ears grow out of the head
         base, up, fwd, across = ear_frame(i)
         side = np.array([np.sign(base[0]), 0.0, 0.0])
         R = np.stack([across, up, fwd], axis=1)
         d = smin(d, sd_ellipsoid(P, base - up * 0.004 - side * 0.01, (0.026, 0.022, 0.02), R), 0.018)
     d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.466, 0.352]), (0.044, 0.042, 0.034)), 0.025)      # brow + bridge
-    d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.446, 0.336]), (0.056, 0.034, 0.032)), 0.03)       # face under the eyes
+    d = smin(d, sd_ellipsoid(P, np.array([0.0, 0.446, 0.336]), (0.066, 0.036, 0.032)), 0.03)       # face under the eyes (full: cute)
     for sx in (1, -1):                                                                             # cheeks
-        d = smin(d, sd_ellipsoid(P, np.array([0.05 * sx, 0.44, 0.3]), (0.032, 0.042, 0.042)), 0.035)
+        d = smin(d, sd_ellipsoid(P, np.array([0.064 * sx, 0.44, 0.305]), (0.046, 0.05, 0.048)), 0.035)   # (chubby)
     d = smin(d, sd_rc_sx(P, np.array([0.0, 0.442, 0.356]), np.array([0.0, 0.392, 0.398]), 0.03, 0.016, 0.85), 0.02)  # muzzle
     for sx in (1, -1):                                                                             # mandible
         d = smin(d, sd_round_cone(P, np.array([0.036 * sx, 0.405, 0.305]), np.array([0.007 * sx, 0.379, 0.389]), 0.016, 0.01), 0.02)
@@ -227,11 +244,11 @@ def _ears_sdf0(P):
 
 
 # ============================================================================================ body
-# Cute pass: a proper bushy raccoon tail (ringed, see paint) instead of the cottontail puff: out behind the rump,
-# drooping a little. TAIL_D is its axis, PUFF_C the middle of the bush.
-TAIL_D = nrm(np.array([0.0, -0.5, -1.0]))
-TAIL_TIP = SACRUM + TAIL_D * 0.07 + np.array([0.0, 0.01, 0.0])
-PUFF_C = SACRUM + TAIL_D * 0.115 + np.array([0.0, 0.012, 0.0])
+# Cute pass: a short ringed raccoon tail, a nub sticking up off the back of the rump. TAIL_D is its axis, PUFF_C the
+# middle of the nub.
+TAIL_D = nrm(np.array([0.0, 1.0, -0.6]))
+TAIL_TIP = SACRUM + TAIL_D * 0.035
+PUFF_C = SACRUM + TAIL_D * 0.06
 _TAIL_R = np.stack([np.array([1.0, 0, 0]), nrm(np.cross(TAIL_D, np.array([1.0, 0, 0]))), TAIL_D], axis=1)
 
 
@@ -239,7 +256,7 @@ _TAIL_R = np.stack([np.array([1.0, 0, 0]), nrm(np.cross(TAIL_D, np.array([1.0, 0
 # the ribs. As a function of z (the spine runs monotonically forward).
 _SPT = np.linspace(0.0, 1.0, len(SPINE))
 _SPZ = SPINE[:, 2]
-_TOP = SPINE[:, 1] + 0.016 + 0.02 * smoothstep(0.1, 0.4, _SPT) - 0.025 * smoothstep(0.62, 0.95, _SPT)   # (cute pass: lower withers)
+_TOP = SPINE[:, 1] + 0.016 + 0.02 * smoothstep(0.1, 0.4, _SPT)
 
 # The back is one dome swept along the spine, from the sacrum to the withers: at every z an egg-shaped cross-section
 # (rounded top on the dorsal line, widest low down where it meets the ribs and belly), so the back is round from
@@ -291,9 +308,9 @@ def tail_skin_sdf(P):
 
 
 def puff_sdf(P):
-    """The bushy tail: a fat, slightly lumpy sausage of fur, fullest in the middle, rounded at the tip."""
-    d = sd_ellipsoid(P, PUFF_C, (0.054, 0.058, 0.105), _TAIL_R)
-    d = smin(d, sd_ellipsoid(P, PUFF_C + TAIL_D * 0.065, (0.044, 0.046, 0.055), _TAIL_R), 0.03)
+    """The tail nub: a short, slightly lumpy stub of fur, rounded at the tip."""
+    d = sd_ellipsoid(P, PUFF_C, (0.036, 0.036, 0.05), _TAIL_R)
+    d = smin(d, sd_ellipsoid(P, PUFF_C + TAIL_D * 0.03, (0.028, 0.028, 0.03), _TAIL_R), 0.02)
     return d - 0.006 * fbm3(P, 30.0, 17)
 
 
@@ -438,8 +455,8 @@ def paint(V, eyes, N):
     tax = TAIL_D
     ts = (V - SACRUM) @ tax
     inp = smoothstep(0.01, -0.02, puff_sdf(V) - 0.02) * smoothstep(0.02, 0.05, ts)
-    rings = smoothstep(0.35, 0.65, 0.5 + 0.5 * np.cos((ts - 0.02) / 0.05 * 2 * math.pi))
-    tcol = mix(hexc('#8a8580'), hexc('#2a2725'), (0.85 * rings * smoothstep(0.03, 0.06, ts) + smoothstep(0.17, 0.21, ts))
+    rings = smoothstep(0.35, 0.65, 0.5 + 0.5 * np.cos((ts - 0.045) / 0.032 * 2 * math.pi))
+    tcol = mix(hexc('#8a8580'), hexc('#2a2725'), (0.85 * rings * smoothstep(0.03, 0.05, ts) + smoothstep(0.085, 0.105, ts))
                .clip(0, 1)[:, None])
     c = mix(c, tcol, inp[:, None])
     # dark stripe from behind each ear down the side of the neck toward the shoulder
@@ -576,7 +593,7 @@ def fur_length(V, N, eyes, pose='stand', R=None):
     L = _lerp(L, leg_len, legw)
     L = np.where((s > 0.78) & (ny < -0.5) & (legw > 0.5), 0.0, L)
     # tail puff: fluffy
-    L = _lerp(L, 2.0, R['tail'])
+    L = _lerp(L, 1.4, R['tail'])
     # head: cheek ruffs, very short face fur (shortest on the snout), a full coat on the crown and nape
     face_len = _lerp(0.3, 0.14, smoothstep(0.0, -1.2, fc.v))                     # forehead 0.3 -> snout 0.14
     face_len = _lerp(face_len, 0.1, smoothstep(-1.4, -1.9, fc.v) * smoothstep(0.9, 0.4, fc.au))   # nose / lips
